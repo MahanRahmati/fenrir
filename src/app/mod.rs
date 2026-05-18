@@ -1,6 +1,8 @@
 mod errors;
+mod prompt;
 
 use crate::app::errors::RuntimeResult;
+use crate::app::prompt::Prompt;
 use crate::config::Config;
 
 pub struct App {
@@ -13,6 +15,7 @@ impl App {
   }
 
   pub async fn run(&self) -> RuntimeResult<String> {
-    return Ok(String::from("Hello, World!"));
+    let prompt = Prompt::new();
+    return Ok(String::from(prompt.get_system_prompt()));
   }
 }
