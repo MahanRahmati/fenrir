@@ -56,7 +56,16 @@ impl Config {
       .unwrap_or(String::from(DEFAULT_MODEL_NAME));
   }
 
-  pub async fn reset_to_defaults() -> ConfigResult<()> {
+  pub async fn reset_to_defaults(yes: bool) -> ConfigResult<()> {
+    if !yes {
+      let should_reset = crate::input::confirm_with(
+        "Are you sure you want to reset the configuration to default values? (y/n) ",
+      );
+      if !should_reset {
+        println!("Reset cancelled.");
+        return Ok(());
+      }
+    }
     let default_config = Config::default();
     let xdg_dirs = BaseDirectories::with_prefix(DEFAULT_DIRECTORY);
     let config_path = xdg_dirs

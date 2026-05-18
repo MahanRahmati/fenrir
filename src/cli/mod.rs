@@ -16,5 +16,9 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
   /// Reset configuration to default values
-  ResetConfig,
+  ResetConfig {
+    /// Skip confirmation prompt
+    #[arg(short, long, default_value_t = false)]
+    yes: bool,
+  },
 }

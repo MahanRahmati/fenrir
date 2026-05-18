@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod config;
 mod files;
+mod input;
 mod logging;
 
 use clap::Parser;
@@ -28,16 +29,18 @@ async fn main() {
   let app = App::new(config);
 
   let result = match cli.command {
-    Some(Commands::ResetConfig) => match Config::reset_to_defaults().await {
-      Ok(_) => {
-        println!("Configuration has been reset to default values.");
-        return;
+    Some(Commands::ResetConfig { yes }) => {
+      match Config::reset_to_defaults(yes).await {
+        Ok(_) => {
+          println!("Configuration has been reset to default values.");
+          return;
+        }
+        Err(e) => {
+          eprintln!("Failed to reset configuration: {}", e);
+          std::process::exit(1);
+        }
       }
-      Err(e) => {
-        eprintln!("Failed to reset configuration: {}", e);
-        std::process::exit(1);
-      }
-    },
+    }
     None => app.run().await,
   };
 
