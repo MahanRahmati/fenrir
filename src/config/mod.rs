@@ -11,6 +11,7 @@ const DEFAULT_DIRECTORY: &str = "fenrir";
 const DEFAULT_CONFIG_NAME: &str = "config.toml";
 const DEFAULT_MODEL_URL: &str = "http://127.0.0.1:12434";
 const DEFAULT_MODEL_NAME: &str = "qwen-3.6-35B-A3B";
+const DEFAULT_SESSIONS_FOLDER: &str = "sessions";
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Config {
@@ -25,7 +26,9 @@ pub struct ModelConfig {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-pub struct GeneralConfig {}
+pub struct GeneralConfig {
+  pub sessions_folder: Option<String>,
+}
 
 impl Config {
   pub async fn load() -> ConfigResult<Config> {
@@ -54,6 +57,14 @@ impl Config {
       .name
       .clone()
       .unwrap_or(String::from(DEFAULT_MODEL_NAME));
+  }
+
+  pub fn get_sessions_folder(&self) -> String {
+    return self
+      .general
+      .sessions_folder
+      .clone()
+      .unwrap_or(String::from(DEFAULT_SESSIONS_FOLDER));
   }
 
   pub async fn reset_to_defaults(yes: bool) -> ConfigResult<()> {
@@ -106,7 +117,9 @@ impl Default for Config {
         url: Some(String::from(DEFAULT_MODEL_URL)),
         name: Some(String::from(DEFAULT_MODEL_NAME)),
       },
-      general: GeneralConfig {},
+      general: GeneralConfig {
+        sessions_folder: Some(String::from(DEFAULT_SESSIONS_FOLDER)),
+      },
     };
   }
 }

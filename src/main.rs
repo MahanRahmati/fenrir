@@ -4,6 +4,7 @@ mod config;
 mod files;
 mod input;
 mod logging;
+mod session_manager;
 
 use clap::Parser;
 
