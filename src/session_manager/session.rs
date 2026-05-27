@@ -27,6 +27,10 @@ impl Session {
     };
   }
 
+  pub fn add_system_message(&mut self, content: String) {
+    self.add_message("system", content);
+  }
+
   pub fn add_user_message(&mut self, content: String) {
     self.add_message("user", content);
   }

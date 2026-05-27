@@ -5,6 +5,7 @@ use crate::app::errors::RuntimeResult;
 use crate::app::prompt::Prompt;
 use crate::config::Config;
 use crate::session_manager::SessionManager;
+use crate::vlog;
 
 pub struct App {
   config: Config,
@@ -20,8 +21,11 @@ impl App {
     };
   }
 
-  pub async fn run(&self) -> RuntimeResult<String> {
+  pub async fn run(&mut self) -> RuntimeResult<String> {
     let prompt = Prompt::new();
-    return Ok(String::from(prompt.get_system_prompt()));
+    vlog!("Prompt: {}", prompt.get_system_prompt());
+    let session_id = self.session_manager.create_session();
+    vlog!("Created session with ID: {}", session_id);
+    return Ok(String::new());
   }
 }

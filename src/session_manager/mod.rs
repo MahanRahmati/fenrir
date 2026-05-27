@@ -7,6 +7,7 @@ use crate::session_manager::session::Session;
 pub struct SessionManager {
   sessions_path: PathBuf,
   sessions: Vec<Session>,
+  current_session: Option<i64>,
 }
 
 impl SessionManager {
@@ -15,7 +16,16 @@ impl SessionManager {
     return Self {
       sessions_path,
       sessions: Vec::new(),
+      current_session: None,
     };
+  }
+
+  pub fn create_session(&mut self) -> i64 {
+    let session = Session::new();
+    let id = session.id;
+    self.sessions.push(session);
+    self.current_session = Some(id);
+    return id;
   }
 
   pub fn get_sessions(&self) -> &Vec<Session> {
@@ -24,5 +34,11 @@ impl SessionManager {
 
   pub fn get_session_by_id(&self, id: i64) -> Option<&Session> {
     return self.sessions.iter().find(|session| session.id == id);
+  }
+
+  pub fn get_current_session(&self) -> Option<&Session> {
+    self
+      .current_session
+      .and_then(|id| self.get_session_by_id(id))
   }
 }

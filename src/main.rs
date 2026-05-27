@@ -27,7 +27,7 @@ async fn main() {
     }
   };
 
-  let app = App::new(config);
+  let mut app = App::new(config);
 
   let result = match cli.command {
     Some(Commands::ResetConfig { yes }) => {
