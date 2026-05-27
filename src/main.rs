@@ -6,6 +6,7 @@ mod input;
 mod logging;
 mod prompt;
 mod session_manager;
+mod tool_manager;
 
 use clap::Parser;
 
