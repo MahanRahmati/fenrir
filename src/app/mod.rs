@@ -1,9 +1,8 @@
 mod errors;
-mod prompt;
 
 use crate::app::errors::RuntimeResult;
-use crate::app::prompt::Prompt;
 use crate::config::Config;
+use crate::prompt::Prompt;
 use crate::session_manager::SessionManager;
 use crate::vlog;
 
