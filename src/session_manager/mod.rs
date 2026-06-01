@@ -37,8 +37,8 @@ impl SessionManager {
   }
 
   pub fn get_current_session(&self) -> Option<&Session> {
-    self
+    return self
       .current_session
-      .and_then(|id| self.get_session_by_id(id))
+      .and_then(|id| self.get_session_by_id(id));
   }
 }

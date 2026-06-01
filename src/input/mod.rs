@@ -10,7 +10,7 @@ fn read_from_stdin() -> InputResult<String> {
     .map_err(|e| InputError::StdinRead(e.to_string()))?;
   let input = input.trim().to_string();
   return match input.is_empty() {
-    true => return Err(InputError::EmptyInput),
+    true => Err(InputError::EmptyInput),
     false => Ok(input),
   };
 }
@@ -23,8 +23,5 @@ fn confirm(prompt: &str) -> InputResult<bool> {
 }
 
 pub fn confirm_with(prompt: &str) -> bool {
-  match confirm(prompt) {
-    Ok(result) => result,
-    Err(_) => false,
-  }
+  return confirm(prompt).unwrap_or_default();
 }
