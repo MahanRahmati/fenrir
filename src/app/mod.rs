@@ -1,4 +1,4 @@
-mod errors;
+pub mod errors;
 
 use crate::app::errors::RuntimeResult;
 use crate::config::Config;
