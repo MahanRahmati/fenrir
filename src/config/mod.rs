@@ -103,9 +103,9 @@ impl Config {
   ) -> ConfigResult<()> {
     let config_content = toml::to_string_pretty(&config)
       .map_err(|e| ConfigError::Parse(e.to_string()))?;
-    tokio::fs::write(&config_path, config_content)
+    operations::write_file(&config_path.to_string_lossy(), &config_content)
       .await
-      .map_err(|e| ConfigError::FileRead(e.to_string()))?;
+      .map_err(|e| ConfigError::FileWrite(e.to_string()))?;
     return Ok(());
   }
 }

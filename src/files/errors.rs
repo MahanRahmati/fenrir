@@ -17,6 +17,9 @@ pub enum FileError {
 
   #[error("File not found: '{0}'. Please verify the file path and try again.")]
   FileNotFound(String),
+
+  #[error("Cannot write to file '{0}'. Please check permissions.")]
+  FileWrite(String),
 }
 
 pub type FileResult<T> = Result<T, FileError>;
