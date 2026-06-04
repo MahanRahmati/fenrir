@@ -10,8 +10,11 @@ toml = "1.1.2"
 xdg = "3.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
 chrono = { version = "0.4.44", features = ["serde"] }
+reqwest = { version = "0.13.4", features = ["json", "stream"] }
 thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["fs", "macros", "rt-multi-thread"] }
+futures = "0.3.32"
+bytes = "1.11.1"
 
 [lints.clippy]
 needless_return = "allow"
