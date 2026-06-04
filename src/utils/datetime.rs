@@ -12,5 +12,5 @@ pub fn get_current_datetime() -> String {
     Weekday::Sat => "Saturday",
     Weekday::Sun => "Sunday",
   };
-  format!("Current date: {} ({})\n", datetime, day)
+  return format!("Current date: {} ({})\n", datetime, day);
 }
