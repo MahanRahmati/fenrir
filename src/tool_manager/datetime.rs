@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-
+use crate::tool_manager::ToolParams;
+use crate::tool_manager::errors::ToolManagerResult;
 use crate::tool_manager::tool::Tool;
 use crate::utils::datetime::get_current_datetime;
 
@@ -14,10 +14,7 @@ impl Tool for DateTimeTool {
     return "Returns the current local date and time.";
   }
 
-  fn execute(
-    &self,
-    _params: HashMap<String, String>,
-  ) -> Result<String, String> {
+  fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
     return Ok(get_current_datetime());
   }
 }

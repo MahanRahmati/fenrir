@@ -1,0 +1,12 @@
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ToolManagerError {
+  #[error("Failed to execute tool '{name}': {reason}.")]
+  ExecutionFailed { name: String, reason: String },
+
+  #[error("Missing parameter '{param}' for tool '{name}'.")]
+  MissingParameter { param: String, name: String },
+}
+
+pub type ToolManagerResult<T> = Result<T, ToolManagerError>;
