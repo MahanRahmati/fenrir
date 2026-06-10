@@ -7,7 +7,7 @@ use xdg::BaseDirectories;
 use crate::config::errors::{ConfigError, ConfigResult};
 use crate::files::operations;
 
-const DEFAULT_DIRECTORY: &str = "fenrir";
+pub const DEFAULT_DIRECTORY: &str = "fenrir";
 const DEFAULT_CONFIG_NAME: &str = "config.toml";
 const DEFAULT_MODEL_URL: &str = "http://127.0.0.1:12434";
 const DEFAULT_MODEL_NAME: &str = "qwen-3.6-35B-A3B";

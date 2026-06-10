@@ -1,6 +1,7 @@
 mod app;
 mod cli;
 mod config;
+mod database;
 mod files;
 mod input;
 mod logging;
@@ -15,6 +16,7 @@ use clap::Parser;
 use crate::app::App;
 use crate::cli::{Cli, Commands};
 use crate::config::Config;
+use crate::database::DB;
 use crate::logging::set_verbose;
 
 #[tokio::main]
@@ -27,6 +29,14 @@ async fn main() {
     Ok(config) => config,
     Err(e) => {
       eprintln!("Configuration Error: {}", e);
+      std::process::exit(1);
+    }
+  };
+
+  let db = match DB::load().await {
+    Ok(db) => db,
+    Err(e) => {
+      eprintln!("Failed to load database: {}", e);
       std::process::exit(1);
     }
   };
@@ -49,11 +59,11 @@ async fn main() {
     None => app.run().await,
   };
 
-  match result {
+  return match result {
     Ok(output) => println!("{}", output),
     Err(e) => {
       eprintln!("{}", e);
       std::process::exit(1);
     }
-  }
+  };
 }
