@@ -1,6 +1,5 @@
-use crate::tool_manager::ToolParams;
 use crate::tool_manager::errors::ToolManagerResult;
-use crate::tool_manager::tool::Tool;
+use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::datetime::get_current_datetime;
 
 pub struct DateTimeTool;

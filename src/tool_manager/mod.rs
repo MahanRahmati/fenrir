@@ -1,13 +1,14 @@
 mod datetime;
 pub mod errors;
+mod helpers;
+mod read_file;
 mod tool;
-
-use std::collections::HashMap;
+mod write_file;
 
 use crate::tool_manager::datetime::DateTimeTool;
+use crate::tool_manager::read_file::ReadFileTool;
 use crate::tool_manager::tool::Tool;
-
-pub type ToolParams = HashMap<String, String>;
+use crate::tool_manager::write_file::WriteFileTool;
 
 pub struct ToolManager {
   tools: Vec<Box<dyn Tool>>,
@@ -15,7 +16,11 @@ pub struct ToolManager {
 
 impl ToolManager {
   pub fn new() -> Self {
-    let tools: Vec<Box<dyn Tool>> = vec![Box::new(DateTimeTool)];
+    let tools: Vec<Box<dyn Tool>> = vec![
+      Box::new(DateTimeTool),
+      Box::new(ReadFileTool),
+      Box::new(WriteFileTool),
+    ];
     return Self { tools };
   }
 

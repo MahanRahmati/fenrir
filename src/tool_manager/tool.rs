@@ -1,5 +1,8 @@
-use crate::tool_manager::ToolParams;
+use std::collections::HashMap;
+
 use crate::tool_manager::errors::ToolManagerResult;
+
+pub type ToolParams = HashMap<String, String>;
 
 #[derive(Debug, Clone)]
 pub struct ToolSpec {
