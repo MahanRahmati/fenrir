@@ -2,7 +2,7 @@ pub mod errors;
 
 use crate::input::errors::{InputError, InputResult};
 
-fn read_from_stdin() -> InputResult<String> {
+pub fn read_from_stdin() -> InputResult<String> {
   let _ = std::io::Write::flush(&mut std::io::stdout());
   let mut input = String::new();
   std::io::stdin()

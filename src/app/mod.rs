@@ -1,9 +1,12 @@
 pub mod errors;
 
-use crate::app::errors::RuntimeResult;
+use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
+use crate::input::errors::InputError;
+use crate::input::read_from_stdin;
 use crate::prompt::Prompt;
 use crate::session_manager::SessionManager;
+use crate::slash_commands::{SlashCommand, parse_command};
 use crate::tool_manager::ToolManager;
 use crate::vlog;
 
@@ -29,6 +32,22 @@ impl App {
     vlog!("Prompt: {}", prompt.get_system_prompt());
     let session_id = self.session_manager.create_session();
     vlog!("Created session with ID: {}", session_id);
+
+    loop {
+      let input = match read_from_stdin() {
+        Ok(input) => input,
+        Err(InputError::EmptyInput) => continue,
+        Err(e) => return Err(RuntimeError::Input(e.to_string())),
+      };
+
+      match parse_command(&input) {
+        Ok(Some(SlashCommand::Exit)) => break,
+        Ok(Some(cmd)) => println!("Unknown command: {}", cmd.name()),
+        Ok(None) => println!("Assistant: {}", input),
+        Err(e) => println!("Error: {}", e),
+      }
+    }
+
     return Ok(String::new());
   }
 }
