@@ -2,6 +2,7 @@ pub mod errors;
 
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
+use crate::database::DB;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::prompt::Prompt;
@@ -17,8 +18,8 @@ pub struct App {
 }
 
 impl App {
-  pub fn new(config: Config) -> Self {
-    let session_manager = SessionManager::new(config.get_sessions_folder());
+  pub fn new(config: Config, db: DB) -> Self {
+    let session_manager = SessionManager::new(config.get_sessions_folder(), db);
     let tool_manager = ToolManager::new();
     return App {
       config,
@@ -39,6 +40,10 @@ impl App {
         Err(InputError::EmptyInput) => continue,
         Err(e) => return Err(RuntimeError::Input(e.to_string())),
       };
+
+      self
+        .session_manager
+        .add_user_message_to_current_session(&input);
 
       match parse_command(&input) {
         Ok(Some(SlashCommand::Exit)) => break,
