@@ -1,9 +1,11 @@
 pub mod errors;
+pub mod migrations;
 
 use turso::{Database, Rows};
 
 use crate::config::DEFAULT_DIRECTORY;
 use crate::database::errors::{DatabaseError, DatabaseResult};
+use crate::database::migrations::list_migrations;
 
 const DEFAULT_DB_NAME: &str = "database.db";
 
@@ -21,7 +23,20 @@ impl DB {
       .build()
       .await
       .map_err(|e| DatabaseError::Initialization(e.to_string()))?;
-    return Ok(DB { db });
+    let db_instance = DB { db };
+    db_instance.run_migrations().await?;
+    return Ok(db_instance);
+  }
+
+  async fn run_migrations(&self) -> DatabaseResult<()> {
+    for migration in list_migrations() {
+      let conn = self.connect()?;
+      conn
+        .execute(&migration.sql, ())
+        .await
+        .map_err(|e| DatabaseError::Migration(e.to_string()))?;
+    }
+    return Ok(());
   }
 
   pub async fn execute(

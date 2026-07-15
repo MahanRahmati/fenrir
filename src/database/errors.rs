@@ -10,6 +10,9 @@ pub enum DatabaseError {
 
   #[error("Database query error: {0}")]
   Query(String),
+
+  #[error("Migration error: {0}")]
+  Migration(String),
 }
 
 pub type DatabaseResult<T> = Result<T, DatabaseError>;
