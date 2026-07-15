@@ -43,7 +43,8 @@ impl App {
 
       self
         .session_manager
-        .add_user_message_to_current_session(&input);
+        .add_user_message_to_current_session(&input)
+        .await;
 
       match parse_command(&input) {
         Ok(Some(SlashCommand::Exit)) => break,
