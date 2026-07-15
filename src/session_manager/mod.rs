@@ -31,7 +31,7 @@ impl SessionManager {
     return id;
   }
 
-  pub fn add_user_message_to_current_session(&mut self, content: &str) {
+  pub async fn add_user_message_to_current_session(&mut self, content: &str) {
     if let Some(session) = self
       .current_session
       .and_then(|id| self.sessions.iter_mut().find(|s| s.id == id))
