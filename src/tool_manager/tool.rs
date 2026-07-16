@@ -4,7 +4,7 @@ use crate::tool_manager::errors::ToolManagerResult;
 
 pub type ToolParams = HashMap<String, String>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ToolSpec {
   pub name: String,
   pub description: String,

@@ -28,8 +28,8 @@ impl Tool for WriteFileTool {
   }
 
   fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
-    let path = get_param(&params, "path")?;
-    let content = get_param(&params, "content")?;
+    let path = get_param(&params, "write_file", "path")?;
+    let content = get_param(&params, "write_file", "content")?;
 
     let file_path = Path::new(&path);
 
