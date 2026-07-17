@@ -7,17 +7,14 @@ use crate::database::DB;
 use crate::session_manager::session::Session;
 
 pub struct SessionManager {
-  sessions_path: PathBuf,
   sessions: Vec<Session>,
   current_session: Option<i64>,
   db: DB,
 }
 
 impl SessionManager {
-  pub fn new(path: String, db: DB) -> Self {
-    let sessions_path = PathBuf::from(path);
+  pub fn new(db: DB) -> Self {
     return Self {
-      sessions_path,
       sessions: Vec::new(),
       current_session: None,
       db,

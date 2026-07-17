@@ -19,7 +19,7 @@ pub struct App {
 
 impl App {
   pub fn new(config: Config, db: DB) -> Self {
-    let session_manager = SessionManager::new(config.get_sessions_folder(), db);
+    let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new();
     return App {
       config,
