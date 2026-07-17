@@ -48,6 +48,12 @@ impl App {
 
       match parse_command(&input) {
         Ok(Some(SlashCommand::Exit)) => break,
+        Ok(Some(SlashCommand::Help)) => {
+          println!("Available commands:");
+          for cmd in SlashCommand::all() {
+            println!("  {}: {}", cmd.name(), cmd.description());
+          }
+        }
         Ok(Some(cmd)) => println!("Unknown command: {}", cmd.name()),
         Ok(None) => println!("Assistant: {}", input),
         Err(e) => println!("Error: {}", e),
