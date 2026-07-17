@@ -1,8 +1,6 @@
 mod queries;
 mod session;
 
-use std::path::PathBuf;
-
 use crate::database::DB;
 use crate::session_manager::session::Session;
 
@@ -34,7 +32,7 @@ impl SessionManager {
       .current_session
       .and_then(|id| self.sessions.iter_mut().find(|s| s.id == id))
     {
-      session.add_user_message(content.to_string());
+      session.add_user_message(content);
     }
   }
 

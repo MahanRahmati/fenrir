@@ -27,27 +27,27 @@ impl Session {
     };
   }
 
-  pub fn add_system_message(&mut self, content: String) {
+  pub fn add_system_message(&mut self, content: &str) {
     self.add_message("system", content);
   }
 
-  pub fn add_user_message(&mut self, content: String) {
+  pub fn add_user_message(&mut self, content: &str) {
     self.add_message("user", content);
   }
 
-  pub fn add_assistant_message(&mut self, content: String) {
+  pub fn add_assistant_message(&mut self, content: &str) {
     self.add_message("assistant", content);
   }
 
-  pub fn add_tool_message(&mut self, content: String) {
+  pub fn add_tool_message(&mut self, content: &str) {
     self.add_message("tool", content);
   }
 
-  fn add_message(&mut self, role: &str, content: String) {
+  fn add_message(&mut self, role: &str, content: &str) {
     let now = Utc::now().timestamp();
     let message = Message {
       role: role.to_string(),
-      content,
+      content: content.to_string(),
       timestamp: now,
     };
     self.last_interaction = now;
