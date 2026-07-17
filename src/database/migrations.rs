@@ -6,6 +6,10 @@ pub struct Migration {
 pub fn list_migrations() -> Vec<Migration> {
   return vec![
     Migration {
+      name: "000_schema_migrations".into(),
+      sql: include_str!("../migrations/000_schema_migrations.sql").into(),
+    },
+    Migration {
       name: "001_create_sessions".into(),
       sql: include_str!("../migrations/001_create_sessions.sql").into(),
     },
