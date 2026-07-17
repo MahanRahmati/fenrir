@@ -1,3 +1,4 @@
+mod queries;
 mod session;
 
 use std::path::PathBuf;
