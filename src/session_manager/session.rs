@@ -39,6 +39,10 @@ impl Session {
     self.add_message("assistant", content);
   }
 
+  pub fn add_tool_message(&mut self, content: String) {
+    self.add_message("tool", content);
+  }
+
   fn add_message(&mut self, role: &str, content: String) {
     let now = Utc::now().timestamp();
     let message = Message {
