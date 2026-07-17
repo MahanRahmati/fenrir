@@ -52,7 +52,7 @@ pub fn get_optional_bool(
   name: &str,
 ) -> Option<bool> {
   vlog!(
-    "Getting optional usize parameter '{}' for tool '{}'",
+    "Getting optional bool parameter '{}' for tool '{}'",
     name,
     tool_name
   );
