@@ -6,6 +6,7 @@ use crate::database::DB;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::prompt::Prompt;
+use crate::provider_manager::ProviderManager;
 use crate::session_manager::SessionManager;
 use crate::slash_commands::{SlashCommand, parse_command};
 use crate::tool_manager::ToolManager;
@@ -13,6 +14,7 @@ use crate::vlog;
 
 pub struct App {
   session_manager: SessionManager,
+  provider_manager: ProviderManager,
   tool_manager: ToolManager,
 }
 
@@ -20,8 +22,10 @@ impl App {
   pub fn new(config: Config, db: DB) -> Self {
     let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new();
+    let provider_manager = ProviderManager::new(config);
     return App {
       session_manager,
+      provider_manager,
       tool_manager,
     };
   }

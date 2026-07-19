@@ -7,6 +7,7 @@ mod input;
 mod logging;
 mod network;
 mod prompt;
+mod provider_manager;
 mod session_manager;
 mod slash_commands;
 mod tool_manager;
