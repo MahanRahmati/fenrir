@@ -12,7 +12,6 @@ use crate::tool_manager::ToolManager;
 use crate::vlog;
 
 pub struct App {
-  config: Config,
   session_manager: SessionManager,
   tool_manager: ToolManager,
 }
@@ -22,7 +21,6 @@ impl App {
     let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new();
     return App {
-      config,
       session_manager,
       tool_manager,
     };
