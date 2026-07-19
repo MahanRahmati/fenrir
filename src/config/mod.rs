@@ -9,26 +9,34 @@ use crate::files::operations;
 
 pub const DEFAULT_DIRECTORY: &str = "fenrir";
 const DEFAULT_CONFIG_NAME: &str = "config.toml";
-const DEFAULT_MODEL_URL: &str = "http://127.0.0.1:12434";
-const DEFAULT_MODEL_NAME: &str = "qwen-3.6-35B-A3B";
-const DEFAULT_SESSIONS_FOLDER: &str = "sessions";
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Config {
-  pub model: ModelConfig,
   pub general: GeneralConfig,
+  pub providers: ProvidersConfig,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-pub struct ModelConfig {
+pub struct ProvidersConfig {
+  pub openai_compatible: Option<OpenAICompatibleConfig>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct OpenAICompatibleConfig {
   pub url: Option<String>,
   pub name: Option<String>,
+  pub api_key: Option<String>,
+  pub models: Vec<ProviderModel>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-pub struct GeneralConfig {
-  pub sessions_folder: Option<String>,
+pub struct ProviderModel {
+  pub name: String,
+  pub alias: Option<String>,
 }
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct GeneralConfig {}
 
 impl Config {
   pub async fn load() -> ConfigResult<Config> {
@@ -41,30 +49,6 @@ impl Config {
       }
     };
     return Config::load_from_path(config_path).await;
-  }
-
-  pub fn get_model_url(&self) -> String {
-    return self
-      .model
-      .url
-      .clone()
-      .unwrap_or(String::from(DEFAULT_MODEL_URL));
-  }
-
-  pub fn get_model_name(&self) -> String {
-    return self
-      .model
-      .name
-      .clone()
-      .unwrap_or(String::from(DEFAULT_MODEL_NAME));
-  }
-
-  pub fn get_sessions_folder(&self) -> String {
-    return self
-      .general
-      .sessions_folder
-      .clone()
-      .unwrap_or(String::from(DEFAULT_SESSIONS_FOLDER));
   }
 
   pub async fn reset_to_defaults(yes: bool) -> ConfigResult<()> {
@@ -113,12 +97,9 @@ impl Config {
 impl Default for Config {
   fn default() -> Self {
     return Config {
-      model: ModelConfig {
-        url: Some(String::from(DEFAULT_MODEL_URL)),
-        name: Some(String::from(DEFAULT_MODEL_NAME)),
-      },
-      general: GeneralConfig {
-        sessions_folder: Some(String::from(DEFAULT_SESSIONS_FOLDER)),
+      general: GeneralConfig {},
+      providers: ProvidersConfig {
+        openai_compatible: None,
       },
     };
   }
