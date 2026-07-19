@@ -4,6 +4,9 @@ use thiserror::Error;
 pub enum RuntimeError {
   #[error("Unknown input: {0}")]
   Input(String),
+
+  #[error("Session error: {0}")]
+  Session(String),
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
