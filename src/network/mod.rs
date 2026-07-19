@@ -22,6 +22,46 @@ impl HttpClient {
     return HttpClient { base_url, client };
   }
 
+  pub async fn post<B>(
+    &self,
+    body: &B,
+    endpoint: &str,
+    headers: Option<HashMap<String, String>>,
+  ) -> NetworkResult<String>
+  where
+    B: Serialize,
+  {
+    let full_url = self.url_builder(endpoint);
+    vlog!("Sending POST request to: {}", full_url);
+
+    let request_builder = self.client.post(&full_url).json(body);
+    let request_builder = Self::apply_headers(request_builder, headers);
+
+    let response = request_builder
+      .send()
+      .await
+      .map_err(|e| NetworkError::RequestFailed(e.to_string()))?;
+
+    if !response.status().is_success() {
+      let status = response.status().as_str().to_string();
+      let body_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::from("Failed to read response body"));
+      vlog!("Service returned error {}: {}", status, body_text);
+      return Err(NetworkError::ResponseError {
+        status,
+        body: body_text,
+      });
+    }
+
+    let text = response
+      .text()
+      .await
+      .map_err(|e| NetworkError::RequestFailed(e.to_string()))?;
+    return Ok(text);
+  }
+
   pub async fn post_stream<B>(
     &self,
     body: &B,
