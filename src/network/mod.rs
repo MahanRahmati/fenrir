@@ -22,13 +22,14 @@ impl HttpClient {
     return HttpClient { base_url, client };
   }
 
-  pub async fn post<B>(
+  pub async fn post<T, B>(
     &self,
     body: &B,
     endpoint: &str,
     headers: Option<HashMap<String, String>>,
-  ) -> NetworkResult<String>
+  ) -> NetworkResult<T>
   where
+    T: serde::de::DeserializeOwned,
     B: Serialize,
   {
     let full_url = self.url_builder(endpoint);
@@ -55,11 +56,12 @@ impl HttpClient {
       });
     }
 
-    let text = response
-      .text()
+    let parsed_response = response
+      .json::<T>()
       .await
-      .map_err(|e| NetworkError::RequestFailed(e.to_string()))?;
-    return Ok(text);
+      .map_err(|e| NetworkError::DecodeError(e.to_string()))?;
+
+    return Ok(parsed_response);
   }
 
   pub async fn post_stream<B>(
