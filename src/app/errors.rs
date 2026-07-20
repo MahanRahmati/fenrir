@@ -7,6 +7,9 @@ pub enum RuntimeError {
 
   #[error("Session error: {0}")]
   Session(String),
+
+  #[error("Provider error: {0}")]
+  Provider(String),
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;

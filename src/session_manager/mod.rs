@@ -2,12 +2,14 @@ mod errors;
 mod queries;
 mod session;
 
+pub use crate::session_manager::session::Message;
+
 use crate::database::DB;
 use crate::session_manager::errors::{
   SessionManagerError, SessionManagerResult,
 };
 use crate::session_manager::queries::*;
-use crate::session_manager::session::{Message, Session};
+use crate::session_manager::session::Session;
 
 pub struct SessionManager {
   sessions: Vec<Session>,

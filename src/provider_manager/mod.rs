@@ -3,8 +3,13 @@ mod provider;
 mod providers;
 
 use crate::config::Config;
-use crate::provider_manager::provider::Provider;
+use crate::provider_manager::errors::{
+  ProviderManagerError, ProviderManagerResult,
+};
+use crate::provider_manager::provider::{ChatResponse, Provider};
 use crate::provider_manager::providers::openai_compatible::OpenAICompatibleProvider;
+use crate::session_manager::Message;
+use crate::tool_manager::tool::ToolSpec;
 use crate::vlog;
 
 pub struct ProviderManager {
@@ -23,6 +28,18 @@ impl ProviderManager {
       providers,
       active_provider,
     };
+  }
+
+  pub fn chat(
+    &self,
+    messages: &[Message],
+    tools: &[ToolSpec],
+  ) -> ProviderManagerResult<ChatResponse> {
+    let provider = self
+      .active_provider
+      .and_then(|i| self.providers.get(i))
+      .ok_or_else(|| ProviderManagerError::NoActiveProvider)?;
+    return provider.chat(messages, tools);
   }
 }
 
