@@ -5,23 +5,49 @@ mod providers;
 use crate::config::Config;
 use crate::provider_manager::provider::Provider;
 use crate::provider_manager::providers::openai_compatible::OpenAICompatibleProvider;
+use crate::vlog;
 
 pub struct ProviderManager {
   providers: Vec<Box<dyn Provider>>,
-  active_provider: Option<Box<dyn Provider>>,
+  active_provider: Option<usize>,
 }
 
 impl ProviderManager {
   pub fn new(config: Config) -> Self {
     let mut providers: Vec<Box<dyn Provider>> = Vec::new();
-    if let Some(provider) = setup_openai_compatible(config) {
+    if let Some(provider) = setup_openai_compatible(config.clone()) {
       providers.push(Box::new(provider));
     }
+    let active_provider = setup_active_provider(config, &providers);
     return Self {
       providers,
-      active_provider: None,
+      active_provider,
     };
   }
+}
+
+fn setup_active_provider(
+  config: Config,
+  providers: &Vec<Box<dyn Provider>>,
+) -> Option<usize> {
+  let model_str = config.general.model.clone()?;
+  let (provider_name, model_name) = model_str.split_once('/')?;
+
+  for (i, p) in providers.iter().enumerate() {
+    if p.name() != provider_name {
+      continue;
+    }
+
+    let has_model = p.list_models().iter().any(|m| m.name == model_name);
+
+    if has_model {
+      vlog!("Selected provider '{provider_name}' model '{model_name}'");
+      return Some(i);
+    }
+  }
+
+  vlog!("Failed to select provider '{provider_name}' model '{model_name}'");
+  return None;
 }
 
 fn setup_openai_compatible(config: Config) -> Option<OpenAICompatibleProvider> {

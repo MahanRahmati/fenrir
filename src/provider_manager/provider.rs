@@ -8,5 +8,4 @@ pub trait Provider {
   fn name(&self) -> &str;
   fn active_model(&self) -> Option<&Model>;
   fn list_models(&self) -> Vec<Model>;
-  fn select_model(&mut self, model: &Model);
 }

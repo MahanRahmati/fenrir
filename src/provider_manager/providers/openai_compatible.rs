@@ -2,6 +2,7 @@ use crate::config::ProviderModel;
 use crate::provider_manager::provider::{Model, Provider};
 use crate::vlog;
 
+#[derive(Clone)]
 pub struct OpenAICompatibleProvider {
   name: String,
   api_key: Option<String>,
@@ -12,7 +13,7 @@ pub struct OpenAICompatibleProvider {
 impl OpenAICompatibleProvider {
   pub fn new(
     url: String,
-    name: Option<String>,
+    name: String,
     api_key: Option<String>,
     models: Vec<ProviderModel>,
   ) -> Self {
@@ -24,7 +25,7 @@ impl OpenAICompatibleProvider {
       })
       .collect();
     return Self {
-      name: name.unwrap_or("OpenAI-compatible".to_string()),
+      name: name,
       api_key,
       models,
       active_model: None,
@@ -50,10 +51,5 @@ impl Provider for OpenAICompatibleProvider {
         alias: m.alias.clone(),
       })
       .collect();
-  }
-
-  fn select_model(&mut self, model: &Model) {
-    vlog!("Switching active model to: {}", model.name);
-    self.active_model = Some(model.clone());
   }
 }

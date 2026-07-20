@@ -17,6 +17,11 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct GeneralConfig {
+  pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ProvidersConfig {
   pub openai_compatible: Option<OpenAICompatibleConfig>,
 }
@@ -24,7 +29,7 @@ pub struct ProvidersConfig {
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct OpenAICompatibleConfig {
   pub url: Option<String>,
-  pub name: Option<String>,
+  pub name: String,
   pub api_key: Option<String>,
   pub models: Vec<ProviderModel>,
 }
@@ -34,9 +39,6 @@ pub struct ProviderModel {
   pub name: String,
   pub alias: Option<String>,
 }
-
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-pub struct GeneralConfig {}
 
 impl Config {
   pub async fn load() -> ConfigResult<Config> {
@@ -97,7 +99,7 @@ impl Config {
 impl Default for Config {
   fn default() -> Self {
     return Config {
-      general: GeneralConfig {},
+      general: GeneralConfig { model: None },
       providers: ProvidersConfig {
         openai_compatible: None,
       },
