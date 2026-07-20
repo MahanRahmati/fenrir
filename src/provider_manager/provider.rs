@@ -19,18 +19,14 @@ pub struct ChatResponse {
   pub tool_calls: Vec<ToolCall>,
 }
 
+#[async_trait::async_trait]
 pub trait Provider {
   fn name(&self) -> &str;
-  fn active_model(&self) -> Option<&Model>;
   fn list_models(&self) -> Vec<Model>;
-  fn chat(
+  fn set_active_model(&mut self, model: Model);
+  async fn chat(
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
-  ) -> ProviderManagerResult<ChatResponse> {
-    return Ok(ChatResponse {
-      content: None,
-      tool_calls: Vec::new(),
-    });
-  }
+  ) -> ProviderManagerResult<ChatResponse>;
 }

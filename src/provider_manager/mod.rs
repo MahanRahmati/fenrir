@@ -23,14 +23,30 @@ impl ProviderManager {
     if let Some(provider) = setup_openai_compatible(config.clone()) {
       providers.push(Box::new(provider));
     }
-    let active_provider = setup_active_provider(config, &providers);
+
+    let active_provider = setup_active_provider(config.clone(), &providers);
+    if let Some(idx) = active_provider {
+      let provider = &mut providers[idx];
+      let model_str = config.general.model.clone().unwrap_or_default();
+      let (_, model_name) = model_str
+        .split_once('/')
+        .unwrap_or(("", model_str.as_str()));
+      let active_model = provider
+        .list_models()
+        .into_iter()
+        .find(|m| m.name == model_name);
+      if let Some(model) = active_model {
+        provider.set_active_model(model);
+      }
+    }
+
     return Self {
       providers,
       active_provider,
     };
   }
 
-  pub fn chat(
+  pub async fn chat(
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
@@ -39,7 +55,7 @@ impl ProviderManager {
       .active_provider
       .and_then(|i| self.providers.get(i))
       .ok_or_else(|| ProviderManagerError::NoActiveProvider)?;
-    return provider.chat(messages, tools);
+    return provider.chat(messages, tools).await;
   }
 }
 

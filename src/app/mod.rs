@@ -104,6 +104,7 @@ impl App {
       let response = self
         .provider_manager
         .chat(&messages, &tools)
+        .await
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
       if let Some(ref content) = response.content {

@@ -17,6 +17,7 @@ tokio = { version = "1.52.3", features = ["fs", "macros", "rt-multi-thread"] }
 futures = "0.3.32"
 bytes = "1.11.1"
 turso = "0.6.1"
+async-trait = "0.1.91"
 
 [lints.clippy]
 needless_return = "allow"
