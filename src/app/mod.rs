@@ -60,38 +60,24 @@ impl App {
         }
       }
 
-      if self.session_manager.get_current_session().is_none() {
-        let session_id = self.session_manager.create_session();
-        vlog!("Created session with ID: {}", session_id);
-        match self
-          .session_manager
-          .add_system_message_to_current_session(prompt.get_system_prompt())
-          .await
-        {
-          Ok(_) => {}
-          Err(e) => return Err(RuntimeError::Session(e.to_string())),
-        }
-      }
+      self.ensure_session_with_system_message(&prompt).await?;
 
-      match self
+      self
         .session_manager
         .add_user_message_to_current_session(&input)
         .await
-      {
-        Ok(_) => {}
-        Err(e) => return Err(RuntimeError::Session(e.to_string())),
-      }
+        .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
-      match self.process_chat().await {
-        Ok(_) => {}
-        Err(e) => return Err(e),
-      }
+      print!("{}", self.process_chat_inner().await?);
+      println!();
     }
 
     return Ok(String::new());
   }
 
-  async fn process_chat(&mut self) -> RuntimeResult<()> {
+  async fn process_chat_inner(&mut self) -> RuntimeResult<String> {
+    let mut assistant_content = String::new();
+
     loop {
       let session = self
         .session_manager
@@ -108,8 +94,7 @@ impl App {
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
       if let Some(ref content) = response.content {
-        print!("{}", content);
-        println!();
+        assistant_content.push_str(content);
       }
 
       if response.tool_calls.is_empty() {
@@ -141,6 +126,25 @@ impl App {
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
       }
     }
+
+    return Ok(assistant_content);
+  }
+
+  async fn ensure_session_with_system_message(
+    &mut self,
+    prompt: &Prompt,
+  ) -> RuntimeResult<()> {
+    if self.session_manager.get_current_session().is_some() {
+      return Ok(());
+    }
+
+    let session_id = self.session_manager.create_session();
+    vlog!("Created session with ID: {}", session_id);
+    self
+      .session_manager
+      .add_system_message_to_current_session(prompt.get_system_prompt())
+      .await
+      .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
     return Ok(());
   }
