@@ -10,6 +10,9 @@ pub enum RuntimeError {
 
   #[error("Provider error: {0}")]
   Provider(String),
+
+  #[error("TUI error: {0}")]
+  TUI(String),
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;

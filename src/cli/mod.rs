@@ -21,4 +21,6 @@ pub enum Commands {
     #[arg(short, long, default_value_t = false)]
     yes: bool,
   },
+  /// Run the application in TUI mode
+  TUI,
 }
