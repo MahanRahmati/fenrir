@@ -1,14 +1,8 @@
-use ratatui::Frame;
-use ratatui::crossterm::event::{self, KeyCode};
-use ratatui::layout::{Constraint, Layout, Position};
-use ratatui::style::Style;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, List, ListItem, Paragraph};
-
 use crate::app::App;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::prompt::Prompt;
-use crate::tui::input::Input;
+use crate::slash_commands::{SlashCommand, parse_command};
+use crate::tui::TUI;
 use crate::vlog;
 
 impl App {
@@ -16,86 +10,59 @@ impl App {
     let prompt = Prompt::new();
     vlog!("Prompt: {}", prompt.get_system_prompt());
 
-    return ratatui::run(|terminal| -> RuntimeResult<String> {
-      let mut tui = TUI::new();
-      while tui.running {
-        terminal
-          .draw(|frame| tui.render(frame))
-          .map_err(|e| RuntimeError::TUI(e.to_string()))?;
-        tui.handle_events()?;
+    let mut terminal = ratatui::init();
+    let mut tui = TUI::new();
+
+    while tui.is_running() {
+      terminal
+        .draw(|frame| tui.draw(frame))
+        .map_err(|e| RuntimeError::TUI(e.to_string()))?;
+
+      let input = tui.read_input().await;
+      if let Some(input) = input {
+        match parse_command(&input) {
+          Ok(Some(SlashCommand::Exit)) => {
+            tui.quit();
+            break;
+          }
+          Ok(Some(SlashCommand::Help)) => {
+            tui.open_help_popup();
+            continue;
+          }
+          Ok(Some(cmd)) => {
+            tui.add_message(format!("Unknown command: {}", cmd.name()));
+          }
+          Ok(None) => {}
+          Err(e) => {
+            tui.add_message(format!("Error: {}", e.to_string()));
+            continue;
+          }
+        }
+
+        self.ensure_session_with_system_message().await?;
+
+        self
+          .session_manager
+          .add_user_message_to_current_session(&input)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+
+        match self.process_chat().await {
+          Ok(content) => {
+            tui.add_message(format!("You: {}", input));
+            if !content.is_empty() {
+              tui.add_message(format!("Fenrir: {}", content));
+            }
+          }
+          Err(e) => {
+            tui.add_message(format!("Error: {}", e.to_string()));
+            continue;
+          }
+        }
       }
-      return Ok(String::new());
-    });
-  }
-}
+    }
 
-struct TUI {
-  input: Input,
-  messages: Vec<String>,
-  running: bool,
-}
-
-impl TUI {
-  fn new() -> Self {
-    let input = Input::new();
-    return Self {
-      input,
-      messages: Vec::new(),
-      running: true,
-    };
-  }
-
-  fn submit_message(&mut self) {
-    let input = self.input.submit_content();
-
-    self.messages.push(input);
-  }
-
-  fn render(&self, frame: &mut Frame) {
-    let layout = Layout::vertical([Constraint::Min(1), Constraint::Length(3)]);
-    let [messages_area, input_area] = frame.area().layout(&layout);
-
-    let messages: Vec<ListItem> = self
-      .messages
-      .iter()
-      .enumerate()
-      .map(|(i, m)| {
-        let content = Line::from(Span::raw(format!("{i}: {m}")));
-        ListItem::new(content)
-      })
-      .collect();
-    let messages = List::new(messages).block(Block::bordered());
-    frame.render_widget(messages, messages_area);
-
-    let input = Paragraph::new(self.input.content.as_str())
-      .style(Style::default())
-      .block(Block::bordered());
-    frame.render_widget(input, input_area);
-
-    frame.set_cursor_position(Position::new(
-      input_area.x + self.input.character_index as u16 + 1,
-      input_area.y + 1,
-    ));
-  }
-
-  fn handle_events(&mut self) -> RuntimeResult<String> {
-    let event = event::read().map_err(|e| RuntimeError::TUI(e.to_string()))?;
-
-    if let Some(key) = event.as_key_press_event() {
-      match key.code {
-        KeyCode::Enter => self.submit_message(),
-        KeyCode::Char(to_insert) => self.input.enter_char(to_insert),
-        KeyCode::Backspace => self.input.delete_char(),
-        KeyCode::Left => self.input.move_cursor_left(),
-        KeyCode::Right => self.input.move_cursor_right(),
-        KeyCode::Esc => self.quit(),
-        _ => {}
-      };
-    };
+    ratatui::restore();
     return Ok(String::new());
-  }
-
-  pub fn quit(&mut self) {
-    self.running = false;
   }
 }
