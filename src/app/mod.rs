@@ -2,8 +2,6 @@ mod cli;
 pub mod errors;
 mod tui;
 
-use std::collections::HashMap;
-
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
 use crate::database::DB;
@@ -11,6 +9,7 @@ use crate::prompt::Prompt;
 use crate::provider_manager::ProviderManager;
 use crate::session_manager::SessionManager;
 use crate::tool_manager::ToolManager;
+use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
 
 pub struct App {
@@ -84,19 +83,39 @@ impl App {
       }
 
       for tool_call in &response.tool_calls {
-        let params: HashMap<String, String> =
-          serde_json::from_str(&tool_call.arguments).unwrap_or_default();
+        vlog!(
+          "Tool call: {} with arguments: {}",
+          tool_call.name,
+          tool_call.arguments
+        );
 
+        self
+          .session_manager
+          .add_tool_call_to_current_session(
+            &tool_call.id,
+            &tool_call.name,
+            &tool_call.arguments,
+          )
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+
+        let params = parse_tool_params(&tool_call.arguments);
         let result = self.tool_manager.execute_tool(&tool_call.name, params);
 
         let result_str = match result {
-          Ok(r) => r,
-          Err(e) => format!("Tool error: {}", e),
+          Ok(r) => {
+            vlog!("Tool '{}' result: {}", tool_call.name, r);
+            r
+          }
+          Err(e) => {
+            vlog!("Tool '{}' error: {}", tool_call.name, e);
+            format!("Tool error: {}", e)
+          }
         };
 
         self
           .session_manager
-          .add_tool_result_to_current_session(&tool_call.name, &result_str)
+          .add_tool_result_to_current_session(&tool_call.id, &result_str)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
       }

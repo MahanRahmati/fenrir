@@ -30,3 +30,19 @@ pub trait Tool {
     };
   }
 }
+
+pub fn parse_tool_params(arguments: &str) -> ToolParams {
+  let mut params = ToolParams::new();
+  let value: serde_json::Value =
+    serde_json::from_str(arguments).unwrap_or_default();
+  if let serde_json::Value::Object(map) = value {
+    for (k, v) in map {
+      let s = match v {
+        serde_json::Value::String(s) => s.clone(),
+        _ => v.to_string(),
+      };
+      params.insert(k, s);
+    }
+  }
+  return params;
+}

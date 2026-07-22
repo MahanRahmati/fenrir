@@ -26,7 +26,25 @@ struct ChatCompletionRequest {
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatMessage {
   role: String,
-  content: String,
+  content: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  tool_calls: Option<Vec<ChatToolCall>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ChatToolCall {
+  id: String,
+  #[serde(rename = "type")]
+  call_type: String,
+  function: ChatToolFunction,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ChatToolFunction {
+  name: String,
+  arguments: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -127,9 +145,33 @@ impl OpenAICompatibleProvider {
   ) -> ChatCompletionRequest {
     let chat_messages: Vec<ChatMessage> = messages
       .iter()
-      .map(|msg| ChatMessage {
-        role: msg.role.clone(),
-        content: msg.content.clone(),
+      .map(|msg| {
+        let content = if msg.content.is_empty() {
+          None
+        } else {
+          Some(msg.content.clone())
+        };
+
+        let tool_calls = msg.tool_calls.as_ref().map(|calls| {
+          calls
+            .iter()
+            .map(|tc| ChatToolCall {
+              id: tc.id.clone(),
+              call_type: tc.call_type.clone(),
+              function: ChatToolFunction {
+                name: tc.function.name.clone(),
+                arguments: tc.function.arguments.clone(),
+              },
+            })
+            .collect()
+        });
+
+        return ChatMessage {
+          role: msg.role.clone(),
+          content,
+          tool_calls,
+          tool_call_id: msg.tool_call_id.clone(),
+        };
       })
       .collect();
 
@@ -146,7 +188,7 @@ impl OpenAICompatibleProvider {
       .collect();
 
     let request = ChatCompletionRequest {
-      model: model,
+      model,
       messages: chat_messages,
       tools: chat_tools,
     };
@@ -213,6 +255,13 @@ impl Provider for OpenAICompatibleProvider {
       })
       .collect();
 
+    for tc in &tool_calls {
+      vlog!(
+        "LLM tool call: {} with arguments: {}",
+        tc.name,
+        tc.arguments
+      );
+    }
     vlog!(
       "Chat response: content={}, tool_calls={}",
       content.as_deref().unwrap_or("none"),

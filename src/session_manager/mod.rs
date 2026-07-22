@@ -72,15 +72,27 @@ impl SessionManager {
 
   pub async fn add_tool_result_to_current_session(
     &mut self,
-    tool_name: &str,
+    tool_call_id: &str,
     result: &str,
   ) -> SessionManagerResult<()> {
     self
       .add_message_to_current_session(|session| {
-        session.add_tool_message(&format!(
-          "Tool '{}' result: {}",
-          tool_name, result
-        ));
+        session
+          .add_tool_result(tool_call_id, &format!("Tool result: {}", result));
+      })
+      .await?;
+    return Ok(());
+  }
+
+  pub async fn add_tool_call_to_current_session(
+    &mut self,
+    tool_call_id: &str,
+    tool_name: &str,
+    arguments: &str,
+  ) -> SessionManagerResult<()> {
+    self
+      .add_message_to_current_session(|session| {
+        session.add_tool_call(tool_call_id, tool_name, arguments);
       })
       .await?;
     return Ok(());
@@ -188,8 +200,11 @@ impl SessionManager {
       };
 
       let message = Message {
+        msg_type: None,
         role,
         content,
+        tool_call_id: None,
+        tool_calls: None,
         timestamp,
       };
 
