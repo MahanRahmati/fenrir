@@ -2,59 +2,48 @@ use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::tool::ToolParams;
 use crate::vlog;
 
-pub fn get_param(
+pub fn get_param<T>(
   params: &ToolParams,
   tool_name: &str,
   param_name: &str,
-) -> ToolManagerResult<String> {
+) -> ToolManagerResult<T>
+where
+  T: std::str::FromStr,
+{
   vlog!(
     "Getting parameter '{}' for tool '{}'",
     param_name,
     tool_name
   );
-  return params.get(param_name).cloned().ok_or(
+  let value = params.get(param_name).cloned().ok_or(
     ToolManagerError::MissingParameter {
       param: param_name.to_string(),
       name: tool_name.to_string(),
     },
-  );
+  )?;
+  return value
+    .parse::<T>()
+    .map_err(|_| ToolManagerError::ExecutionFailed {
+      name: tool_name.to_string(),
+      reason: format!(
+        "Invalid value for parameter '{}': {}",
+        param_name, value
+      ),
+    });
 }
 
-pub fn get_optional_param(
+pub fn get_optional_param<T>(
   params: &ToolParams,
   tool_name: &str,
   name: &str,
-) -> Option<String> {
+) -> Option<T>
+where
+  T: std::str::FromStr,
+{
   vlog!(
     "Getting optional parameter '{}' for tool '{}'",
     name,
     tool_name
   );
-  return params.get(name).cloned();
-}
-
-pub fn get_optional_usize(
-  params: &ToolParams,
-  tool_name: &str,
-  name: &str,
-) -> Option<usize> {
-  vlog!(
-    "Getting optional usize parameter '{}' for tool '{}'",
-    name,
-    tool_name
-  );
-  return params.get(name).and_then(|v| v.parse::<usize>().ok());
-}
-
-pub fn get_optional_bool(
-  params: &ToolParams,
-  tool_name: &str,
-  name: &str,
-) -> Option<bool> {
-  vlog!(
-    "Getting optional bool parameter '{}' for tool '{}'",
-    name,
-    tool_name
-  );
-  return params.get(name).and_then(|v| v.parse::<bool>().ok());
+  return params.get(name).and_then(|v| v.parse::<T>().ok());
 }

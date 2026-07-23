@@ -29,7 +29,7 @@ impl Tool for ReadFileTool {
   }
 
   fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
-    let path = get_param(&params, "read_file", "path")?;
+    let path = get_param::<String>(&params, "read_file", "path")?;
 
     let content = fs::read_to_string(&path).map_err(|e| {
       ToolManagerError::ExecutionFailed {
@@ -45,12 +45,14 @@ impl Tool for ReadFileTool {
       return Ok("".to_string());
     }
 
-    let start_line = get_optional_usize(&params, "read_file", "start_line")
-      .unwrap_or(1)
-      .saturating_sub(1);
+    let start_line: usize =
+      get_optional_param::<usize>(&params, "read_file", "start_line")
+        .unwrap_or(1)
+        .saturating_sub(1);
 
-    let end_line = get_optional_usize(&params, "read_file", "end_line")
-      .map(|v| v.saturating_sub(1));
+    let end_line: Option<usize> =
+      get_optional_param::<usize>(&params, "read_file", "end_line")
+        .map(|v: usize| v.saturating_sub(1));
 
     let start = start_line.min(total_lines - 1);
     let end = end_line
@@ -69,8 +71,9 @@ impl Tool for ReadFileTool {
     }
 
     let selected_lines = &lines[start..=end];
-    let append_loc =
-      get_optional_bool(&params, "read_file", "append_loc").unwrap_or(false);
+    let append_loc: bool =
+      get_optional_param::<bool>(&params, "read_file", "append_loc")
+        .unwrap_or(false);
 
     let output: Vec<String> = if append_loc {
       selected_lines
