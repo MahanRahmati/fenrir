@@ -5,6 +5,7 @@ mod read_file;
 pub mod tool;
 mod write_file;
 
+use crate::config::Config;
 use crate::tool_manager::datetime::DateTimeTool;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::read_file::ReadFileTool;
@@ -16,17 +17,19 @@ pub struct ToolManager {
 }
 
 impl ToolManager {
-  pub fn new() -> Self {
-    let tools: Vec<Box<dyn Tool>> = vec![
-      Box::new(DateTimeTool),
-      Box::new(ReadFileTool),
-      Box::new(WriteFileTool),
-    ];
-    return Self { tools };
-  }
+  pub fn new(config: Config) -> Self {
+    let mut tools: Vec<Box<dyn Tool>> = Vec::new();
 
-  pub fn get_tools(&self) -> &Vec<Box<dyn Tool>> {
-    return &self.tools;
+    if config.permissions.datetime {
+      tools.push(Box::new(DateTimeTool));
+    }
+    if config.permissions.read_file {
+      tools.push(Box::new(ReadFileTool));
+    }
+    if config.permissions.write_file {
+      tools.push(Box::new(WriteFileTool));
+    }
+    return Self { tools };
   }
 
   pub fn get_tools_specs(&self) -> Vec<ToolSpec> {
