@@ -1,4 +1,5 @@
 mod input;
+mod statusline;
 
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, KeyCode};
@@ -9,6 +10,7 @@ use ratatui::widgets::{Block, List, ListItem, Paragraph};
 
 use crate::slash_commands::SlashCommand;
 use crate::tui::input::Input;
+use crate::tui::statusline::StatusLine;
 
 pub struct TUI {
   input: Input,
@@ -32,8 +34,13 @@ impl TUI {
   }
 
   pub fn draw(&self, frame: &mut Frame) {
-    let layout = Layout::vertical([Constraint::Min(1), Constraint::Length(3)]);
-    let [messages_area, input_area] = frame.area().layout(&layout);
+    let layout = Layout::vertical([
+      Constraint::Min(1),
+      Constraint::Length(3),
+      Constraint::Length(1),
+    ]);
+    let [messages_area, input_area, status_bar_area] =
+      frame.area().layout(&layout);
 
     let messages: Vec<ListItem> = self
       .messages
@@ -50,6 +57,10 @@ impl TUI {
       .style(Style::default())
       .block(Block::bordered());
     frame.render_widget(input, input_area);
+
+    let statusline = StatusLine::new();
+    frame
+      .render_widget(statusline.draw(status_bar_area.width), status_bar_area);
 
     frame.set_cursor_position(Position::new(
       input_area.x + self.input.character_index as u16 + 1,
