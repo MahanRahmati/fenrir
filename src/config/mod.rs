@@ -12,6 +12,7 @@ const DEFAULT_CONFIG_NAME: &str = "config.toml";
 const DEFAULT_DATETIME_PERMISSION: bool = true;
 const DEFAULT_READ_FILE_PERMISSION: bool = true;
 const DEFAULT_WRITE_FILE_PERMISSION: bool = true;
+const DEFAULT_EDIT_FILE_PERMISSION: bool = true;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Config {
@@ -55,6 +56,8 @@ pub struct PermissionsConfig {
   pub read_file: bool,
   #[serde(default = "default_write_file")]
   pub write_file: bool,
+  #[serde(default = "default_edit_file")]
+  pub edit_file: bool,
 }
 
 fn default_datetime() -> bool {
@@ -65,6 +68,9 @@ fn default_read_file() -> bool {
 }
 fn default_write_file() -> bool {
   DEFAULT_WRITE_FILE_PERMISSION
+}
+fn default_edit_file() -> bool {
+  DEFAULT_EDIT_FILE_PERMISSION
 }
 
 impl Config {
@@ -134,6 +140,7 @@ impl Default for Config {
         datetime: DEFAULT_DATETIME_PERMISSION,
         read_file: DEFAULT_READ_FILE_PERMISSION,
         write_file: DEFAULT_WRITE_FILE_PERMISSION,
+        edit_file: DEFAULT_EDIT_FILE_PERMISSION,
       },
     };
   }

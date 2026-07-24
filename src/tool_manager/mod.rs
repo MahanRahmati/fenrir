@@ -1,4 +1,5 @@
 mod datetime;
+mod edit_file;
 mod errors;
 mod helpers;
 mod read_file;
@@ -7,6 +8,7 @@ mod write_file;
 
 use crate::config::Config;
 use crate::tool_manager::datetime::DateTimeTool;
+use crate::tool_manager::edit_file::EditFileTool;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::read_file::ReadFileTool;
 use crate::tool_manager::tool::{Tool, ToolParams, ToolSpec};
@@ -28,6 +30,9 @@ impl ToolManager {
     }
     if config.permissions.write_file {
       tools.push(Box::new(WriteFileTool));
+    }
+    if config.permissions.edit_file {
+      tools.push(Box::new(EditFileTool));
     }
     return Self { tools };
   }
