@@ -9,6 +9,7 @@ mod network;
 mod prompt;
 mod provider_manager;
 mod session_manager;
+mod shutdown;
 mod slash_commands;
 mod tool_manager;
 mod tui;

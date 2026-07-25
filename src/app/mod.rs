@@ -8,6 +8,7 @@ use crate::database::DB;
 use crate::prompt::Prompt;
 use crate::provider_manager::ProviderManager;
 use crate::session_manager::SessionManager;
+use crate::shutdown::Shutdown;
 use crate::tool_manager::ToolManager;
 use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
@@ -16,6 +17,7 @@ pub struct App {
   session_manager: SessionManager,
   provider_manager: ProviderManager,
   tool_manager: ToolManager,
+  shutdown: Shutdown,
 }
 
 impl App {
@@ -23,10 +25,12 @@ impl App {
     let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new(config.clone());
     let provider_manager = ProviderManager::new(config.clone());
+    let shutdown = Shutdown::new();
     return App {
       session_manager,
       provider_manager,
       tool_manager,
+      shutdown,
     };
   }
 

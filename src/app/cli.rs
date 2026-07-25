@@ -3,10 +3,16 @@ use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::slash_commands::{SlashCommand, parse_command};
+use crate::vlog;
 
 impl App {
   pub async fn run(&mut self) -> RuntimeResult<String> {
     loop {
+      if self.shutdown.is_cancelled() {
+        vlog!("Shutdown signal received, exiting CLI loop...");
+        break;
+      }
+
       let input = match read_from_stdin() {
         Ok(input) => input,
         Err(InputError::EmptyInput) => continue,

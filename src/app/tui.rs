@@ -13,7 +13,7 @@ impl App {
     let mut terminal = ratatui::init();
     let mut tui = TUI::new();
 
-    while tui.is_running() {
+    while tui.is_running() && !self.shutdown.is_cancelled() {
       terminal
         .draw(|frame| tui.draw(frame))
         .map_err(|e| RuntimeError::TUI(e.to_string()))?;
