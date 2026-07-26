@@ -11,6 +11,7 @@ pub struct ToolSpec {
   pub parameters: serde_json::Value,
 }
 
+#[async_trait::async_trait]
 pub trait Tool {
   fn name(&self) -> &str;
   fn description(&self) -> &str;
@@ -21,7 +22,7 @@ pub trait Tool {
       "required": [],
     });
   }
-  fn execute(&self, params: ToolParams) -> ToolManagerResult<String>;
+  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String>;
   fn to_tool_spec(&self) -> ToolSpec {
     return ToolSpec {
       name: self.name().to_string(),

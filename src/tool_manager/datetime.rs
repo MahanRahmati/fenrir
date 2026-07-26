@@ -4,6 +4,7 @@ use crate::utils::datetime::get_current_datetime;
 
 pub struct DateTimeTool;
 
+#[async_trait::async_trait]
 impl Tool for DateTimeTool {
   fn name(&self) -> &str {
     return "Date Time";
@@ -13,7 +14,7 @@ impl Tool for DateTimeTool {
     return "Returns the current local date and time.";
   }
 
-  fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
     return Ok(get_current_datetime());
   }
 }

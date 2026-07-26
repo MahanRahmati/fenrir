@@ -104,7 +104,10 @@ impl App {
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
         let params = parse_tool_params(&tool_call.arguments);
-        let result = self.tool_manager.execute_tool(&tool_call.name, params);
+        let result = self
+          .tool_manager
+          .execute_tool(&tool_call.name, params)
+          .await;
 
         let result_str = match result {
           Ok(r) => {

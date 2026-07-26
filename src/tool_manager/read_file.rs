@@ -6,6 +6,7 @@ use crate::tool_manager::tool::{Tool, ToolParams};
 
 pub struct ReadFileTool;
 
+#[async_trait::async_trait]
 impl Tool for ReadFileTool {
   fn name(&self) -> &str {
     return "read_file";
@@ -28,7 +29,7 @@ impl Tool for ReadFileTool {
     });
   }
 
-  fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "read_file", "path")?;
 
     let content = fs::read_to_string(&path).map_err(|e| {

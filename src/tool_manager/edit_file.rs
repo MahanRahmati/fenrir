@@ -7,6 +7,7 @@ use crate::tool_manager::tool::{Tool, ToolParams};
 
 pub struct EditFileTool;
 
+#[async_trait::async_trait]
 impl Tool for EditFileTool {
   fn name(&self) -> &str {
     return "edit_file";
@@ -29,7 +30,7 @@ impl Tool for EditFileTool {
     });
   }
 
-  fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "edit_file", "path")?;
     let start_line = get_param::<usize>(&params, "edit_file", "start_line")?;
     let end_line = get_param::<usize>(&params, "edit_file", "end_line")?;

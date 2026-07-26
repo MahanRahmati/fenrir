@@ -6,6 +6,7 @@ use crate::tool_manager::tool::{Tool, ToolParams};
 
 pub struct RemoveFileTool;
 
+#[async_trait::async_trait]
 impl Tool for RemoveFileTool {
   fn name(&self) -> &str {
     return "remove_file";
@@ -25,7 +26,7 @@ impl Tool for RemoveFileTool {
     });
   }
 
-  fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "remove_file", "path")?;
 
     fs::remove_file(&path).map_err(|e| ToolManagerError::ExecutionFailed {

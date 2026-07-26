@@ -7,6 +7,7 @@ use crate::tool_manager::tool::{Tool, ToolParams};
 
 pub struct WriteFileTool;
 
+#[async_trait::async_trait]
 impl Tool for WriteFileTool {
   fn name(&self) -> &str {
     return "write_file";
@@ -27,7 +28,7 @@ impl Tool for WriteFileTool {
     });
   }
 
-  fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "write_file", "path")?;
     let content = get_param::<String>(&params, "write_file", "content")?;
 

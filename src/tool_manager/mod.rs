@@ -46,14 +46,14 @@ impl ToolManager {
     return self.tools.iter().map(|t| t.to_tool_spec()).collect();
   }
 
-  pub fn execute_tool(
+  pub async fn execute_tool(
     &self,
     name: &str,
     params: ToolParams,
   ) -> ToolManagerResult<String> {
     for tool in &self.tools {
       if tool.name() == name {
-        return tool.execute(params);
+        return tool.execute(params).await;
       }
     }
     return Err(ToolManagerError::NotFound {
