@@ -1,6 +1,6 @@
-use std::fs;
 use std::path::Path;
 
+use crate::files::operations::{create_directory_all, write_file};
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
@@ -32,21 +32,21 @@ impl Tool for WriteFileTool {
     let path = get_param::<String>(&params, "write_file", "path")?;
     let content = get_param::<String>(&params, "write_file", "content")?;
 
-    let file_path = Path::new(&path);
-
-    if let Some(parent) = file_path.parent() {
-      fs::create_dir_all(parent).map_err(|e| {
-        ToolManagerError::ExecutionFailed {
-          name: "write_file".to_string(),
-          reason: format!(
-            "Cannot create parent directories for '{}': {}",
-            &path, e
-          ),
-        }
-      })?;
+    if let Some(parent) = Path::new(&path).parent() {
+      if let Some(parent_str) = parent.as_os_str().to_str() {
+        create_directory_all(parent_str).await.map_err(|e| {
+          ToolManagerError::ExecutionFailed {
+            name: "write_file".to_string(),
+            reason: format!(
+              "Cannot create parent directories for '{}': {}",
+              &path, e
+            ),
+          }
+        })?;
+      }
     }
 
-    fs::write(file_path, &content).map_err(|e| {
+    write_file(&path, &content).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "write_file".to_string(),
         reason: format!("Cannot write to file '{}': {}", &path, e),

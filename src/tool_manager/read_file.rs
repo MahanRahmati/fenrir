@@ -1,5 +1,4 @@
-use std::fs;
-
+use crate::files::operations::read_to_string;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
@@ -32,7 +31,7 @@ impl Tool for ReadFileTool {
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "read_file", "path")?;
 
-    let content = fs::read_to_string(&path).map_err(|e| {
+    let content = read_to_string(&path).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "read_file".to_string(),
         reason: format!("Cannot read file '{}': {}", path, e),

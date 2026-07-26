@@ -1,6 +1,4 @@
-use std::fs;
-use std::path::Path;
-
+use crate::files::operations::{read_to_string, write_file};
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
@@ -64,8 +62,7 @@ impl Tool for EditFileTool {
       });
     }
 
-    let file_path = Path::new(&path);
-    let content = fs::read_to_string(file_path).map_err(|e| {
+    let content = read_to_string(&path).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "edit_file".to_string(),
         reason: format!("Cannot read file '{}': {}", path, e),
@@ -94,7 +91,7 @@ impl Tool for EditFileTool {
       (result.join("\n"), end_idx.saturating_sub(start_line) + 1)
     };
 
-    fs::write(file_path, &output).map_err(|e| {
+    write_file(&path, &output).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "edit_file".to_string(),
         reason: format!("Cannot write to file '{}': {}", path, e),
