@@ -126,7 +126,8 @@ impl SessionManager {
     if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
     {
       f(session);
-      for msg in &session.messages {
+      let new_msg = session.messages.last();
+      if let Some(msg) = new_msg {
         match self
           .db
           .execute(
