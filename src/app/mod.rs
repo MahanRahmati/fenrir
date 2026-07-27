@@ -39,7 +39,11 @@ impl App {
       return Ok(());
     }
 
-    let session_id = self.session_manager.create_session();
+    let session_id = self
+      .session_manager
+      .create_session()
+      .await
+      .map_err(|e| RuntimeError::Session(e.to_string()))?;
     vlog!("Created session with ID: {}", session_id);
 
     let prompt = Prompt::new();

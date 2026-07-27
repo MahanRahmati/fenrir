@@ -1,6 +1,6 @@
 mod errors;
 mod queries;
-mod session;
+pub mod session;
 
 pub use crate::session_manager::session::Message;
 
@@ -26,12 +26,26 @@ impl SessionManager {
     };
   }
 
-  pub fn create_session(&mut self) -> i64 {
+  pub async fn create_session(&mut self) -> SessionManagerResult<i64> {
     let session = Session::new();
+    match self
+      .db
+      .execute(
+        INSERT_SESSION,
+        (session.id, session.created_at, session.last_interaction),
+      )
+      .await
+    {
+      Ok(_) => {}
+      Err(e) => {
+        return Err(SessionManagerError::DatabaseError(e.to_string()));
+      }
+    };
+
     let id = session.id;
     self.sessions.push(session);
     self.current_session = Some(id);
-    return id;
+    return Ok(id);
   }
 
   pub async fn add_system_message_to_current_session(
