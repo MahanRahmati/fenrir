@@ -19,6 +19,16 @@ impl App {
         .map_err(|e| RuntimeError::TUI(e.to_string()))?;
 
       let input = tui.read_input().await;
+      if let Some(session_id) = tui.get_selected_session() {
+        self
+          .session_manager
+          .load_session_from_db(session_id)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        let current_session = self.session_manager.get_current_session();
+        tui.update_messages(current_session);
+        continue;
+      }
       if let Some(input) = input {
         match parse_command(&input) {
           Ok(Some(SlashCommand::Exit)) => {
@@ -29,8 +39,19 @@ impl App {
             tui.open_help_popup();
             continue;
           }
+          Ok(Some(SlashCommand::Sessions)) => {
+            let sessions = self
+              .session_manager
+              .list_sessions()
+              .await
+              .map_err(|e| RuntimeError::Session(e.to_string()))?;
+            let current_session = self.session_manager.get_current_session();
+            tui.open_sessions_popup(sessions, current_session);
+            continue;
+          }
           Ok(Some(cmd)) => {
             tui.add_message(format!("Unknown command: {}", cmd.name()));
+            continue;
           }
           Ok(None) => {}
           Err(e) => {

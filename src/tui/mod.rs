@@ -1,32 +1,39 @@
+mod help_popup;
 mod input;
+mod popup;
+mod sessions_popup;
 mod statusline;
 
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, KeyCode};
-use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, List, ListItem, Paragraph};
 
-use crate::slash_commands::SlashCommand;
+use crate::session_manager::session::Session;
+use crate::tui::help_popup::HelpPopup;
 use crate::tui::input::Input;
+use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
 
 pub struct TUI {
   input: Input,
   messages: Vec<String>,
   running: bool,
-  show_help_popup: bool,
+  help_popup: HelpPopup,
+  sessions_popup: SessionsPopup,
 }
 
 impl TUI {
   pub fn new() -> Self {
-    Self {
+    return Self {
       input: Input::new(),
       messages: Vec::new(),
       running: true,
-      show_help_popup: false,
-    }
+      help_popup: HelpPopup::new(),
+      sessions_popup: SessionsPopup::new(),
+    };
   }
 
   pub fn is_running(&self) -> bool {
@@ -67,21 +74,8 @@ impl TUI {
       input_area.y + 1,
     ));
 
-    if self.show_help_popup {
-      let num_commands = SlashCommand::all().len();
-      let popup_height = 3u16 + num_commands as u16;
-      let popup_y = messages_area.y + messages_area.height - popup_height;
-      let popup_area =
-        Rect::new(messages_area.x, popup_y, messages_area.width, popup_height);
-      let lines: Vec<Line> = [Line::from(Span::raw("Available commands:"))]
-        .into_iter()
-        .chain(SlashCommand::all().iter().map(|cmd| {
-          Line::from(format!("  {} - {}", cmd.name(), cmd.description()))
-        }))
-        .collect();
-      let paragraph = Paragraph::new(lines).block(Block::bordered());
-      frame.render_widget(paragraph, popup_area);
-    }
+    self.sessions_popup.draw(frame);
+    self.help_popup.draw(frame, messages_area);
   }
 
   pub async fn read_input(&mut self) -> Option<String> {
@@ -94,8 +88,9 @@ impl TUI {
     };
 
     if let Some(key) = event.as_key_press_event() {
-      if self.show_help_popup {
-        self.close_help_popup();
+      self.help_popup.handle_input();
+      if self.sessions_popup.handle_input(key.code) {
+        return None;
       }
 
       match key.code {
@@ -117,7 +112,7 @@ impl TUI {
         _ => {}
       };
     }
-    None
+    return None;
   }
 
   pub fn add_message(&mut self, message: String) {
@@ -125,11 +120,38 @@ impl TUI {
   }
 
   pub fn open_help_popup(&mut self) {
-    self.show_help_popup = true;
+    self.help_popup.open_help_popup();
   }
 
-  fn close_help_popup(&mut self) {
-    self.show_help_popup = false;
+  pub fn open_sessions_popup(
+    &mut self,
+    sessions: Vec<Session>,
+    current_session: Option<&Session>,
+  ) {
+    self
+      .sessions_popup
+      .open_sessions_popup(sessions, current_session);
+  }
+
+  pub fn get_selected_session(&mut self) -> Option<i64> {
+    return self.sessions_popup.get_selected_session();
+  }
+
+  pub fn update_messages(&mut self, session: Option<&Session>) {
+    self.messages.clear();
+    if let Some(session) = session {
+      for msg in &session.messages {
+        if msg.role == "system" {
+          continue;
+        }
+        let role = match msg.role.as_str() {
+          "user" => "You",
+          "assistant" => "Fenrir",
+          _ => continue,
+        };
+        self.messages.push(format!("{}: {}", role, msg.content));
+      }
+    }
   }
 
   pub fn quit(&mut self) {
