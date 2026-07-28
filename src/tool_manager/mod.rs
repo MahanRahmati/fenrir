@@ -4,6 +4,7 @@ mod errors;
 mod find_file;
 mod find_text;
 mod helpers;
+mod list_directories;
 mod read_file;
 mod remove_file;
 pub mod tool;
@@ -19,6 +20,7 @@ use crate::tool_manager::edit_file::EditFileTool;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::find_file::FindFileTool;
 use crate::tool_manager::find_text::FindTextTool;
+use crate::tool_manager::list_directories::ListDirectoriesTool;
 use crate::tool_manager::read_file::ReadFileTool;
 use crate::tool_manager::remove_file::RemoveFileTool;
 use crate::tool_manager::tool::{Tool, ToolParams, ToolSpec};
@@ -54,6 +56,9 @@ impl ToolManager {
     }
     if config.permissions.find_text {
       tools.push(Box::new(FindTextTool));
+    }
+    if config.permissions.list_directories {
+      tools.push(Box::new(ListDirectoriesTool));
     }
     return Self {
       tools,

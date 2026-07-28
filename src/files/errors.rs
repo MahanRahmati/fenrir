@@ -20,6 +20,9 @@ pub enum FileError {
 
   #[error("Cannot write to file '{0}'. Please check permissions.")]
   FileWrite(String),
+
+  #[error("Cannot read directory '{0}'. Please check permissions.")]
+  DirectoryRead(String),
 }
 
 pub type FileResult<T> = Result<T, FileError>;

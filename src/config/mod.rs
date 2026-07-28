@@ -18,6 +18,7 @@ const DEFAULT_EDIT_FILE_PERMISSION: bool = true;
 const DEFAULT_REMOVE_FILE_PERMISSION: bool = true;
 const DEFAULT_FIND_FILE_PERMISSION: bool = true;
 const DEFAULT_FIND_TEXT_PERMISSION: bool = true;
+const DEFAULT_LIST_DIRECTORIES_PERMISSION: bool = true;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Config {
@@ -73,6 +74,8 @@ pub struct PermissionsConfig {
   pub find_file: bool,
   #[serde(default = "default_find_text")]
   pub find_text: bool,
+  #[serde(default = "default_list_directories")]
+  pub list_directories: bool,
 }
 
 fn default_stream() -> bool {
@@ -103,6 +106,9 @@ fn default_find_file() -> bool {
 }
 fn default_find_text() -> bool {
   DEFAULT_FIND_TEXT_PERMISSION
+}
+fn default_list_directories() -> bool {
+  DEFAULT_LIST_DIRECTORIES_PERMISSION
 }
 
 impl Config {
@@ -180,6 +186,7 @@ impl Default for Config {
         remove_file: DEFAULT_REMOVE_FILE_PERMISSION,
         find_file: DEFAULT_FIND_FILE_PERMISSION,
         find_text: DEFAULT_FIND_TEXT_PERMISSION,
+        list_directories: DEFAULT_LIST_DIRECTORIES_PERMISSION,
       },
     };
   }
