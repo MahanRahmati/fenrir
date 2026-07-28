@@ -7,6 +7,10 @@ mod remove_file;
 pub mod tool;
 mod write_file;
 
+use std::time::Duration;
+
+use tokio::time;
+
 use crate::config::Config;
 use crate::tool_manager::datetime::DateTimeTool;
 use crate::tool_manager::edit_file::EditFileTool;
@@ -18,10 +22,12 @@ use crate::tool_manager::write_file::WriteFileTool;
 
 pub struct ToolManager {
   tools: Vec<Box<dyn Tool>>,
+  tool_timeout: Duration,
 }
 
 impl ToolManager {
   pub fn new(config: Config) -> Self {
+    let tool_timeout = Duration::from_secs(config.general.tool_timeout_seconds);
     let mut tools: Vec<Box<dyn Tool>> = Vec::new();
 
     if config.permissions.datetime {
@@ -39,7 +45,10 @@ impl ToolManager {
     if config.permissions.remove_file {
       tools.push(Box::new(RemoveFileTool));
     }
-    return Self { tools };
+    return Self {
+      tools,
+      tool_timeout,
+    };
   }
 
   pub fn get_tools_specs(&self) -> Vec<ToolSpec> {
@@ -53,7 +62,14 @@ impl ToolManager {
   ) -> ToolManagerResult<String> {
     for tool in &self.tools {
       if tool.name() == name {
-        return tool.execute(params).await;
+        match time::timeout(self.tool_timeout, tool.execute(params)).await {
+          Ok(result) => return result,
+          Err(_) => {
+            return Err(ToolManagerError::Timeout {
+              name: name.to_string(),
+            });
+          }
+        }
       }
     }
     return Err(ToolManagerError::NotFound {

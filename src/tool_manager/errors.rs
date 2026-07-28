@@ -10,6 +10,9 @@ pub enum ToolManagerError {
 
   #[error("Missing parameter '{param}' for tool '{name}'.")]
   MissingParameter { param: String, name: String },
+
+  #[error("Tool '{name}' timed out.")]
+  Timeout { name: String },
 }
 
 pub type ToolManagerResult<T> = Result<T, ToolManagerError>;
