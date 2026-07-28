@@ -20,14 +20,13 @@ impl StatusLine {
   }
 
   fn to_relative_path(path: &str) -> String {
-    if let Some(home) = env::home_dir() {
-      if let Some(home_str) = home.to_str() {
-        if path.starts_with(home_str) {
-          return format!("~{}", &path[home_str.len()..]);
-        }
-      }
+    if let Some(home) = env::home_dir()
+      && let Some(home_str) = home.to_str()
+      && path.starts_with(home_str)
+    {
+      return format!("~{}", &path[home_str.len()..]);
     }
-    path.to_string()
+    return path.to_string();
   }
 
   pub fn draw(&self, width: u16) -> Paragraph<'_> {
@@ -51,6 +50,6 @@ impl StatusLine {
       Span::raw(version_display),
     ]);
 
-    Paragraph::new(line)
+    return Paragraph::new(line);
   }
 }

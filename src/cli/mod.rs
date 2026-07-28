@@ -22,5 +22,5 @@ pub enum Commands {
     yes: bool,
   },
   /// Run the application in TUI mode
-  TUI,
+  Tui,
 }

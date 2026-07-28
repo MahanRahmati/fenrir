@@ -60,7 +60,7 @@ async fn main() {
         }
       }
     }
-    Some(Commands::TUI) => app.run_tui().await,
+    Some(Commands::Tui) => app.run_tui().await,
     None => app.run().await,
   };
 

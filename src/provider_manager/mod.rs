@@ -27,7 +27,7 @@ impl ProviderManager {
     let active_provider = setup_active_provider(config.clone(), &providers);
     if let Some(idx) = active_provider {
       let provider = &mut providers[idx];
-      let model_str = config.general.model.clone().unwrap_or_default();
+      let model_str = config.general.model.unwrap_or_default();
       let (_, model_name) = model_str
         .split_once('/')
         .unwrap_or(("", model_str.as_str()));
@@ -54,7 +54,7 @@ impl ProviderManager {
     let provider = self
       .active_provider
       .and_then(|i| self.providers.get(i))
-      .ok_or_else(|| ProviderManagerError::NoActiveProvider)?;
+      .ok_or(ProviderManagerError::NoActiveProvider)?;
     return provider.chat(messages, tools).await;
   }
 }
@@ -63,7 +63,7 @@ fn setup_active_provider(
   config: Config,
   providers: &Vec<Box<dyn Provider>>,
 ) -> Option<usize> {
-  let model_str = config.general.model.clone()?;
+  let model_str = config.general.model?;
   let (provider_name, model_name) = model_str.split_once('/')?;
 
   for (i, p) in providers.iter().enumerate() {

@@ -127,12 +127,9 @@ impl OpenAICompatibleProvider {
     let mut headers = HashMap::new();
     headers.insert("Content-Type".to_string(), "application/json".to_string());
     let api_key = self.api_key.clone();
-    match api_key {
-      Some(api_key) => {
-        headers
-          .insert("Authorization".to_string(), format!("Bearer {}", api_key));
-      }
-      None => {}
+    if let Some(api_key) = api_key {
+      headers
+        .insert("Authorization".to_string(), format!("Bearer {}", api_key));
     }
     return Some(headers);
   }

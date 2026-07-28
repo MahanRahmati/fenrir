@@ -32,18 +32,18 @@ impl Tool for WriteFileTool {
     let path = get_param::<String>(&params, "write_file", "path")?;
     let content = get_param::<String>(&params, "write_file", "content")?;
 
-    if let Some(parent) = Path::new(&path).parent() {
-      if let Some(parent_str) = parent.as_os_str().to_str() {
-        create_directory_all(parent_str).await.map_err(|e| {
-          ToolManagerError::ExecutionFailed {
-            name: "write_file".to_string(),
-            reason: format!(
-              "Cannot create parent directories for '{}': {}",
-              &path, e
-            ),
-          }
-        })?;
-      }
+    if let Some(parent) = Path::new(&path).parent()
+      && let Some(parent_str) = parent.as_os_str().to_str()
+    {
+      create_directory_all(parent_str).await.map_err(|e| {
+        ToolManagerError::ExecutionFailed {
+          name: "write_file".to_string(),
+          reason: format!(
+            "Cannot create parent directories for '{}': {}",
+            &path, e
+          ),
+        }
+      })?;
     }
 
     write_file(&path, &content).await.map_err(|e| {

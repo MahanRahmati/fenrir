@@ -41,13 +41,10 @@ impl SessionsPopup {
       .map(|(i, s)| {
         let prefix = if i == self.session_index { ">" } else { " " };
         let current_session = match &self.current_session {
-          Some(session) => {
-            if session.id == s.id {
-              "*"
-            } else {
-              " "
-            }
-          }
+          Some(session) => match session.id == s.id {
+            true => "*",
+            false => " ",
+          },
           None => " ",
         };
         let id_str = s.id.to_string();
@@ -75,7 +72,7 @@ impl SessionsPopup {
     match key {
       KeyCode::Up => {
         if self.session_index > 0 {
-          self.session_index = self.session_index - 1;
+          self.session_index -= 1;
         }
         return true;
       }
@@ -84,7 +81,7 @@ impl SessionsPopup {
           return true;
         }
         if self.session_index < self.sessions.len() - 1 {
-          self.session_index = self.session_index + 1;
+          self.session_index += 1;
         }
         return true;
       }
@@ -93,7 +90,11 @@ impl SessionsPopup {
         self.close_sessions_popup();
         return true;
       }
-      KeyCode::Esc | _ => {
+      KeyCode::Esc => {
+        self.close_sessions_popup();
+        return true;
+      }
+      _ => {
         self.close_sessions_popup();
         return true;
       }

@@ -2,7 +2,7 @@ use crate::app::App;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::prompt::Prompt;
 use crate::slash_commands::{SlashCommand, parse_command};
-use crate::tui::TUI;
+use crate::tui::Tui;
 use crate::vlog;
 
 impl App {
@@ -11,12 +11,12 @@ impl App {
     vlog!("Prompt: {}", prompt.get_system_prompt());
 
     let mut terminal = ratatui::init();
-    let mut tui = TUI::new();
+    let mut tui = Tui::new();
 
     while tui.is_running() && !self.shutdown.is_cancelled() {
       terminal
         .draw(|frame| tui.draw(frame))
-        .map_err(|e| RuntimeError::TUI(e.to_string()))?;
+        .map_err(|e| RuntimeError::Tui(e.to_string()))?;
 
       let input = tui.read_input().await;
       if let Some(session_id) = tui.get_selected_session() {
@@ -55,7 +55,7 @@ impl App {
           }
           Ok(None) => {}
           Err(e) => {
-            tui.add_message(format!("Error: {}", e.to_string()));
+            tui.add_message(format!("Error: {}", e));
             continue;
           }
         }
@@ -76,7 +76,7 @@ impl App {
             }
           }
           Err(e) => {
-            tui.add_message(format!("Error: {}", e.to_string()));
+            tui.add_message(format!("Error: {}", e));
             continue;
           }
         }

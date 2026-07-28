@@ -24,7 +24,7 @@ impl App {
   pub fn new(config: Config, db: DB) -> Self {
     let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new(config.clone());
-    let provider_manager = ProviderManager::new(config.clone());
+    let provider_manager = ProviderManager::new(config);
     let shutdown = Shutdown::new();
     return App {
       session_manager,

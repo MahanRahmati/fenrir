@@ -17,7 +17,7 @@ use crate::tui::input::Input;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
 
-pub struct TUI {
+pub struct Tui {
   input: Input,
   messages: Vec<String>,
   running: bool,
@@ -25,7 +25,7 @@ pub struct TUI {
   sessions_popup: SessionsPopup,
 }
 
-impl TUI {
+impl Tui {
   pub fn new() -> Self {
     return Self {
       input: Input::new(),
