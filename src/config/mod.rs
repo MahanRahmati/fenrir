@@ -9,6 +9,7 @@ use crate::files::operations;
 
 pub const DEFAULT_DIRECTORY: &str = "fenrir";
 const DEFAULT_CONFIG_NAME: &str = "config.toml";
+const DEFAULT_STREAM: bool = true;
 const DEFAULT_DATETIME_PERMISSION: bool = true;
 const DEFAULT_READ_FILE_PERMISSION: bool = true;
 const DEFAULT_WRITE_FILE_PERMISSION: bool = true;
@@ -28,6 +29,8 @@ pub struct Config {
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct GeneralConfig {
   pub model: Option<String>,
+  #[serde(default = "default_stream")]
+  pub stream: bool,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
@@ -61,6 +64,10 @@ pub struct PermissionsConfig {
   pub edit_file: bool,
   #[serde(default = "default_remove_file")]
   pub remove_file: bool,
+}
+
+fn default_stream() -> bool {
+  DEFAULT_STREAM
 }
 
 fn default_datetime() -> bool {
@@ -138,7 +145,10 @@ impl Config {
 impl Default for Config {
   fn default() -> Self {
     return Config {
-      general: GeneralConfig { model: None },
+      general: GeneralConfig {
+        model: None,
+        stream: DEFAULT_STREAM,
+      },
       providers: ProvidersConfig {
         openai_compatible: None,
       },

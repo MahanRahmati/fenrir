@@ -2,11 +2,16 @@ mod cli;
 pub mod errors;
 mod tui;
 
+use std::collections::HashMap;
+
+use futures::StreamExt;
+
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
 use crate::database::DB;
 use crate::prompt::Prompt;
 use crate::provider_manager::ProviderManager;
+use crate::provider_manager::ToolCall;
 use crate::session_manager::SessionManager;
 use crate::shutdown::Shutdown;
 use crate::tool_manager::ToolManager;
@@ -18,10 +23,12 @@ pub struct App {
   provider_manager: ProviderManager,
   tool_manager: ToolManager,
   shutdown: Shutdown,
+  use_stream: bool,
 }
 
 impl App {
   pub fn new(config: Config, db: DB) -> Self {
+    let use_stream = config.general.stream;
     let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new(config.clone());
     let provider_manager = ProviderManager::new(config);
@@ -31,6 +38,7 @@ impl App {
       provider_manager,
       tool_manager,
       shutdown,
+      use_stream,
     };
   }
 
@@ -57,7 +65,95 @@ impl App {
     return Ok(());
   }
 
-  async fn process_chat(&mut self) -> RuntimeResult<String> {
+  async fn process_chat<F: FnMut(&str)>(
+    &mut self,
+    on_token: F,
+  ) -> RuntimeResult<String> {
+    if self.use_stream {
+      return self.process_chat_stream(on_token).await;
+    }
+    return self.process_chat_non_streaming(on_token).await;
+  }
+
+  async fn process_chat_stream<F: FnMut(&str)>(
+    &mut self,
+    mut on_token: F,
+  ) -> RuntimeResult<String> {
+    let mut assistant_content = String::new();
+
+    loop {
+      let session = self
+        .session_manager
+        .get_current_session()
+        .ok_or(RuntimeError::Session("No active session".into()))?;
+
+      let messages = session.messages.clone();
+      let tools = self.tool_manager.get_tools_specs();
+
+      let mut stream = self
+        .provider_manager
+        .chat_stream(&messages, &tools)
+        .await
+        .map_err(|e| RuntimeError::Provider(e.to_string()))?;
+
+      let mut content_buffer = String::new();
+      let mut tool_call_builders: HashMap<usize, ToolCall> = HashMap::new();
+
+      while let Some(chunk_result) = stream.next().await {
+        let delta =
+          chunk_result.map_err(|e| RuntimeError::Provider(e.to_string()))?;
+
+        if let Some(ref text) = delta.content {
+          on_token(text);
+          content_buffer.push_str(text);
+        }
+
+        for tc_delta in delta.tool_calls {
+          let entry =
+            tool_call_builders
+              .entry(tc_delta.index)
+              .or_insert(ToolCall {
+                id: String::new(),
+                name: String::new(),
+                arguments: String::new(),
+              });
+          if let Some(id) = tc_delta.id {
+            entry.id = id;
+          }
+          if let Some(name) = tc_delta.name {
+            entry.name = name;
+          }
+          if let Some(args) = tc_delta.arguments {
+            entry.arguments.push_str(&args);
+          }
+        }
+      }
+
+      if !content_buffer.is_empty() {
+        assistant_content.push_str(&content_buffer);
+      }
+
+      if tool_call_builders.is_empty() {
+        self
+          .session_manager
+          .add_assistant_message_to_current_session(&content_buffer)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        break;
+      }
+
+      let tool_calls: Vec<ToolCall> =
+        tool_call_builders.into_values().collect();
+      self.execute_tool_calls(&tool_calls).await?;
+    }
+
+    return Ok(assistant_content);
+  }
+
+  async fn process_chat_non_streaming<F: FnMut(&str)>(
+    &mut self,
+    mut on_token: F,
+  ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
 
     loop {
@@ -76,6 +172,7 @@ impl App {
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
       if let Some(ref content) = response.content {
+        on_token(content);
         assistant_content.push_str(content);
       }
 
@@ -90,48 +187,56 @@ impl App {
         break;
       }
 
-      for tool_call in &response.tool_calls {
-        vlog!(
-          "Tool call: {} with arguments: {}",
-          tool_call.name,
-          tool_call.arguments
-        );
-
-        self
-          .session_manager
-          .add_tool_call_to_current_session(
-            &tool_call.id,
-            &tool_call.name,
-            &tool_call.arguments,
-          )
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
-
-        let params = parse_tool_params(&tool_call.arguments);
-        let result = self
-          .tool_manager
-          .execute_tool(&tool_call.name, params)
-          .await;
-
-        let result_str = match result {
-          Ok(r) => {
-            vlog!("Tool '{}' result: {}", tool_call.name, r);
-            r
-          }
-          Err(e) => {
-            vlog!("Tool '{}' error: {}", tool_call.name, e);
-            format!("Tool error: {}", e)
-          }
-        };
-
-        self
-          .session_manager
-          .add_tool_result_to_current_session(&tool_call.id, &result_str)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
-      }
+      self.execute_tool_calls(&response.tool_calls).await?;
     }
 
     return Ok(assistant_content);
+  }
+
+  async fn execute_tool_calls(
+    &mut self,
+    tool_calls: &[ToolCall],
+  ) -> RuntimeResult<()> {
+    for tool_call in tool_calls {
+      vlog!(
+        "Tool call: {} with arguments: {}",
+        tool_call.name,
+        tool_call.arguments
+      );
+
+      self
+        .session_manager
+        .add_tool_call_to_current_session(
+          &tool_call.id,
+          &tool_call.name,
+          &tool_call.arguments,
+        )
+        .await
+        .map_err(|e| RuntimeError::Session(e.to_string()))?;
+
+      let params = parse_tool_params(&tool_call.arguments);
+      let result = self
+        .tool_manager
+        .execute_tool(&tool_call.name, params)
+        .await;
+
+      let result_str = match result {
+        Ok(r) => {
+          vlog!("Tool '{}' result: {}", tool_call.name, r);
+          r
+        }
+        Err(e) => {
+          vlog!("Tool '{}' error: {}", tool_call.name, e);
+          format!("Tool error: {}", e)
+        }
+      };
+
+      self
+        .session_manager
+        .add_tool_result_to_current_session(&tool_call.id, &result_str)
+        .await
+        .map_err(|e| RuntimeError::Session(e.to_string()))?;
+    }
+    return Ok(());
   }
 }

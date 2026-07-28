@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use crate::app::App;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::input::errors::InputError;
@@ -44,7 +46,13 @@ impl App {
         .await
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
-      print!("{}", self.process_chat().await?);
+      let mut stdout = std::io::stdout();
+      self
+        .process_chat(|token| {
+          print!("{}", token);
+          stdout.flush().ok();
+        })
+        .await?;
       println!();
     }
 

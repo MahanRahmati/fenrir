@@ -1,15 +1,19 @@
 use std::collections::HashMap;
 
+use futures::{StreamExt, future};
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::config::ProviderModel;
 use crate::network::HttpClient;
+use crate::network::sse::SSEChunk;
 use crate::provider_manager::errors::{
   ProviderManagerError, ProviderManagerResult,
 };
 use crate::provider_manager::provider::{
-  ChatResponse, Model, Provider, ToolCall,
+  ChatResponse, ChatStream, ChatStreamDelta, Model, Provider,
+  StreamToolCallDelta, ToolCall,
 };
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
@@ -21,6 +25,7 @@ struct ChatCompletionRequest {
   messages: Vec<ChatMessage>,
   #[serde(skip_serializing_if = "Vec::is_empty")]
   tools: Vec<ChatTool>,
+  stream: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -90,6 +95,36 @@ struct ApiFunctionCall {
   arguments: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct ChatCompletionStreamResponse {
+  choices: Vec<StreamChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamChoice {
+  delta: StreamDelta,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct StreamDelta {
+  content: Option<String>,
+  #[serde(default)]
+  tool_calls: Vec<StreamToolCall>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamToolCall {
+  index: usize,
+  id: Option<String>,
+  function: Option<StreamFunction>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamFunction {
+  name: Option<String>,
+  arguments: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct OpenAICompatibleProvider {
   name: String,
@@ -139,6 +174,7 @@ impl OpenAICompatibleProvider {
     model: String,
     messages: &[Message],
     tools: &[ToolSpec],
+    stream: bool,
   ) -> ChatCompletionRequest {
     let chat_messages: Vec<ChatMessage> = messages
       .iter()
@@ -188,9 +224,44 @@ impl OpenAICompatibleProvider {
       model,
       messages: chat_messages,
       tools: chat_tools,
+      stream,
     };
 
     return request;
+  }
+}
+
+fn parse_sse_chunk(
+  chunk: SSEChunk,
+) -> Option<ProviderManagerResult<ChatStreamDelta>> {
+  if chunk.event == "error" {
+    return Some(Err(ProviderManagerError::ProviderError(chunk.data)));
+  }
+  if chunk.data.trim() == "[DONE]" {
+    return None;
+  }
+  match serde_json::from_str::<ChatCompletionStreamResponse>(&chunk.data) {
+    Ok(stream_resp) => {
+      let choice = stream_resp.choices.into_iter().next()?;
+      let delta = choice.delta;
+      let tool_calls = delta
+        .tool_calls
+        .into_iter()
+        .map(|tc| StreamToolCallDelta {
+          index: tc.index,
+          id: tc.id,
+          name: tc.function.as_ref().and_then(|f| f.name.clone()),
+          arguments: tc.function.map(|f| f.arguments.unwrap_or_default()),
+        })
+        .collect();
+      return Some(Ok(ChatStreamDelta {
+        content: delta.content,
+        tool_calls,
+      }));
+    }
+    Err(e) => {
+      return Some(Err(ProviderManagerError::ProviderError(e.to_string())));
+    }
   }
 }
 
@@ -223,11 +294,13 @@ impl Provider for OpenAICompatibleProvider {
     let model = self
       .active_model
       .as_ref()
-      .ok_or_else(|| ProviderManagerError::NoActiveModel)?;
-    let request = self.build_request(model.name.clone(), messages, tools);
+      .ok_or_else(|| ProviderManagerError::NoActiveModel)?
+      .name
+      .clone();
+    let request = self.build_request(model, messages, tools, false);
     let headers = self.build_headers();
 
-    vlog!("Sending chat request to llama.cpp server");
+    vlog!("Sending chat request to open ai compatible server");
 
     let response: ChatCompletionResponse = self
       .client
@@ -269,5 +342,37 @@ impl Provider for OpenAICompatibleProvider {
       content,
       tool_calls,
     });
+  }
+
+  async fn chat_stream(
+    &self,
+    messages: &[Message],
+    tools: &[ToolSpec],
+  ) -> ProviderManagerResult<ChatStream> {
+    let model = self
+      .active_model
+      .as_ref()
+      .ok_or_else(|| ProviderManagerError::NoActiveModel)?
+      .name
+      .clone();
+    let request = self.build_request(model, messages, tools, true);
+    let headers = self.build_headers();
+
+    vlog!("Sending streaming chat request to open ai compatible server");
+
+    let sse_stream = self
+      .client
+      .post_stream(&request, "/v1/chat/completions", headers)
+      .await
+      .map_err(|e| ProviderManagerError::ProviderError(e.to_string()))?;
+
+    let mapped = sse_stream.filter_map(|chunk_result| {
+      future::ready(match chunk_result {
+        Ok(chunk) => parse_sse_chunk(chunk),
+        Err(e) => Some(Err(ProviderManagerError::ProviderError(e.to_string()))),
+      })
+    });
+
+    return Ok(Box::pin(mapped));
   }
 }

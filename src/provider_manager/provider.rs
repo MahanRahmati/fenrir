@@ -1,3 +1,7 @@
+use std::pin::Pin;
+
+use futures::Stream;
+
 use crate::provider_manager::errors::ProviderManagerResult;
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
@@ -19,6 +23,21 @@ pub struct ChatResponse {
   pub tool_calls: Vec<ToolCall>,
 }
 
+pub struct ChatStreamDelta {
+  pub content: Option<String>,
+  pub tool_calls: Vec<StreamToolCallDelta>,
+}
+
+pub struct StreamToolCallDelta {
+  pub index: usize,
+  pub id: Option<String>,
+  pub name: Option<String>,
+  pub arguments: Option<String>,
+}
+
+pub type ChatStream =
+  Pin<Box<dyn Stream<Item = ProviderManagerResult<ChatStreamDelta>> + Send>>;
+
 #[async_trait::async_trait]
 pub trait Provider {
   fn name(&self) -> &str;
@@ -29,4 +48,9 @@ pub trait Provider {
     messages: &[Message],
     tools: &[ToolSpec],
   ) -> ProviderManagerResult<ChatResponse>;
+  async fn chat_stream(
+    &self,
+    messages: &[Message],
+    tools: &[ToolSpec],
+  ) -> ProviderManagerResult<ChatStream>;
 }

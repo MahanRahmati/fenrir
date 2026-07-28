@@ -68,12 +68,18 @@ impl App {
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
-        match self.process_chat().await {
-          Ok(content) => {
-            tui.add_message(format!("You: {}", input));
-            if !content.is_empty() {
-              tui.add_message(format!("Fenrir: {}", content));
-            }
+        tui.add_message(format!("You: {}", input));
+        tui.add_message("Fenrir: ".to_string());
+
+        match self
+          .process_chat(|token| {
+            tui.append_to_last_message(token);
+            terminal.draw(|frame| tui.draw(frame)).ok();
+          })
+          .await
+        {
+          Ok(_) => {
+            terminal.draw(|frame| tui.draw(frame)).ok();
           }
           Err(e) => {
             tui.add_message(format!("Error: {}", e));

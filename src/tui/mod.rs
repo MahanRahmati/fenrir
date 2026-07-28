@@ -115,6 +115,14 @@ impl Tui {
     self.messages.push(message);
   }
 
+  pub fn append_to_last_message(&mut self, text: &str) {
+    if let Some(last) = self.messages.last_mut() {
+      last.push_str(text);
+    } else {
+      self.messages.push(format!("Fenrir: {}", text));
+    }
+  }
+
   pub fn open_help_popup(&mut self) {
     self.help_popup.open_help_popup();
   }

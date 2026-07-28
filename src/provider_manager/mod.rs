@@ -6,7 +6,8 @@ use crate::config::Config;
 use crate::provider_manager::errors::{
   ProviderManagerError, ProviderManagerResult,
 };
-use crate::provider_manager::provider::{ChatResponse, Provider};
+pub use crate::provider_manager::provider::ToolCall;
+use crate::provider_manager::provider::{ChatResponse, ChatStream, Provider};
 use crate::provider_manager::providers::openai_compatible::OpenAICompatibleProvider;
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
@@ -56,6 +57,18 @@ impl ProviderManager {
       .and_then(|i| self.providers.get(i))
       .ok_or(ProviderManagerError::NoActiveProvider)?;
     return provider.chat(messages, tools).await;
+  }
+
+  pub async fn chat_stream(
+    &self,
+    messages: &[Message],
+    tools: &[ToolSpec],
+  ) -> ProviderManagerResult<ChatStream> {
+    let provider = self
+      .active_provider
+      .and_then(|i| self.providers.get(i))
+      .ok_or(ProviderManagerError::NoActiveProvider)?;
+    return provider.chat_stream(messages, tools).await;
   }
 }
 
