@@ -105,10 +105,6 @@ impl TUI {
         KeyCode::Backspace => self.input.delete_char(),
         KeyCode::Left => self.input.move_cursor_left(),
         KeyCode::Right => self.input.move_cursor_right(),
-        KeyCode::Esc => {
-          self.running = false;
-          return None;
-        }
         _ => {}
       };
     }
