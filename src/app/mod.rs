@@ -23,22 +23,21 @@ pub struct App {
   provider_manager: ProviderManager,
   tool_manager: ToolManager,
   shutdown: Shutdown,
-  use_stream: bool,
+  config: Config,
 }
 
 impl App {
   pub fn new(config: Config, db: DB) -> Self {
-    let use_stream = config.general.stream;
     let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new(config.clone());
-    let provider_manager = ProviderManager::new(config);
+    let provider_manager = ProviderManager::new(config.clone());
     let shutdown = Shutdown::new();
     return App {
       session_manager,
       provider_manager,
       tool_manager,
       shutdown,
-      use_stream,
+      config,
     };
   }
 
@@ -54,7 +53,7 @@ impl App {
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
     vlog!("Created session with ID: {}", session_id);
 
-    let prompt = Prompt::new();
+    let prompt = Prompt::new(self.config.clone());
     vlog!("Prompt: {}", prompt.get_system_prompt());
     self
       .session_manager
@@ -69,7 +68,7 @@ impl App {
     &mut self,
     on_token: F,
   ) -> RuntimeResult<String> {
-    if self.use_stream {
+    if self.config.general.stream {
       return self.process_chat_stream(on_token).await;
     }
     return self.process_chat_non_streaming(on_token).await;
