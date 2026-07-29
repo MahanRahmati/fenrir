@@ -1,4 +1,6 @@
-use ratatui::{Frame, layout::Rect, widgets::Widget};
+use ratatui::Frame;
+use ratatui::layout::Rect;
+use ratatui::widgets::{Clear, Widget};
 
 pub struct Popup {
   show_popup: bool,
@@ -16,6 +18,7 @@ impl Popup {
     popup_area: Rect,
   ) {
     if self.show_popup {
+      frame.render_widget(Clear, popup_area);
       frame.render_widget(widget, popup_area);
     }
   }

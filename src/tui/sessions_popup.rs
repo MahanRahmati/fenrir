@@ -2,7 +2,7 @@ use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::Constraint;
 use ratatui::text::Line;
-use ratatui::widgets::{Block, Clear, List, ListItem};
+use ratatui::widgets::{Block, List, ListItem};
 
 use crate::session_manager::session::Session;
 use crate::tui::popup::Popup;
@@ -31,7 +31,6 @@ impl SessionsPopup {
     let area = frame.area();
     let popup_area =
       area.centered(Constraint::Percentage(40), Constraint::Percentage(20));
-    frame.render_widget(Clear, popup_area);
 
     let popup_width = popup_area.width as usize;
     let sessions: Vec<ListItem> = self
