@@ -6,7 +6,7 @@ use crate::utils::process;
 pub struct RustTool;
 
 static STEPS: &[(&str, &[&str])] = &[
-  ("fmt", &["fmt", "--check"]),
+  ("fmt", &["fmt"]),
   ("check", &["check"]),
   ("clippy", &["clippy"]),
   ("test", &["test"]),
@@ -19,7 +19,7 @@ impl Tool for RustTool {
   }
 
   fn description(&self) -> &str {
-    "Run Rust project checks: fmt, check, clippy, test. Stops at the first failure."
+    "Run Rust tooling: fmt (auto-fixes formatting), check, clippy, test. Stops at the first failure."
   }
 
   fn parameters(&self) -> serde_json::Value {
