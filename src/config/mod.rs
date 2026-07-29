@@ -20,6 +20,7 @@ const DEFAULT_FIND_FILE_PERMISSION: bool = true;
 const DEFAULT_FIND_TEXT_PERMISSION: bool = true;
 const DEFAULT_LIST_DIRECTORIES_PERMISSION: bool = true;
 const DEFAULT_PROJECT_CONTEXT_PERMISSION: bool = true;
+const DEFAULT_RUST_PERMISSION: bool = true;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Config {
@@ -79,6 +80,8 @@ pub struct PermissionsConfig {
   pub list_directories: bool,
   #[serde(default = "default_project_context")]
   pub project_context: bool,
+  #[serde(default = "default_rust")]
+  pub rust: bool,
 }
 
 fn default_stream() -> bool {
@@ -115,6 +118,9 @@ fn default_list_directories() -> bool {
 }
 fn default_project_context() -> bool {
   DEFAULT_PROJECT_CONTEXT_PERMISSION
+}
+fn default_rust() -> bool {
+  DEFAULT_RUST_PERMISSION
 }
 
 impl Config {
@@ -194,6 +200,7 @@ impl Default for Config {
         find_text: DEFAULT_FIND_TEXT_PERMISSION,
         list_directories: DEFAULT_LIST_DIRECTORIES_PERMISSION,
         project_context: DEFAULT_PROJECT_CONTEXT_PERMISSION,
+        rust: DEFAULT_RUST_PERMISSION,
       },
     };
   }
