@@ -12,7 +12,7 @@ impl Tool for EditFileTool {
   }
 
   fn description(&self) -> &str {
-    return "Edit a file by replacing a range of lines. start_line and end_line are 1-based inclusive. If end_line exceeds the file length, new_content is appended after the last line. Use write_file to replace the whole file.";
+    return "Edit a file by replacing a range of lines. ALWAYS first read the file with append_loc=true to get accurate line numbers. start_line and end_line are 1-based inclusive. If end_line exceeds the file length, new_content is appended after the last line. Use write_file to replace the whole file. Prefer many small edits over one large one.";
   }
 
   fn parameters(&self) -> serde_json::Value {
