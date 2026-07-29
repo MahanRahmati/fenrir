@@ -10,7 +10,7 @@ use crate::files::operations;
 pub const DEFAULT_DIRECTORY: &str = "fenrir";
 const DEFAULT_CONFIG_NAME: &str = "config.toml";
 const DEFAULT_STREAM: bool = true;
-const DEFAULT_TOOL_TIMEOUT_SECONDS: u64 = 5;
+const DEFAULT_TOOL_TIMEOUT_SECONDS: u64 = 60;
 const DEFAULT_DATETIME_PERMISSION: bool = true;
 const DEFAULT_READ_FILE_PERMISSION: bool = true;
 const DEFAULT_WRITE_FILE_PERMISSION: bool = true;
