@@ -18,6 +18,11 @@ use crate::tool_manager::ToolManager;
 use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
 
+pub enum AppEvent {
+  Token(String),
+  Confirm(String),
+}
+
 pub struct App {
   session_manager: SessionManager,
   provider_manager: ProviderManager,
@@ -64,20 +69,26 @@ impl App {
     return Ok(());
   }
 
-  async fn process_chat<F: FnMut(&str)>(
+  pub async fn process_chat<F>(
     &mut self,
-    on_token: F,
-  ) -> RuntimeResult<String> {
+    mut on_event: F,
+  ) -> RuntimeResult<String>
+  where
+    F: FnMut(AppEvent) -> bool,
+  {
     if self.config.general.stream {
-      return self.process_chat_stream(on_token).await;
+      return self.process_chat_stream(&mut on_event).await;
     }
-    return self.process_chat_non_streaming(on_token).await;
+    return self.process_chat_non_streaming(&mut on_event).await;
   }
 
-  async fn process_chat_stream<F: FnMut(&str)>(
+  async fn process_chat_stream<F>(
     &mut self,
-    mut on_token: F,
-  ) -> RuntimeResult<String> {
+    on_event: &mut F,
+  ) -> RuntimeResult<String>
+  where
+    F: FnMut(AppEvent) -> bool,
+  {
     let mut assistant_content = String::new();
 
     loop {
@@ -103,7 +114,7 @@ impl App {
           chunk_result.map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
         if let Some(ref text) = delta.content {
-          on_token(text);
+          on_event(AppEvent::Token(text.clone()));
           content_buffer.push_str(text);
         }
 
@@ -143,16 +154,19 @@ impl App {
 
       let tool_calls: Vec<ToolCall> =
         tool_call_builders.into_values().collect();
-      self.execute_tool_calls(&tool_calls).await?;
+      self.execute_tool_calls(&tool_calls, on_event).await?;
     }
 
     return Ok(assistant_content);
   }
 
-  async fn process_chat_non_streaming<F: FnMut(&str)>(
+  async fn process_chat_non_streaming<F>(
     &mut self,
-    mut on_token: F,
-  ) -> RuntimeResult<String> {
+    on_event: &mut F,
+  ) -> RuntimeResult<String>
+  where
+    F: FnMut(AppEvent) -> bool,
+  {
     let mut assistant_content = String::new();
 
     loop {
@@ -171,7 +185,7 @@ impl App {
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
       if let Some(ref content) = response.content {
-        on_token(content);
+        on_event(AppEvent::Token(content.clone()));
         assistant_content.push_str(content);
       }
 
@@ -186,15 +200,18 @@ impl App {
         break;
       }
 
-      self.execute_tool_calls(&response.tool_calls).await?;
+      self
+        .execute_tool_calls(&response.tool_calls, on_event)
+        .await?;
     }
 
     return Ok(assistant_content);
   }
 
-  async fn execute_tool_calls(
+  async fn execute_tool_calls<F: FnMut(AppEvent) -> bool>(
     &mut self,
     tool_calls: &[ToolCall],
+    on_event: &mut F,
   ) -> RuntimeResult<()> {
     for tool_call in tool_calls {
       vlog!(
@@ -214,6 +231,25 @@ impl App {
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
       let params = parse_tool_params(&tool_call.arguments);
+
+      let mut confirm =
+        |msg: &str| on_event(AppEvent::Confirm(msg.to_string()));
+      if !self.tool_manager.confirm_if_needed(
+        &tool_call.name,
+        &params,
+        &mut confirm,
+      ) {
+        self
+          .session_manager
+          .add_tool_result_to_current_session(
+            &tool_call.id,
+            "Tool execution cancelled by user",
+          )
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        continue;
+      }
+
       let result = self
         .tool_manager
         .execute_tool(&tool_call.name, params)

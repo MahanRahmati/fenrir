@@ -30,6 +30,10 @@ impl Tool for RustTool {
     })
   }
 
+  fn is_read_only(&self) -> bool {
+    return true;
+  }
+
   async fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
     if !operations::file_exists("Cargo.toml").await {
       return Err(ToolManagerError::ExecutionFailed {

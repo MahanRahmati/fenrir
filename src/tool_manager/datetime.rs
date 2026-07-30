@@ -14,6 +14,10 @@ impl Tool for DateTimeTool {
     return "Returns the current local date and time.";
   }
 
+  fn is_read_only(&self) -> bool {
+    return true;
+  }
+
   async fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
     return Ok(get_current_datetime());
   }

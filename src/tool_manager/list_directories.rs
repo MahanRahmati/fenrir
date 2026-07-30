@@ -29,6 +29,10 @@ impl Tool for ListDirectoriesTool {
     });
   }
 
+  fn is_read_only(&self) -> bool {
+    return true;
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path =
       get_optional_param::<String>(&params, "list_directories", "path")

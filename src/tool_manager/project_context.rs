@@ -25,6 +25,10 @@ impl Tool for ProjectContextTool {
     });
   }
 
+  fn is_read_only(&self) -> bool {
+    return true;
+  }
+
   async fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
     let mut sections: Vec<String> = Vec::new();
 

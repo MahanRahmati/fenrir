@@ -1,5 +1,7 @@
-use crate::app::App;
+use ratatui::crossterm::event::{self, Event};
+
 use crate::app::errors::{RuntimeError, RuntimeResult};
+use crate::app::{App, AppEvent};
 use crate::prompt::Prompt;
 use crate::slash_commands::{SlashCommand, parse_command};
 use crate::tui::Tui;
@@ -71,13 +73,30 @@ impl App {
         tui.add_message(format!("You: {}", input));
         tui.add_message("Fenrir: ".to_string());
 
-        match self
-          .process_chat(|token| {
-            tui.append_to_last_message(token);
-            terminal.draw(|frame| tui.draw(frame)).ok();
-          })
-          .await
-        {
+        let handler = |event: AppEvent| -> bool {
+          match event {
+            AppEvent::Token(text) => {
+              tui.append_to_last_message(&text);
+              terminal.draw(|frame| tui.draw(frame)).ok();
+              return true;
+            }
+            AppEvent::Confirm(msg) => {
+              tui.open_confirm_popup(msg);
+              terminal.draw(|frame| tui.draw(frame)).ok();
+              while tui.confirm_popup_open() {
+                if let Ok(event) = event::read() {
+                  if let Event::Key(key) = event {
+                    tui.handle_confirm_event(key.code);
+                  }
+                }
+                terminal.draw(|frame| tui.draw(frame)).ok();
+              }
+              return tui.get_confirmation();
+            }
+          }
+        };
+
+        match self.process_chat(handler).await {
           Ok(_) => {
             terminal.draw(|frame| tui.draw(frame)).ok();
           }

@@ -23,6 +23,7 @@ pub trait Tool {
     });
   }
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String>;
+  fn is_read_only(&self) -> bool;
   fn to_tool_spec(&self) -> ToolSpec {
     return ToolSpec {
       name: self.name().to_string(),

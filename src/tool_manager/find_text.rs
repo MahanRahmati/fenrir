@@ -33,6 +33,10 @@ impl Tool for FindTextTool {
     });
   }
 
+  fn is_read_only(&self) -> bool {
+    return true;
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let pattern = get_param::<String>(&params, "find_text", "pattern")?;
     let path = get_optional_param::<String>(&params, "find_text", "path")

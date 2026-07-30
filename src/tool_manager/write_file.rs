@@ -28,6 +28,10 @@ impl Tool for WriteFileTool {
     });
   }
 
+  fn is_read_only(&self) -> bool {
+    return false;
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "write_file", "path")?;
     let content = get_param::<String>(&params, "write_file", "content")?;

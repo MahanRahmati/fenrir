@@ -28,6 +28,10 @@ impl Tool for EditFileTool {
     });
   }
 
+  fn is_read_only(&self) -> bool {
+    return false;
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "edit_file", "path")?;
     let start_line = get_param::<usize>(&params, "edit_file", "start_line")?;

@@ -153,6 +153,10 @@ impl Tui {
     return self.confirm_popup.is_open();
   }
 
+  pub fn handle_confirm_event(&mut self, key: KeyCode) -> bool {
+    return self.confirm_popup.handle_input(key);
+  }
+
   pub fn quit(&mut self) {
     self.running = false;
   }

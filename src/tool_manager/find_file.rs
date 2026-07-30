@@ -41,6 +41,10 @@ impl Tool for FindFileTool {
     });
   }
 
+  fn is_read_only(&self) -> bool {
+    return true;
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "find_file", "path")?;
     let include = get_optional_param::<String>(&params, "find_file", "include")

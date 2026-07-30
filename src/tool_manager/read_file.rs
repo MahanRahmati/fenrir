@@ -28,6 +28,10 @@ impl Tool for ReadFileTool {
     });
   }
 
+  fn is_read_only(&self) -> bool {
+    return true;
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "read_file", "path")?;
 

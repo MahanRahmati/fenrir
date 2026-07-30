@@ -1,7 +1,8 @@
 use std::io::Write;
 
-use crate::app::App;
 use crate::app::errors::{RuntimeError, RuntimeResult};
+use crate::app::{App, AppEvent};
+use crate::input::confirm_with;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::slash_commands::{SlashCommand, parse_command};
@@ -47,12 +48,18 @@ impl App {
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
       let mut stdout = std::io::stdout();
-      self
-        .process_chat(|token| {
-          print!("{}", token);
-          stdout.flush().ok();
-        })
-        .await?;
+      let handler = |event: AppEvent| -> bool {
+        match event {
+          AppEvent::Token(text) => {
+            print!("{}", text);
+            stdout.flush().ok();
+            return true;
+          }
+          AppEvent::Confirm(msg) => confirm_with(&format!("{} (y/N): ", msg)),
+        }
+      };
+
+      self.process_chat(handler).await?;
       println!();
     }
 

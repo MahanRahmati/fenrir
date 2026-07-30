@@ -25,6 +25,10 @@ impl Tool for RemoveFileTool {
     });
   }
 
+  fn is_read_only(&self) -> bool {
+    return false;
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "remove_file", "path")?;
 
