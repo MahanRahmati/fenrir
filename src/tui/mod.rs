@@ -1,5 +1,6 @@
 mod help_popup;
 mod input;
+mod messages_list;
 mod popup;
 mod sessions_popup;
 mod statusline;
@@ -8,18 +9,18 @@ use ratatui::Frame;
 use ratatui::crossterm::event::{self, KeyCode};
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::style::Style;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Paragraph};
 
 use crate::session_manager::session::Session;
 use crate::tui::help_popup::HelpPopup;
 use crate::tui::input::Input;
+use crate::tui::messages_list::MessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
 
 pub struct Tui {
   input: Input,
-  messages: Vec<String>,
+  messages_list: MessagesList,
   running: bool,
   help_popup: HelpPopup,
   sessions_popup: SessionsPopup,
@@ -29,7 +30,7 @@ impl Tui {
   pub fn new() -> Self {
     return Self {
       input: Input::new(),
-      messages: Vec::new(),
+      messages_list: MessagesList::new(),
       running: true,
       help_popup: HelpPopup::new(),
       sessions_popup: SessionsPopup::new(),
@@ -49,16 +50,7 @@ impl Tui {
     let [messages_area, input_area, status_bar_area] =
       frame.area().layout(&layout);
 
-    let messages: Vec<ListItem> = self
-      .messages
-      .iter()
-      .map(|m| {
-        let content = Line::from(Span::raw(m.clone()));
-        ListItem::new(content)
-      })
-      .collect();
-    let messages = List::new(messages);
-    frame.render_widget(messages, messages_area);
+    self.messages_list.draw(frame, messages_area);
 
     let input = Paragraph::new(self.input.content.as_str())
       .style(Style::default())
@@ -112,15 +104,15 @@ impl Tui {
   }
 
   pub fn add_message(&mut self, message: String) {
-    self.messages.push(message);
+    self.messages_list.add_message(message);
   }
 
   pub fn append_to_last_message(&mut self, text: &str) {
-    if let Some(last) = self.messages.last_mut() {
-      last.push_str(text);
-    } else {
-      self.messages.push(format!("Fenrir: {}", text));
-    }
+    self.messages_list.append_to_last_message(text);
+  }
+
+  pub fn update_messages(&mut self, session: Option<&Session>) {
+    self.messages_list.update_messages(session);
   }
 
   pub fn open_help_popup(&mut self) {
@@ -139,23 +131,6 @@ impl Tui {
 
   pub fn get_selected_session(&mut self) -> Option<i64> {
     return self.sessions_popup.get_selected_session();
-  }
-
-  pub fn update_messages(&mut self, session: Option<&Session>) {
-    self.messages.clear();
-    if let Some(session) = session {
-      for msg in &session.messages {
-        if msg.role == "system" {
-          continue;
-        }
-        let role = match msg.role.as_str() {
-          "user" => "You",
-          "assistant" => "Fenrir",
-          _ => continue,
-        };
-        self.messages.push(format!("{}: {}", role, msg.content));
-      }
-    }
   }
 
   pub fn quit(&mut self) {
