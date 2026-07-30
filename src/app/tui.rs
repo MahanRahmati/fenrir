@@ -84,10 +84,8 @@ impl App {
               tui.open_confirm_popup(msg);
               terminal.draw(|frame| tui.draw(frame)).ok();
               while tui.confirm_popup_open() {
-                if let Ok(event) = event::read() {
-                  if let Event::Key(key) = event {
-                    tui.handle_confirm_event(key.code);
-                  }
+                if let Ok(Event::Key(key)) = event::read() {
+                  tui.handle_confirm_event(key.code);
                 }
                 terminal.draw(|frame| tui.draw(frame)).ok();
               }
