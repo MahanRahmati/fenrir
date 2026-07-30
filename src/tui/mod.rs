@@ -1,3 +1,4 @@
+mod confirm_popup;
 mod help_popup;
 mod input;
 mod messages_list;
@@ -12,6 +13,7 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, Paragraph};
 
 use crate::session_manager::session::Session;
+use crate::tui::confirm_popup::ConfirmPopup;
 use crate::tui::help_popup::HelpPopup;
 use crate::tui::input::Input;
 use crate::tui::messages_list::MessagesList;
@@ -24,6 +26,7 @@ pub struct Tui {
   running: bool,
   help_popup: HelpPopup,
   sessions_popup: SessionsPopup,
+  confirm_popup: ConfirmPopup,
 }
 
 impl Tui {
@@ -34,6 +37,7 @@ impl Tui {
       running: true,
       help_popup: HelpPopup::new(),
       sessions_popup: SessionsPopup::new(),
+      confirm_popup: ConfirmPopup::new(),
     };
   }
 
@@ -68,6 +72,7 @@ impl Tui {
 
     self.sessions_popup.draw(frame);
     self.help_popup.draw(frame, messages_area);
+    self.confirm_popup.draw(frame, messages_area);
   }
 
   pub async fn read_input(&mut self) -> Option<String> {
@@ -80,6 +85,9 @@ impl Tui {
     };
 
     if let Some(key) = event.as_key_press_event() {
+      if self.confirm_popup.handle_input(key.code) {
+        return None;
+      }
       self.help_popup.handle_input();
       if self.sessions_popup.handle_input(key.code) {
         return None;
@@ -131,6 +139,18 @@ impl Tui {
 
   pub fn get_selected_session(&mut self) -> Option<i64> {
     return self.sessions_popup.get_selected_session();
+  }
+
+  pub fn open_confirm_popup(&mut self, message: String) {
+    self.confirm_popup.open_confirm_popup(message);
+  }
+
+  pub fn get_confirmation(&mut self) -> bool {
+    return self.confirm_popup.get_confirmation();
+  }
+
+  pub fn confirm_popup_open(&self) -> bool {
+    return self.confirm_popup.is_open();
   }
 
   pub fn quit(&mut self) {
