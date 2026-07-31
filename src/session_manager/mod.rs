@@ -84,6 +84,18 @@ impl SessionManager {
     return Ok(());
   }
 
+  pub async fn add_reasoning_message_to_current_session(
+    &mut self,
+    content: &str,
+  ) -> SessionManagerResult<()> {
+    self
+      .add_message_to_current_session(|session| {
+        session.add_reasoning_message(content);
+      })
+      .await?;
+    return Ok(());
+  }
+
   pub async fn add_tool_result_to_current_session(
     &mut self,
     tool_call_id: &str,

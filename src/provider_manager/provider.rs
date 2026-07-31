@@ -20,11 +20,13 @@ pub struct ToolCall {
 
 pub struct ChatResponse {
   pub content: Option<String>,
+  pub reasoning: Option<String>,
   pub tool_calls: Vec<ToolCall>,
 }
 
 pub struct ChatStreamDelta {
   pub content: Option<String>,
+  pub reasoning: Option<String>,
   pub tool_calls: Vec<StreamToolCallDelta>,
 }
 

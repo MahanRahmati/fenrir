@@ -115,6 +115,14 @@ impl Tui {
     self.messages_list.add_message(message);
   }
 
+  pub fn ensure_reasoning_line(&mut self) {
+    self.messages_list.ensure_reasoning_line();
+  }
+
+  pub fn ensure_content_line(&mut self) {
+    self.messages_list.ensure_content_line();
+  }
+
   pub fn append_to_last_message(&mut self, text: &str) {
     self.messages_list.append_to_last_message(text);
   }

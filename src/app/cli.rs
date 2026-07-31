@@ -48,10 +48,27 @@ impl App {
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
       let mut stdout = std::io::stdout();
+      let mut reasoning_open = false;
+      let mut reasoning_ends_with_newline = false;
       let handler = |event: AppEvent| -> bool {
         match event {
-          AppEvent::Token(text) => {
-            print!("{}", text);
+          AppEvent::Token { text, reasoning } => {
+            if reasoning {
+              if !reasoning_open {
+                print!("Reasoning: ");
+                reasoning_open = true;
+              }
+              reasoning_ends_with_newline = text.ends_with('\n');
+              print!("{}", text);
+            } else {
+              if reasoning_open {
+                reasoning_open = false;
+                if !reasoning_ends_with_newline {
+                  println!();
+                }
+              }
+              print!("{}", text);
+            }
             stdout.flush().ok();
             return true;
           }

@@ -19,7 +19,7 @@ use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
 
 pub enum AppEvent {
-  Token(String),
+  Token { text: String, reasoning: bool },
   Confirm(String),
 }
 
@@ -107,6 +107,7 @@ impl App {
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
       let mut content_buffer = String::new();
+      let mut reasoning_buffer = String::new();
       let mut tool_call_builders: HashMap<usize, ToolCall> = HashMap::new();
 
       while let Some(chunk_result) = stream.next().await {
@@ -114,8 +115,21 @@ impl App {
           chunk_result.map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
         if let Some(ref text) = delta.content {
-          on_event(AppEvent::Token(text.clone()));
+          on_event(AppEvent::Token {
+            text: text.clone(),
+            reasoning: false,
+          });
           content_buffer.push_str(text);
+        }
+
+        if let Some(ref text) = delta.reasoning {
+          if self.config.general.show_reasoning {
+            on_event(AppEvent::Token {
+              text: text.clone(),
+              reasoning: true,
+            });
+          }
+          reasoning_buffer.push_str(text);
         }
 
         for tc_delta in delta.tool_calls {
@@ -144,6 +158,13 @@ impl App {
       }
 
       if tool_call_builders.is_empty() {
+        if self.config.general.show_reasoning && !reasoning_buffer.is_empty() {
+          self
+            .session_manager
+            .add_reasoning_message_to_current_session(&reasoning_buffer)
+            .await
+            .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        }
         self
           .session_manager
           .add_assistant_message_to_current_session(&content_buffer)
@@ -184,12 +205,34 @@ impl App {
         .await
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
+      if self.config.general.show_reasoning
+        && let Some(ref reasoning) = response.reasoning
+      {
+        on_event(AppEvent::Token {
+          text: reasoning.clone(),
+          reasoning: true,
+        });
+      }
+
       if let Some(ref content) = response.content {
-        on_event(AppEvent::Token(content.clone()));
+        on_event(AppEvent::Token {
+          text: content.clone(),
+          reasoning: false,
+        });
         assistant_content.push_str(content);
       }
 
       if response.tool_calls.is_empty() {
+        if self.config.general.show_reasoning
+          && let Some(ref reasoning) = response.reasoning
+          && !reasoning.is_empty()
+        {
+          self
+            .session_manager
+            .add_reasoning_message_to_current_session(reasoning)
+            .await
+            .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        }
         if let Some(ref content) = response.content {
           self
             .session_manager

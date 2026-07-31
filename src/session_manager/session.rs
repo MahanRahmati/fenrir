@@ -60,6 +60,10 @@ impl Session {
     self.add_message("assistant", content, None, None);
   }
 
+  pub fn add_reasoning_message(&mut self, content: &str) {
+    self.add_message("reasoning", content, None, None);
+  }
+
   pub fn add_tool_result(&mut self, tool_call_id: &str, content: &str) {
     self.add_message("tool", content, Some(tool_call_id.to_string()), None);
   }

@@ -10,6 +10,7 @@ use crate::files::operations;
 pub const DEFAULT_DIRECTORY: &str = "fenrir";
 const DEFAULT_CONFIG_NAME: &str = "config.toml";
 const DEFAULT_STREAM: bool = true;
+const DEFAULT_SHOW_REASONING: bool = true;
 const DEFAULT_TOOL_TIMEOUT_SECONDS: u64 = 60;
 const DEFAULT_DATETIME_PERMISSION: bool = true;
 const DEFAULT_READ_FILE_PERMISSION: bool = true;
@@ -37,6 +38,8 @@ pub struct GeneralConfig {
   pub model: Option<String>,
   #[serde(default = "default_stream")]
   pub stream: bool,
+  #[serde(default = "default_show_reasoning")]
+  pub show_reasoning: bool,
   #[serde(default = "default_tool_timeout")]
   pub tool_timeout_seconds: u64,
 }
@@ -86,6 +89,10 @@ pub struct PermissionsConfig {
 
 fn default_stream() -> bool {
   DEFAULT_STREAM
+}
+
+fn default_show_reasoning() -> bool {
+  DEFAULT_SHOW_REASONING
 }
 
 fn default_tool_timeout() -> u64 {
@@ -185,6 +192,7 @@ impl Default for Config {
       general: GeneralConfig {
         model: None,
         stream: DEFAULT_STREAM,
+        show_reasoning: DEFAULT_SHOW_REASONING,
         tool_timeout_seconds: DEFAULT_TOOL_TIMEOUT_SECONDS,
       },
       providers: ProvidersConfig {

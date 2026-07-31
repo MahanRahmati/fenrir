@@ -79,6 +79,7 @@ struct ResponseChoice {
 #[derive(Debug, Deserialize)]
 struct ResponseMessage {
   content: Option<String>,
+  reasoning_content: Option<String>,
   #[serde(default)]
   tool_calls: Vec<ApiResponseToolCall>,
 }
@@ -108,6 +109,7 @@ struct StreamChoice {
 #[derive(Debug, Default, Deserialize)]
 struct StreamDelta {
   content: Option<String>,
+  reasoning_content: Option<String>,
   #[serde(default)]
   tool_calls: Vec<StreamToolCall>,
 }
@@ -178,6 +180,7 @@ impl OpenAICompatibleProvider {
   ) -> ChatCompletionRequest {
     let chat_messages: Vec<ChatMessage> = messages
       .iter()
+      .filter(|msg| msg.role != "reasoning")
       .map(|msg| {
         let content = if msg.content.is_empty() {
           None
@@ -256,6 +259,7 @@ fn parse_sse_chunk(
         .collect();
       return Some(Ok(ChatStreamDelta {
         content: delta.content,
+        reasoning: delta.reasoning_content,
         tool_calls,
       }));
     }
@@ -314,6 +318,7 @@ impl Provider for OpenAICompatibleProvider {
 
     let choice = &response.choices[0];
     let content = choice.message.content.clone();
+    let reasoning = choice.message.reasoning_content.clone();
     let tool_calls: Vec<ToolCall> = choice
       .message
       .tool_calls
@@ -340,6 +345,7 @@ impl Provider for OpenAICompatibleProvider {
 
     return Ok(ChatResponse {
       content,
+      reasoning,
       tool_calls,
     });
   }

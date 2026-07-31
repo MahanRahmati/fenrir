@@ -71,11 +71,15 @@ impl App {
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
         tui.add_message(format!("You: {}", input));
-        tui.add_message("Fenrir: ".to_string());
 
         let handler = |event: AppEvent| -> bool {
           match event {
-            AppEvent::Token(text) => {
+            AppEvent::Token { text, reasoning } => {
+              if reasoning {
+                tui.ensure_reasoning_line();
+              } else {
+                tui.ensure_content_line();
+              }
               tui.append_to_last_message(&text);
               terminal.draw(|frame| tui.draw(frame)).ok();
               return true;
