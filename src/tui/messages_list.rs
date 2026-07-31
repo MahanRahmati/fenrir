@@ -1,24 +1,12 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
-use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem};
 
 use crate::session_manager::session::Session;
-
-pub struct MessageLine {
-  text: String,
-  reasoning: bool,
-}
-
-impl MessageLine {
-  pub fn new(text: String, reasoning: bool) -> Self {
-    return Self { text, reasoning };
-  }
-}
+use crate::tui::message_item::MessageItem;
 
 pub struct MessagesList {
-  messages: Vec<MessageLine>,
+  messages: Vec<MessageItem>,
 }
 
 impl MessagesList {
@@ -29,50 +17,38 @@ impl MessagesList {
   }
 
   pub fn draw(&self, frame: &mut Frame, area: Rect) {
-    let messages: Vec<ListItem> = self
-      .messages
-      .iter()
-      .map(|m| {
-        let content = Line::from(Span::raw(m.text.clone()));
-        let mut item = ListItem::new(content);
-        if m.reasoning {
-          item = item.style(Style::default().dim());
-        }
-        return item;
-      })
-      .collect();
+    let messages: Vec<ListItem> =
+      self.messages.iter().map(|m| m.to_list_item()).collect();
     let messages = List::new(messages);
     frame.render_widget(messages, area);
   }
 
   pub fn add_message(&mut self, message: String) {
-    self.messages.push(MessageLine::new(message, false));
+    let message = MessageItem::new(message, false);
+    self.messages.push(message);
   }
 
   pub fn ensure_reasoning_line(&mut self) {
-    if self.messages.last().is_none_or(|last| !last.reasoning) {
-      self
-        .messages
-        .push(MessageLine::new("Reasoning: ".to_string(), true));
+    if self.messages.last().is_none_or(|last| !last.is_reasoning()) {
+      let message = MessageItem::new("Reasoning: ".to_string(), true);
+      self.messages.push(message);
     }
   }
 
   pub fn ensure_content_line(&mut self) {
-    if self.messages.last().is_none_or(|last| last.reasoning) {
-      self
-        .messages
-        .push(MessageLine::new("Fenrir: ".to_string(), false));
+    if self.messages.last().is_none_or(|last| last.is_reasoning()) {
+      let message = MessageItem::new("Fenrir: ".to_string(), false);
+      self.messages.push(message);
     }
   }
 
   pub fn append_to_last_message(&mut self, text: &str) {
     if let Some(last) = self.messages.last_mut() {
-      last.text.push_str(text);
-    } else {
-      self
-        .messages
-        .push(MessageLine::new(format!("Fenrir: {}", text), false));
+      last.push_string(text);
+      return;
     }
+    let message = MessageItem::new(format!("Fenrir: {}", text), false);
+    self.messages.push(message);
   }
 
   pub fn update_messages(&mut self, session: Option<&Session>) {
@@ -88,10 +64,11 @@ impl MessagesList {
           "reasoning" => "Reasoning",
           _ => continue,
         };
-        self.messages.push(MessageLine::new(
+        let message = MessageItem::new(
           format!("{}: {}", role, msg.content),
           msg.role == "reasoning",
-        ));
+        );
+        self.messages.push(message);
       }
     }
   }

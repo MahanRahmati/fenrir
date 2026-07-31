@@ -1,6 +1,7 @@
 mod confirm_popup;
 mod help_popup;
 mod input;
+mod message_item;
 mod messages_list;
 mod popup;
 mod sessions_popup;
