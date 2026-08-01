@@ -1,5 +1,5 @@
 use ratatui::style::Style;
-use ratatui::text::{Line, Span};
+use ratatui::widgets::{Paragraph, Wrap};
 
 pub struct MessageItem {
   text: String,
@@ -11,12 +11,13 @@ impl MessageItem {
     return Self { text, reasoning };
   }
 
-  pub fn to_list_item(&self) -> Line<'static> {
-    let mut item = Line::from(Span::raw(self.text.clone()));
+  pub fn to_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
+    let mut item = Paragraph::new(self.text.clone()).wrap(Wrap { trim: true });
     if self.reasoning {
       item = item.style(Style::default().dim());
     }
-    return item;
+    let height = item.line_count(width).max(1) as u16;
+    return (item, height);
   }
 
   pub fn is_reasoning(&self) -> bool {
