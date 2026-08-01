@@ -25,9 +25,10 @@ impl MessagesList {
   pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
     let builder = ListBuilder::new(|context| {
       let message = &self.messages[context.index];
-      (message.to_list_item(), 1)
+      message.to_list_item(context.cross_axis_size)
     });
     let list = ListView::new(builder, self.messages.len())
+      .infinite_scrolling(false)
       .scroll_direction(ScrollDirection::Backward)
       .scrollbar(
         Scrollbar::new(ScrollbarOrientation::VerticalRight)
@@ -45,8 +46,8 @@ impl MessagesList {
 
   pub fn handle_mouse(&mut self, mouse: &MouseEvent) {
     match mouse.kind {
-      MouseEventKind::ScrollUp => self.scroll_newer(),
-      MouseEventKind::ScrollDown => self.scroll_older(),
+      MouseEventKind::ScrollUp => self.scroll_older(),
+      MouseEventKind::ScrollDown => self.scroll_newer(),
       _ => {}
     }
   }
