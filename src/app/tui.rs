@@ -77,7 +77,7 @@ impl App {
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
-        tui.add_message(format!("You: {}", input));
+        tui.add_message(input);
 
         let handler = |event: AppEvent| -> bool {
           match event {

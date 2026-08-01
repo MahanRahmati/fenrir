@@ -5,7 +5,7 @@ use ratatui::widgets::{Scrollbar, ScrollbarOrientation};
 use tui_widget_list::{ListBuilder, ListState, ListView, ScrollDirection};
 
 use crate::session_manager::session::Session;
-use crate::tui::message_item::MessageItem;
+use crate::tui::message_item::{MessageItem, Role};
 
 pub struct MessagesList {
   messages: Vec<MessageItem>,
@@ -64,14 +64,14 @@ impl MessagesList {
   }
 
   pub fn add_message(&mut self, message: String) {
-    let message = MessageItem::new(message, false);
+    let message = MessageItem::new(message, Role::User);
     self.messages.push(message);
     self.select_last();
   }
 
   pub fn ensure_reasoning_line(&mut self) {
     if self.messages.last().is_none_or(|last| !last.is_reasoning()) {
-      let message = MessageItem::new("Reasoning: ".to_string(), true);
+      let message = MessageItem::new(String::new(), Role::Reasoning);
       self.messages.push(message);
       self.select_last();
     }
@@ -79,7 +79,7 @@ impl MessagesList {
 
   pub fn ensure_content_line(&mut self) {
     if self.messages.last().is_none_or(|last| last.is_reasoning()) {
-      let message = MessageItem::new("Fenrir: ".to_string(), false);
+      let message = MessageItem::new(String::new(), Role::Assistant);
       self.messages.push(message);
       self.select_last();
     }
@@ -89,7 +89,7 @@ impl MessagesList {
     if let Some(last) = self.messages.last_mut() {
       last.push_string(text);
     } else {
-      let message = MessageItem::new(format!("Fenrir: {}", text), false);
+      let message = MessageItem::new(text.to_string(), Role::Assistant);
       self.messages.push(message);
     }
     self.select_last();
@@ -103,15 +103,12 @@ impl MessagesList {
           continue;
         }
         let role = match msg.role.as_str() {
-          "user" => "You",
-          "assistant" => "Fenrir",
-          "reasoning" => "Reasoning",
+          "user" => Role::User,
+          "assistant" => Role::Assistant,
+          "reasoning" => Role::Reasoning,
           _ => continue,
         };
-        let message = MessageItem::new(
-          format!("{}: {}", role, msg.content),
-          msg.role == "reasoning",
-        );
+        let message = MessageItem::new(msg.content.clone(), role);
         self.messages.push(message);
       }
     }
