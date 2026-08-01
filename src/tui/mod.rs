@@ -8,7 +8,7 @@ mod sessions_popup;
 mod statusline;
 
 use ratatui::Frame;
-use ratatui::crossterm::event::{self, KeyCode};
+use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Paragraph};
@@ -46,7 +46,7 @@ impl Tui {
     return self.running;
   }
 
-  pub fn draw(&self, frame: &mut Frame) {
+  pub fn draw(&mut self, frame: &mut Frame) {
     let layout = Layout::vertical([
       Constraint::Min(1),
       Constraint::Length(3),
@@ -84,6 +84,10 @@ impl Tui {
         return None;
       }
     };
+
+    if let Event::Mouse(mouse) = &event {
+      self.messages_list.handle_mouse(mouse);
+    }
 
     if let Some(key) = event.as_key_press_event() {
       if self.confirm_popup.handle_input(key.code) {

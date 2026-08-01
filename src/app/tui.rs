@@ -1,4 +1,9 @@
-use ratatui::crossterm::event::{self, Event};
+use std::io::stdout;
+
+use ratatui::crossterm;
+use ratatui::crossterm::event::{
+  self, DisableMouseCapture, EnableMouseCapture, Event,
+};
 
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent};
@@ -13,6 +18,8 @@ impl App {
     vlog!("Prompt: {}", prompt.get_system_prompt());
 
     let mut terminal = ratatui::init();
+    crossterm::execute!(stdout(), EnableMouseCapture)
+      .map_err(|e| RuntimeError::Tui(e.to_string()))?;
     let mut tui = Tui::new();
 
     while tui.is_running() && !self.shutdown.is_cancelled() {
@@ -110,6 +117,8 @@ impl App {
       }
     }
 
+    crossterm::execute!(stdout(), DisableMouseCapture)
+      .map_err(|e| RuntimeError::Tui(e.to_string()))?;
     ratatui::restore();
     return Ok(String::new());
   }
