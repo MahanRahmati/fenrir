@@ -1,5 +1,7 @@
 use ratatui::style::Style;
-use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::widgets::{Block, Padding, Paragraph, Wrap};
+
+const TOP_PADDING: u16 = 1;
 
 pub struct MessageItem {
   text: String,
@@ -12,7 +14,10 @@ impl MessageItem {
   }
 
   pub fn to_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
-    let mut item = Paragraph::new(self.text.clone()).wrap(Wrap { trim: true });
+    let block = Block::default().padding(Padding::new(0, 0, TOP_PADDING, 0));
+    let mut item = Paragraph::new(self.text.clone())
+      .wrap(Wrap { trim: true })
+      .block(block);
     if self.reasoning {
       item = item.style(Style::default().dim());
     }
