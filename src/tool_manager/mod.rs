@@ -34,11 +34,14 @@ use crate::utils::path::is_path_within;
 pub struct ToolManager {
   tools: Vec<Box<dyn Tool>>,
   tool_timeout: Duration,
+  restrict_write_tools_to_cwd: bool,
 }
 
 impl ToolManager {
   pub fn new(config: Config) -> Self {
     let tool_timeout = Duration::from_secs(config.general.tool_timeout_seconds);
+    let restrict_write_tools_to_cwd =
+      config.general.restrict_write_tools_to_cwd;
     let mut tools: Vec<Box<dyn Tool>> = Vec::new();
 
     if config.permissions.datetime {
@@ -74,6 +77,7 @@ impl ToolManager {
     return Self {
       tools,
       tool_timeout,
+      restrict_write_tools_to_cwd,
     };
   }
 
@@ -142,6 +146,9 @@ impl ToolManager {
   ) -> bool {
     if !self.needs_confirmation(name, params) {
       return true;
+    }
+    if self.restrict_write_tools_to_cwd {
+      return false;
     }
     let path = match params.get("path") {
       Some(p) => p.as_str(),

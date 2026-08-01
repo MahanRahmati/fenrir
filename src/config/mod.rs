@@ -12,6 +12,7 @@ const DEFAULT_CONFIG_NAME: &str = "config.toml";
 const DEFAULT_STREAM: bool = true;
 const DEFAULT_SHOW_REASONING: bool = true;
 const DEFAULT_TOOL_TIMEOUT_SECONDS: u64 = 60;
+const DEFAULT_RESTRICT_WRITE_TOOLS_TO_CWD: bool = true;
 const DEFAULT_DATETIME_PERMISSION: bool = true;
 const DEFAULT_READ_FILE_PERMISSION: bool = true;
 const DEFAULT_WRITE_FILE_PERMISSION: bool = true;
@@ -42,6 +43,8 @@ pub struct GeneralConfig {
   pub show_reasoning: bool,
   #[serde(default = "default_tool_timeout")]
   pub tool_timeout_seconds: u64,
+  #[serde(default = "default_restrict_write_tools_to_cwd")]
+  pub restrict_write_tools_to_cwd: bool,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
@@ -97,6 +100,10 @@ fn default_show_reasoning() -> bool {
 
 fn default_tool_timeout() -> u64 {
   DEFAULT_TOOL_TIMEOUT_SECONDS
+}
+
+fn default_restrict_write_tools_to_cwd() -> bool {
+  DEFAULT_RESTRICT_WRITE_TOOLS_TO_CWD
 }
 
 fn default_datetime() -> bool {
@@ -194,6 +201,7 @@ impl Default for Config {
         stream: DEFAULT_STREAM,
         show_reasoning: DEFAULT_SHOW_REASONING,
         tool_timeout_seconds: DEFAULT_TOOL_TIMEOUT_SECONDS,
+        restrict_write_tools_to_cwd: DEFAULT_RESTRICT_WRITE_TOOLS_TO_CWD,
       },
       providers: ProvidersConfig {
         openai_compatible: None,
