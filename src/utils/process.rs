@@ -31,6 +31,7 @@ pub async fn run(program: &str, args: &[&str]) -> Result<Output, String> {
     .args(args)
     .stdout(Stdio::piped())
     .stderr(Stdio::piped())
+    .kill_on_drop(true)
     .output()
     .await
     .map_err(|e| format!("Failed to execute '{}': {}", program, e))?;
