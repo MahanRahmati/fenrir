@@ -60,7 +60,8 @@ impl App {
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
     vlog!("Created session with ID: {}", session_id);
 
-    let prompt = Prompt::new(self.config.clone());
+    let prompt =
+      Prompt::new(self.config.clone(), &self.tool_manager.get_tools_specs());
     vlog!("Prompt: {}", prompt.get_system_prompt());
     self
       .session_manager
