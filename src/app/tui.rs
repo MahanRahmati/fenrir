@@ -102,6 +102,16 @@ impl App {
               }
               return tui.get_confirmation();
             }
+            AppEvent::ToolCall { name, arguments } => {
+              tui.add_tool_call(name, arguments);
+              terminal.draw(|frame| tui.draw(frame)).ok();
+              return true;
+            }
+            AppEvent::ToolResult { result, error } => {
+              tui.add_tool_result(result, error);
+              terminal.draw(|frame| tui.draw(frame)).ok();
+              return true;
+            }
           }
         };
 

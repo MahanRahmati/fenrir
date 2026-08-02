@@ -73,6 +73,26 @@ impl App {
             return true;
           }
           AppEvent::Confirm(msg) => confirm_with(&format!("{} (y/N): ", msg)),
+          AppEvent::ToolCall { name, arguments } => {
+            if reasoning_open {
+              reasoning_open = false;
+              if !reasoning_ends_with_newline {
+                println!();
+              }
+            }
+            println!("[tool] {}({})", name, arguments);
+            stdout.flush().ok();
+            return true;
+          }
+          AppEvent::ToolResult { result, error } => {
+            if error {
+              println!("[error] {}", result);
+            } else {
+              println!("[result] {}", result);
+            }
+            stdout.flush().ok();
+            return true;
+          }
         }
       };
 

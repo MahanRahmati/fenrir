@@ -2,5 +2,7 @@ INSERT INTO messages (
   session_id,
   role,
   content,
-  timestamp
-) VALUES (?, ?, ?, ?);
+  timestamp,
+  tool_call_id,
+  tool_calls
+) VALUES (?, ?, ?, ?, ?, ?);

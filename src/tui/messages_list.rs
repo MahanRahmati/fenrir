@@ -69,6 +69,25 @@ impl MessagesList {
     self.select_last();
   }
 
+  pub fn add_tool_call(&mut self, name: String, arguments: String) {
+    let message = MessageItem::new_tool_call(name, arguments);
+    self.messages.push(message);
+    self.select_last();
+  }
+
+  pub fn add_tool_result(&mut self, result: String, error: bool) {
+    if let Some(last) = self.messages.last_mut()
+      && last.is_pending_tool()
+    {
+      last.push_tool_result(result, error);
+    } else {
+      let message =
+        MessageItem::new(result, Role::ToolResult).with_error(error);
+      self.messages.push(message);
+    }
+    self.select_last();
+  }
+
   pub fn ensure_reasoning_line(&mut self) {
     if self.messages.last().is_none_or(|last| !last.is_reasoning()) {
       let message = MessageItem::new(String::new(), Role::Reasoning);
@@ -98,18 +117,68 @@ impl MessagesList {
   pub fn update_messages(&mut self, session: Option<&Session>) {
     self.messages.clear();
     if let Some(session) = session {
-      for msg in &session.messages {
+      let messages = &session.messages;
+      let mut i = 0;
+      while i < messages.len() {
+        let msg = &messages[i];
         if msg.role == "system" {
+          i += 1;
+          continue;
+        }
+        if msg.role == "assistant" && msg.tool_calls.is_some() {
+          let (name, arguments) = msg
+            .tool_calls
+            .as_ref()
+            .and_then(|calls| calls.first())
+            .map(|call| {
+              (call.function.name.clone(), call.function.arguments.clone())
+            })
+            .unwrap_or_default();
+          let mut item = MessageItem::new_tool_call(name, arguments);
+          if let Some(call_id) = &msg.tool_call_id {
+            for (j, result_msg) in messages.iter().enumerate().skip(i + 1) {
+              if result_msg.role == "tool"
+                && result_msg.tool_call_id.as_deref() == Some(call_id.as_str())
+              {
+                let content = result_msg
+                  .content
+                  .strip_prefix("Tool result: ")
+                  .unwrap_or(&result_msg.content);
+                let error = content.starts_with("Tool error: ");
+                item.push_tool_result(content.to_string(), error);
+                i = j;
+                break;
+              }
+            }
+          }
+          self.messages.push(item);
+          i += 1;
+          continue;
+        }
+        if msg.role == "tool" {
+          let content = msg
+            .content
+            .strip_prefix("Tool result: ")
+            .unwrap_or(&msg.content);
+          let error = content.starts_with("Tool error: ");
+          let message = MessageItem::new(content.to_string(), Role::ToolResult)
+            .with_error(error);
+          self.messages.push(message);
+          i += 1;
           continue;
         }
         let role = match msg.role.as_str() {
           "user" => Role::User,
           "assistant" => Role::Assistant,
           "reasoning" => Role::Reasoning,
-          _ => continue,
+          _ => {
+            i += 1;
+            continue;
+          }
         };
         let message = MessageItem::new(msg.content.clone(), role);
         self.messages.push(message);
+        i += 1;
       }
     }
     self.select_last();

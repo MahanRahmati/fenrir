@@ -140,11 +140,23 @@ impl SessionManager {
       f(session);
       let new_msg = session.messages.last();
       if let Some(msg) = new_msg {
+        let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
+        let tool_calls = match &msg.tool_calls {
+          Some(calls) => serde_json::to_string(calls).unwrap_or_default(),
+          None => String::new(),
+        };
         match self
           .db
           .execute(
             INSERT_MESSAGE,
-            (session.id, &*msg.role, &*msg.content, msg.timestamp),
+            (
+              session.id,
+              &*msg.role,
+              &*msg.content,
+              msg.timestamp,
+              tool_call_id,
+              tool_calls,
+            ),
           )
           .await
         {
@@ -225,13 +237,26 @@ impl SessionManager {
         Ok(v) => v,
         Err(_) => continue,
       };
+      let tool_call_id: String = msg_row.get(5).unwrap_or_default();
+      let tool_calls: String = msg_row.get(6).unwrap_or_default();
+
+      let tool_call_id = if tool_call_id.is_empty() {
+        None
+      } else {
+        Some(tool_call_id)
+      };
+      let tool_calls = if tool_calls.is_empty() {
+        None
+      } else {
+        serde_json::from_str(&tool_calls).ok()
+      };
 
       let message = Message {
         msg_type: None,
         role,
         content,
-        tool_call_id: None,
-        tool_calls: None,
+        tool_call_id,
+        tool_calls,
         timestamp,
       };
 

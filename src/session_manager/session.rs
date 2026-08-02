@@ -84,15 +84,7 @@ impl Session {
     }];
     self.add_message(
       "assistant",
-      &format!(
-        "Calling tool: {}{}",
-        name,
-        if arguments.trim().is_empty() || arguments.trim() == "{}" {
-          String::new()
-        } else {
-          format!("({})", arguments)
-        }
-      ),
+      "",
       Some(tool_call_id.to_string()),
       Some(tool_calls),
     );

@@ -120,6 +120,14 @@ impl Tui {
     self.messages_list.add_message(message);
   }
 
+  pub fn add_tool_call(&mut self, name: String, arguments: String) {
+    self.messages_list.add_tool_call(name, arguments);
+  }
+
+  pub fn add_tool_result(&mut self, result: String, error: bool) {
+    self.messages_list.add_tool_result(result, error);
+  }
+
   pub fn ensure_reasoning_line(&mut self) {
     self.messages_list.ensure_reasoning_line();
   }

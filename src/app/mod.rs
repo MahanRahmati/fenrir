@@ -21,6 +21,8 @@ use crate::vlog;
 pub enum AppEvent {
   Token { text: String, reasoning: bool },
   Confirm(String),
+  ToolCall { name: String, arguments: String },
+  ToolResult { result: String, error: bool },
 }
 
 pub struct App {
@@ -273,6 +275,13 @@ impl App {
         .await
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
+      if self.config.general.show_tools {
+        on_event(AppEvent::ToolCall {
+          name: tool_call.name.clone(),
+          arguments: tool_call.arguments.clone(),
+        });
+      }
+
       let params = parse_tool_params(&tool_call.arguments);
 
       let mut confirm =
@@ -282,14 +291,18 @@ impl App {
         &params,
         &mut confirm,
       ) {
+        let result = "Tool execution cancelled by user".to_string();
         self
           .session_manager
-          .add_tool_result_to_current_session(
-            &tool_call.id,
-            "Tool execution cancelled by user",
-          )
+          .add_tool_result_to_current_session(&tool_call.id, &result)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        if self.config.general.show_tools {
+          on_event(AppEvent::ToolResult {
+            result,
+            error: false,
+          });
+        }
         continue;
       }
 
@@ -298,14 +311,14 @@ impl App {
         .execute_tool(&tool_call.name, params)
         .await;
 
-      let result_str = match result {
+      let (result_str, error) = match result {
         Ok(r) => {
           vlog!("Tool '{}' result: {}", tool_call.name, r);
-          r
+          (r, false)
         }
         Err(e) => {
           vlog!("Tool '{}' error: {}", tool_call.name, e);
-          format!("Tool error: {}", e)
+          (format!("Tool error: {}", e), true)
         }
       };
 
@@ -314,6 +327,13 @@ impl App {
         .add_tool_result_to_current_session(&tool_call.id, &result_str)
         .await
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
+
+      if self.config.general.show_tools {
+        on_event(AppEvent::ToolResult {
+          result: result_str,
+          error,
+        });
+      }
     }
     return Ok(());
   }
