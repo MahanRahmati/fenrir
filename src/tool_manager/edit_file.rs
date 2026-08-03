@@ -72,11 +72,10 @@ impl Tool for EditFileTool {
       }
     })?;
 
-    let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+    let lines: Vec<&str> = content.lines().collect();
     let total_lines = lines.len();
 
-    let new_lines: Vec<String> =
-      new_content.lines().map(|l| l.to_string()).collect();
+    let new_lines: Vec<&str> = new_content.lines().collect();
 
     let (output, replaced) = if end_line > total_lines {
       let mut result = lines;
@@ -85,7 +84,7 @@ impl Tool for EditFileTool {
     } else {
       let start_idx = start_line - 1;
       let end_idx = end_line.min(total_lines);
-      let mut result: Vec<String> = Vec::with_capacity(
+      let mut result: Vec<&str> = Vec::with_capacity(
         total_lines - (end_idx - start_idx) + new_lines.len(),
       );
       result.extend_from_slice(&lines[..start_idx]);

@@ -50,28 +50,29 @@ impl Tool for FindTextTool {
       get_optional_param::<bool>(&params, "find_text", "case_sensitive")
         .unwrap_or(DEFAULT_CASE_SENSITIVE);
 
-    let mut args: Vec<String> = vec![
-      "--color".into(),
-      "never".into(),
-      "--with-filename".into(),
-      "--line-number".into(),
-      "--column".into(),
+    let file_glob_ref = file_glob.as_deref();
+
+    let mut args: Vec<&str> = vec![
+      "--color",
+      "never",
+      "--with-filename",
+      "--line-number",
+      "--column",
     ];
 
     if !case_sensitive {
-      args.push("-i".into());
+      args.push("-i");
     }
 
-    if let Some(file_glob) = file_glob {
-      args.push("--glob".into());
+    if let Some(file_glob) = file_glob_ref {
+      args.push("--glob");
       args.push(file_glob);
     }
 
-    args.push(pattern.clone());
-    args.push(path.clone());
+    args.push(pattern.as_str());
+    args.push(path.as_str());
 
-    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let output = process::run("rg", &args_refs).await.map_err(|e| {
+    let output = process::run("rg", &args).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "find_text".to_string(),
         reason: e,

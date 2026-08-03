@@ -79,16 +79,17 @@ impl Tool for ReadFileTool {
       get_optional_param::<bool>(&params, "read_file", "append_loc")
         .unwrap_or(false);
 
-    let output: Vec<String> = if append_loc {
+    let output: String = if append_loc {
       selected_lines
         .iter()
         .enumerate()
         .map(|(i, line)| format!("{}{} {}", start + i + 1, '\u{2192}', line))
-        .collect()
+        .collect::<Vec<String>>()
+        .join("\n")
     } else {
-      selected_lines.iter().map(|&l| l.to_string()).collect()
+      selected_lines.join("\n")
     };
 
-    return Ok(output.join("\n"));
+    return Ok(output);
   }
 }

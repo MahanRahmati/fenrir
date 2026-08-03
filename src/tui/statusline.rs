@@ -7,7 +7,7 @@ use ratatui::{
 
 pub struct StatusLine {
   cwd: String,
-  version: String,
+  version: &'static str,
 }
 
 impl StatusLine {
@@ -15,7 +15,7 @@ impl StatusLine {
     let cwd = std::env::current_dir()
       .map(|p| p.display().to_string())
       .unwrap_or_default();
-    let version = env!("CARGO_PKG_VERSION").to_string();
+    let version = env!("CARGO_PKG_VERSION");
     return Self { cwd, version };
   }
 
@@ -32,7 +32,6 @@ impl StatusLine {
   pub fn draw(&self, width: u16) -> Paragraph<'_> {
     let cwd_display = Self::to_relative_path(&self.cwd);
     let version_display = format!("v{}", self.version);
-
     let w = width as usize;
     let max_len = w.saturating_sub(4).max(8);
     let cwd_width = if cwd_display.len() > max_len {

@@ -51,10 +51,11 @@ async fn directory_section() -> String {
   match operations::read_dir(".").await {
     Ok(entries) => {
       for (name, is_dir) in &entries {
+        listing.push_str(name);
         if *is_dir {
-          listing.push_str(&format!("{name}/\n"));
+          listing.push_str("/\n");
         } else {
-          listing.push_str(&format!("{name}\n"));
+          listing.push('\n');
         }
       }
     }

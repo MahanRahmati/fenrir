@@ -59,8 +59,7 @@ impl Input {
   }
 
   pub fn submit_content(&mut self) -> String {
-    let value = self.content.clone();
-    self.content.clear();
+    let value = std::mem::take(&mut self.content);
     self.reset_cursor();
     return value;
   }

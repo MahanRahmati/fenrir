@@ -56,24 +56,26 @@ impl Tool for FindFileTool {
 
     let include_pattern = normalize_glob(&include);
 
-    let mut args: Vec<String> = vec![
-      "--type".into(),
-      "f".into(),
-      "--glob".into(),
-      include_pattern,
-      "--base-directory".into(),
-      path.clone(),
-      "--max-results".into(),
-      max_results.to_string(),
+    let max_results_str = max_results.to_string();
+    let exclude_ref = exclude.as_deref();
+
+    let mut args: Vec<&str> = vec![
+      "--type",
+      "f",
+      "--glob",
+      include_pattern.as_str(),
+      "--base-directory",
+      path.as_str(),
+      "--max-results",
+      max_results_str.as_str(),
     ];
 
-    if let Some(exclude) = exclude {
-      args.push("--exclude".into());
+    if let Some(exclude) = exclude_ref {
+      args.push("--exclude");
       args.push(exclude);
     }
 
-    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let output = process::run("fd", &args_refs).await.map_err(|e| {
+    let output = process::run("fd", &args).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "find_file".to_string(),
         reason: e,

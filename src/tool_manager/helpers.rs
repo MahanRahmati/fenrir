@@ -11,12 +11,13 @@ where
   T: std::str::FromStr,
 {
   vlog!("Getting parameter '{param_name}' for tool '{tool_name}'");
-  let value = params.get(param_name).cloned().ok_or(
-    ToolManagerError::MissingParameter {
-      param: param_name.to_string(),
-      name: tool_name.to_string(),
-    },
-  )?;
+  let value =
+    params
+      .get(param_name)
+      .ok_or(ToolManagerError::MissingParameter {
+        param: param_name.to_string(),
+        name: tool_name.to_string(),
+      })?;
   return value
     .parse::<T>()
     .map_err(|_| ToolManagerError::ExecutionFailed {

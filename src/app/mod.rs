@@ -100,12 +100,12 @@ impl App {
         .get_current_session()
         .ok_or(RuntimeError::Session("No active session".into()))?;
 
-      let messages = session.messages.clone();
+      let messages = &session.messages;
       let tools = self.tool_manager.get_tools_specs();
 
       let mut stream = self
         .provider_manager
-        .chat_stream(&messages, &tools)
+        .chat_stream(messages, &tools)
         .await
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
@@ -117,22 +117,22 @@ impl App {
         let delta =
           chunk_result.map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
-        if let Some(ref text) = delta.content {
+        if let Some(text) = delta.content {
+          content_buffer.push_str(&text);
           on_event(AppEvent::Token {
-            text: text.clone(),
+            text,
             reasoning: false,
           });
-          content_buffer.push_str(text);
         }
 
-        if let Some(ref text) = delta.reasoning {
+        if let Some(text) = delta.reasoning {
           if self.config.general.show_reasoning {
             on_event(AppEvent::Token {
               text: text.clone(),
               reasoning: true,
             });
           }
-          reasoning_buffer.push_str(text);
+          reasoning_buffer.push_str(&text);
         }
 
         for tc_delta in delta.tool_calls {
@@ -199,12 +199,12 @@ impl App {
         .get_current_session()
         .ok_or_else(|| RuntimeError::Session("No active session".into()))?;
 
-      let messages = session.messages.clone();
+      let messages = &session.messages;
       let tools = self.tool_manager.get_tools_specs();
 
       let response = self
         .provider_manager
-        .chat(&messages, &tools)
+        .chat(messages, &tools)
         .await
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
 
