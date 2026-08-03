@@ -41,21 +41,20 @@ impl Tool for EditFileTool {
     if start_line < 1 {
       return Err(ToolManagerError::ExecutionFailed {
         name: "edit_file".to_string(),
-        reason: format!("start_line must be >= 1, got {}", start_line),
+        reason: format!("start_line must be >= 1, got {start_line}"),
       });
     }
     if end_line < 1 {
       return Err(ToolManagerError::ExecutionFailed {
         name: "edit_file".to_string(),
-        reason: format!("end_line must be >= 1, got {}", end_line),
+        reason: format!("end_line must be >= 1, got {end_line}"),
       });
     }
     if start_line > end_line {
       return Err(ToolManagerError::ExecutionFailed {
         name: "edit_file".to_string(),
         reason: format!(
-          "start_line ({}) must be <= end_line ({})",
-          start_line, end_line
+          "start_line ({start_line}) must be <= end_line ({end_line})"
         ),
       });
     }
@@ -69,7 +68,7 @@ impl Tool for EditFileTool {
     let content = read_to_string(&path).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "edit_file".to_string(),
-        reason: format!("Cannot read file '{}': {}", path, e),
+        reason: format!("Cannot read file '{path}': {e}"),
       }
     })?;
 
@@ -98,13 +97,10 @@ impl Tool for EditFileTool {
     write_file(&path, &output).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "edit_file".to_string(),
-        reason: format!("Cannot write to file '{}': {}", path, e),
+        reason: format!("Cannot write to file '{path}': {e}"),
       }
     })?;
 
-    return Ok(format!(
-      "Successfully edited {} lines in '{}'",
-      replaced, path
-    ));
+    return Ok(format!("Successfully edited {replaced} lines in '{path}'"));
   }
 }

@@ -28,7 +28,7 @@ impl App {
         .draw(|frame| tui.draw(frame))
         .map_err(|e| RuntimeError::Tui(e.to_string()))?;
 
-      let input = tui.read_input().await;
+      let input = tui.read_input();
       if let Some(session_id) = tui.get_selected_session() {
         self
           .session_manager
@@ -65,7 +65,7 @@ impl App {
           }
           Ok(None) => {}
           Err(e) => {
-            tui.add_message(format!("Error: {}", e));
+            tui.add_message(format!("Error: {e}"));
             continue;
           }
         }
@@ -121,7 +121,7 @@ impl App {
             terminal.draw(|frame| tui.draw(frame)).ok();
           }
           Err(e) => {
-            tui.add_message(format!("Error: {}", e));
+            tui.add_message(format!("Error: {e}"));
             continue;
           }
         }

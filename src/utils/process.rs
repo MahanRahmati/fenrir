@@ -10,11 +10,11 @@ pub enum ExitCode {
 }
 
 impl ExitCode {
-  pub fn is_success(&self) -> bool {
+  pub fn is_success(self) -> bool {
     return matches!(self, ExitCode::Success);
   }
 
-  pub fn is_no_match(&self) -> bool {
+  pub fn is_no_match(self) -> bool {
     return matches!(self, ExitCode::NoMatch);
   }
 }
@@ -34,7 +34,7 @@ pub async fn run(program: &str, args: &[&str]) -> Result<Output, String> {
     .kill_on_drop(true)
     .output()
     .await
-    .map_err(|e| format!("Failed to execute '{}': {}", program, e))?;
+    .map_err(|e| format!("Failed to execute '{program}': {e}"))?;
 
   let stdout = String::from_utf8_lossy(&output.stdout).to_string();
   let stderr = String::from_utf8_lossy(&output.stderr).to_string();

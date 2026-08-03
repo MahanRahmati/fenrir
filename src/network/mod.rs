@@ -90,7 +90,7 @@ impl HttpClient {
   fn url_builder(&self, endpoint: &str) -> String {
     let base = self.base_url.trim_end_matches('/');
     let ep = endpoint.strip_prefix('/').unwrap_or(endpoint);
-    return format!("{}/{}", base, ep);
+    return format!("{base}/{ep}");
   }
 
   fn apply_headers(

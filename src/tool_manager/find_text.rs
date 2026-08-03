@@ -81,16 +81,13 @@ impl Tool for FindTextTool {
     if output.exit_code.is_success() {
       let lines: Vec<&str> = output.stdout.lines().take(max_results).collect();
       if lines.is_empty() {
-        return Ok(format!(
-          "No matches found for '{}' in '{}'.",
-          pattern, path
-        ));
+        return Ok(format!("No matches found for '{pattern}' in '{path}'."));
       }
       return Ok(lines.join("\n"));
     }
 
     if output.exit_code.is_no_match() {
-      return Ok(format!("No matches found for '{}' in '{}'.", pattern, path));
+      return Ok(format!("No matches found for '{pattern}' in '{path}'."));
     }
 
     return Err(ToolManagerError::ExecutionFailed {

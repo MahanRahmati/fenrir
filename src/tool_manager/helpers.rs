@@ -10,11 +10,7 @@ pub fn get_param<T>(
 where
   T: std::str::FromStr,
 {
-  vlog!(
-    "Getting parameter '{}' for tool '{}'",
-    param_name,
-    tool_name
-  );
+  vlog!("Getting parameter '{param_name}' for tool '{tool_name}'");
   let value = params.get(param_name).cloned().ok_or(
     ToolManagerError::MissingParameter {
       param: param_name.to_string(),
@@ -25,10 +21,7 @@ where
     .parse::<T>()
     .map_err(|_| ToolManagerError::ExecutionFailed {
       name: tool_name.to_string(),
-      reason: format!(
-        "Invalid value for parameter '{}': {}",
-        param_name, value
-      ),
+      reason: format!("Invalid value for parameter '{param_name}': {value}"),
     });
 }
 
@@ -40,10 +33,6 @@ pub fn get_optional_param<T>(
 where
   T: std::str::FromStr,
 {
-  vlog!(
-    "Getting optional parameter '{}' for tool '{}'",
-    name,
-    tool_name
-  );
+  vlog!("Getting optional parameter '{name}' for tool '{tool_name}'",);
   return params.get(name).and_then(|v| v.parse::<T>().ok());
 }

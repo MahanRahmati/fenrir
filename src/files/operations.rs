@@ -41,19 +41,19 @@ pub async fn write_file(file_path: &str, content: &str) -> FileResult<()> {
 pub async fn read_dir(dir_path: &str) -> FileResult<Vec<(String, bool)>> {
   let mut entries = tokio::fs::read_dir(dir_path)
     .await
-    .map_err(|e| FileError::DirectoryRead(format!("{}: {}", dir_path, e)))?;
+    .map_err(|e| FileError::DirectoryRead(format!("{dir_path}: {e}")))?;
 
   let mut results: Vec<(String, bool)> = Vec::new();
 
   while let Some(entry) = entries
     .next_entry()
     .await
-    .map_err(|e| FileError::DirectoryRead(format!("{}: {}", dir_path, e)))?
+    .map_err(|e| FileError::DirectoryRead(format!("{dir_path}: {e}")))?
   {
     let file_type = entry
       .file_type()
       .await
-      .map_err(|e| FileError::DirectoryRead(format!("{}: {}", dir_path, e)))?;
+      .map_err(|e| FileError::DirectoryRead(format!("{dir_path}: {e}")))?;
     let name = entry.file_name().to_string_lossy().to_string();
     results.push((name, file_type.is_dir()));
   }

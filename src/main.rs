@@ -32,7 +32,7 @@ async fn main() {
   let config = match Config::load().await {
     Ok(config) => config,
     Err(e) => {
-      eprintln!("Configuration Error: {}", e);
+      eprintln!("Configuration Error: {e}");
       std::process::exit(1);
     }
   };
@@ -40,7 +40,7 @@ async fn main() {
   let db = match DB::load().await {
     Ok(db) => db,
     Err(e) => {
-      eprintln!("Failed to load database: {}", e);
+      eprintln!("Failed to load database: {e}");
       std::process::exit(1);
     }
   };
@@ -55,7 +55,7 @@ async fn main() {
           return;
         }
         Err(e) => {
-          eprintln!("Failed to reset configuration: {}", e);
+          eprintln!("Failed to reset configuration: {e}");
           std::process::exit(1);
         }
       }
@@ -65,9 +65,9 @@ async fn main() {
   };
 
   return match result {
-    Ok(output) => println!("{}", output),
+    Ok(output) => println!("{output}"),
     Err(e) => {
-      eprintln!("{}", e);
+      eprintln!("{e}");
       std::process::exit(1);
     }
   };

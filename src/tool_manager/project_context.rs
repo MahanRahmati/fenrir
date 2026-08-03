@@ -52,14 +52,14 @@ async fn directory_section() -> String {
     Ok(entries) => {
       for (name, is_dir) in &entries {
         if *is_dir {
-          listing.push_str(&format!("{}/\n", name));
+          listing.push_str(&format!("{name}/\n"));
         } else {
-          listing.push_str(&format!("{}\n", name));
+          listing.push_str(&format!("{name}\n"));
         }
       }
     }
     Err(e) => {
-      listing.push_str(&format!("(error: {})\n", e));
+      listing.push_str(&format!("(error: {e})\n"));
     }
   }
   return listing;
@@ -79,7 +79,7 @@ async fn git_section() -> Option<String> {
   if s.is_empty() {
     return None;
   }
-  return Some(format!("## Git Branch\n{}", s));
+  return Some(format!("## Git Branch\n{s}"));
 }
 
 async fn agents_section() -> Option<String> {

@@ -104,7 +104,7 @@ impl SessionManager {
     self
       .add_message_to_current_session(|session| {
         session
-          .add_tool_result(tool_call_id, &format!("Tool result: {}", result));
+          .add_tool_result(tool_call_id, &format!("Tool result: {result}"));
       })
       .await?;
     return Ok(());

@@ -46,7 +46,7 @@ impl Tool for RustTool {
       let output = process::run("cargo", args).await.map_err(|e| {
         ToolManagerError::ExecutionFailed {
           name: "rust".to_string(),
-          reason: format!("Failed to run cargo {}: {}", name, e),
+          reason: format!("Failed to run cargo {name}: {e}"),
         }
       })?;
 
@@ -56,7 +56,7 @@ impl Tool for RustTool {
         let details = if !stderr.is_empty() { stderr } else { stdout };
         return Err(ToolManagerError::ExecutionFailed {
           name: "rust".to_string(),
-          reason: format!("cargo {} failed:\n{}", name, details),
+          reason: format!("cargo {name} failed:\n{details}"),
         });
       }
     }

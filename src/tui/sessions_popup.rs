@@ -48,14 +48,13 @@ impl SessionsPopup {
         };
         let id_str = s.id.to_string();
         let timestamp_str = format_timestamp(s.last_interaction);
-        let label = format!("{}{}{}", prefix, current_session, id_str);
+        let label = format!("{prefix}{current_session}{id_str}");
         let label_width = label.len();
         let available_width = popup_width.saturating_sub(2);
         let spacer_width =
           available_width.saturating_sub(label_width + timestamp_str.len());
         let spacer = " ".repeat(spacer_width);
-        let content =
-          Line::from(format!("{}{}{}", label, spacer, timestamp_str));
+        let content = Line::from(format!("{label}{spacer}{timestamp_str}"));
         ListItem::new(content)
       })
       .collect();

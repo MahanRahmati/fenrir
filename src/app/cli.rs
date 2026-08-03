@@ -34,7 +34,7 @@ impl App {
         Ok(Some(cmd)) => println!("Unknown command: {}", cmd.name()),
         Ok(None) => {}
         Err(e) => {
-          println!("Error: {}", e);
+          println!("Error: {e}");
           continue;
         }
       }
@@ -59,7 +59,7 @@ impl App {
                 reasoning_open = true;
               }
               reasoning_ends_with_newline = text.ends_with('\n');
-              print!("{}", text);
+              print!("{text}");
             } else {
               if reasoning_open {
                 reasoning_open = false;
@@ -67,12 +67,12 @@ impl App {
                   println!();
                 }
               }
-              print!("{}", text);
+              print!("{text}");
             }
             stdout.flush().ok();
             return true;
           }
-          AppEvent::Confirm(msg) => confirm_with(&format!("{} (y/N): ", msg)),
+          AppEvent::Confirm(msg) => confirm_with(&format!("{msg} (y/N): ")),
           AppEvent::ToolCall { name, arguments } => {
             if reasoning_open {
               reasoning_open = false;
@@ -80,15 +80,15 @@ impl App {
                 println!();
               }
             }
-            println!("[tool] {}({})", name, arguments);
+            println!("[tool] {name}({arguments})");
             stdout.flush().ok();
             return true;
           }
           AppEvent::ToolResult { result, error } => {
             if error {
-              println!("[error] {}", result);
+              println!("[error] {result}");
             } else {
-              println!("[result] {}", result);
+              println!("[result] {result}");
             }
             stdout.flush().ok();
             return true;

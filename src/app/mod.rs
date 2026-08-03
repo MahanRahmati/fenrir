@@ -319,7 +319,7 @@ impl App {
         }
         Err(e) => {
           vlog!("Tool '{}' error: {}", tool_call.name, e);
-          (format!("Tool error: {}", e), true)
+          (format!("Tool error: {e}"), true)
         }
       };
 

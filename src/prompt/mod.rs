@@ -25,7 +25,7 @@ impl Prompt {
         .map(|t| format!("- {}: {}", t.name, t.description))
         .collect::<Vec<String>>()
         .join("\n");
-      parts.push(format!("Available tools:\n{}", tools_list));
+      parts.push(format!("Available tools:\n{tools_list}"));
     }
 
     let mut guidelines: Vec<&str> = Vec::new();
@@ -42,18 +42,17 @@ impl Prompt {
 
     let guidelines_list = guidelines
       .iter()
-      .map(|g| format!("- {}", g))
+      .map(|g| format!("- {g}"))
       .collect::<Vec<String>>()
       .join("\n");
-    parts.push(format!("Guidelines:\n{}", guidelines_list));
+    parts.push(format!("Guidelines:\n{guidelines_list}"));
 
     let cwd = std::env::current_dir()
       .map(|d| d.display().to_string())
       .unwrap_or_else(|_| "unknown".to_string());
     let date_time = get_current_datetime();
     parts.push(format!(
-      "Environment:\nCurrent working directory: {}\n{}",
-      cwd, date_time
+      "Environment:\nCurrent working directory: {cwd}\n{date_time}"
     ));
 
     let system_prompt = parts.join("\n\n");

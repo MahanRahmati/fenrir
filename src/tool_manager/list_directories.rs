@@ -69,7 +69,7 @@ impl Tool for ListDirectoriesTool {
       .into_iter()
       .map(
         |(name, is_dir)| {
-          if is_dir { format!("{}/", name) } else { name }
+          if is_dir { format!("{name}/") } else { name }
         },
       )
       .collect();

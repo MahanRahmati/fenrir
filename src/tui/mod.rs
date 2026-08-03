@@ -76,11 +76,11 @@ impl Tui {
     self.confirm_popup.draw(frame, messages_area);
   }
 
-  pub async fn read_input(&mut self) -> Option<String> {
+  pub fn read_input(&mut self) -> Option<String> {
     let event = match event::read() {
       Ok(e) => e,
       Err(e) => {
-        eprintln!("TUI event error: {}", e);
+        eprintln!("TUI event error: {e}");
         return None;
       }
     };

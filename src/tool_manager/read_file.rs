@@ -38,7 +38,7 @@ impl Tool for ReadFileTool {
     let content = read_to_string(&path).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "read_file".to_string(),
-        reason: format!("Cannot read file '{}': {}", path, e),
+        reason: format!("Cannot read file '{path}': {e}"),
       }
     })?;
 

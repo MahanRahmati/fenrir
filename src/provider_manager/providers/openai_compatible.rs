@@ -165,8 +165,7 @@ impl OpenAICompatibleProvider {
     headers.insert("Content-Type".to_string(), "application/json".to_string());
     let api_key = self.api_key.clone();
     if let Some(api_key) = api_key {
-      headers
-        .insert("Authorization".to_string(), format!("Bearer {}", api_key));
+      headers.insert("Authorization".to_string(), format!("Bearer {api_key}"));
     }
     return Some(headers);
   }

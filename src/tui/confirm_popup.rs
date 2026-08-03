@@ -34,17 +34,17 @@ impl ConfirmPopup {
     let popup_area =
       Rect::new(messages_area.x, popup_y, messages_area.width, popup_height);
 
-    let confirm_btn = if !self.selected {
-      "> Confirm"
-    } else {
+    let confirm_btn = if self.selected {
       "  Confirm"
+    } else {
+      "> Confirm"
     };
     let cancel_btn = if self.selected {
       "> Cancel"
     } else {
       "  Cancel"
     };
-    let buttons = format!("    {}    {}", confirm_btn, cancel_btn);
+    let buttons = format!("    {confirm_btn}    {cancel_btn}");
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(""));

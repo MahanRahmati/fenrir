@@ -12,13 +12,13 @@ pub fn get_current_datetime() -> String {
     Weekday::Sat => "Saturday",
     Weekday::Sun => "Sunday",
   };
-  return format!("Current date: {} ({})\n", datetime, day);
+  return format!("Current date: {datetime} ({day})\n");
 }
 
 pub fn format_timestamp(timestamp: i64) -> String {
   let dt = Local.timestamp_opt(timestamp, 0);
   return match dt {
     chrono::LocalResult::Single(dt) => dt.format("%Y-%m-%d %H:%M").to_string(),
-    _ => "".to_string(),
+    _ => String::new(),
   };
 }

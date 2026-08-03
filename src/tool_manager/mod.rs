@@ -154,7 +154,7 @@ impl ToolManager {
       Some(p) => p.as_str(),
       None => return true,
     };
-    let msg = format!("Tool \"{}\" wants to access: {}", name, path);
+    let msg = format!("Tool \"{name}\" wants to access: {path}");
     return confirm(&msg);
   }
 }

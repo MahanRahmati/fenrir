@@ -10,10 +10,10 @@ const DEFAULT_MAX_RESULTS: usize = 50;
 
 fn normalize_glob(pattern: &str) -> String {
   if !pattern.contains('/') {
-    return format!("**/{}", pattern);
+    return format!("**/{pattern}");
   }
   if !pattern.starts_with("**/") && !pattern.starts_with('/') {
-    return format!("**/{}", pattern);
+    return format!("**/{pattern}");
   }
   return pattern.to_string();
 }
@@ -83,19 +83,13 @@ impl Tool for FindFileTool {
     if output.exit_code.is_success() {
       let results: Vec<&str> = output.stdout.lines().collect();
       if results.is_empty() {
-        return Ok(format!(
-          "No files found matching '{}' in '{}'.",
-          include, path
-        ));
+        return Ok(format!("No files found matching '{include}' in '{path}'."));
       }
       return Ok(results.join("\n"));
     }
 
     if output.exit_code.is_no_match() {
-      return Ok(format!(
-        "No files found matching '{}' in '{}'.",
-        include, path
-      ));
+      return Ok(format!("No files found matching '{include}' in '{path}'."));
     }
 
     return Err(ToolManagerError::ExecutionFailed {
