@@ -66,14 +66,12 @@ impl Tool for ListDirectoriesTool {
     }
 
     let results: Vec<String> = entries
-      .iter()
-      .map(|(name, is_dir)| {
-        if *is_dir {
-          format!("{}/", name)
-        } else {
-          name.clone()
-        }
-      })
+      .into_iter()
+      .map(
+        |(name, is_dir)| {
+          if is_dir { format!("{}/", name) } else { name }
+        },
+      )
       .collect();
 
     return Ok(results.join("\n"));

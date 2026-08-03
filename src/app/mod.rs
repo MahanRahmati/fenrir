@@ -36,7 +36,7 @@ pub struct App {
 impl App {
   pub fn new(config: Config, db: DB) -> Self {
     let session_manager = SessionManager::new(db);
-    let tool_manager = ToolManager::new(config.clone());
+    let tool_manager = ToolManager::new(&config);
     let provider_manager = ProviderManager::new(config.clone());
     let shutdown = Shutdown::new();
     return App {
@@ -61,7 +61,7 @@ impl App {
     vlog!("Created session with ID: {}", session_id);
 
     let prompt =
-      Prompt::new(self.config.clone(), &self.tool_manager.get_tools_specs());
+      Prompt::new(&self.config, &self.tool_manager.get_tools_specs());
     vlog!("Prompt: {}", prompt.get_system_prompt());
     self
       .session_manager

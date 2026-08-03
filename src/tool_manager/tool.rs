@@ -40,7 +40,7 @@ pub fn parse_tool_params(arguments: &str) -> ToolParams {
   if let serde_json::Value::Object(map) = value {
     for (k, v) in map {
       let s = match v {
-        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::String(s) => s,
         _ => v.to_string(),
       };
       params.insert(k, s);

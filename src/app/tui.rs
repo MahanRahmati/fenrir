@@ -15,7 +15,7 @@ use crate::vlog;
 impl App {
   pub async fn run_tui(&mut self) -> RuntimeResult<String> {
     let prompt =
-      Prompt::new(self.config.clone(), &self.tool_manager.get_tools_specs());
+      Prompt::new(&self.config, &self.tool_manager.get_tools_specs());
     vlog!("Prompt: {}", prompt.get_system_prompt());
 
     let mut terminal = ratatui::init();

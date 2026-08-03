@@ -38,7 +38,7 @@ pub struct ToolManager {
 }
 
 impl ToolManager {
-  pub fn new(config: Config) -> Self {
+  pub fn new(config: &Config) -> Self {
     let tool_timeout = Duration::from_secs(config.general.tool_timeout_seconds);
     let restrict_write_tools_to_cwd =
       config.general.restrict_write_tools_to_cwd;

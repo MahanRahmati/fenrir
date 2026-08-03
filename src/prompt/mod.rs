@@ -15,7 +15,7 @@ pub struct Prompt {
 }
 
 impl Prompt {
-  pub fn new(config: Config, tool_specs: &[ToolSpec]) -> Self {
+  pub fn new(config: &Config, tool_specs: &[ToolSpec]) -> Self {
     let mut parts: Vec<String> = Vec::new();
     parts.push(IDENTITY.to_string());
 
