@@ -320,4 +320,8 @@ impl SessionManager {
       .current_session
       .and_then(|id| self.get_session_by_id(id));
   }
+
+  pub fn clear_current_session(&mut self) {
+    self.current_session = None;
+  }
 }

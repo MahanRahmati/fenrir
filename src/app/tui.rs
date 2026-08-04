@@ -59,8 +59,9 @@ impl App {
             tui.open_sessions_popup(sessions, current_session);
             continue;
           }
-          Ok(Some(cmd)) => {
-            tui.add_message(format!("Unknown command: {}", cmd.name()));
+          Ok(Some(SlashCommand::New)) => {
+            self.session_manager.clear_current_session();
+            tui.update_messages(None);
             continue;
           }
           Ok(None) => {}

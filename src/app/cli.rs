@@ -31,6 +31,11 @@ impl App {
           }
           continue;
         }
+        Ok(Some(SlashCommand::New)) => {
+          self.session_manager.clear_current_session();
+          println!("Started a new session.");
+          continue;
+        }
         Ok(Some(cmd)) => println!("Unknown command: {}", cmd.name()),
         Ok(None) => {}
         Err(e) => {
