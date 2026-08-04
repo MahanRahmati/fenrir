@@ -1,6 +1,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Widget, Wrap};
 
 const TOP_PADDING: u16 = 1;
@@ -153,24 +154,39 @@ impl MessageItem {
       return (item, height);
     }
 
-    let mut block = Block::default()
+    let block = Block::default()
       .borders(Borders::ALL)
       .border_type(BorderType::Rounded)
       .border_style(Style::default().fg(Color::Blue));
+    let mut content: Vec<Line<'static>> = Vec::new();
     if let Some(name) = &self.tool_name {
-      block = block.title(name.clone());
-    }
-    let mut content_parts = Vec::new();
-    if let Some(arguments) = &self.tool_arguments {
-      let trimmed = arguments.trim();
-      if !trimmed.is_empty() && trimmed != "{}" {
-        content_parts.push(arguments.clone());
+      let trimmed = name.trim();
+      let mut title = String::new();
+      if !trimmed.is_empty() {
+        title.push(' ');
+        title.push_str(trimmed);
+      }
+      if let Some(arguments) = &self.tool_arguments {
+        let args = arguments.trim();
+        if !args.is_empty() && args != "{}" {
+          if !title.is_empty() {
+            title.push(' ');
+          }
+          title.push_str(args);
+        }
+      }
+      if !title.is_empty() {
+        let separator = "─".repeat(width.saturating_sub(2) as usize);
+        content.push(Line::from(title));
+        content.push(Line::from(Span::styled(
+          separator,
+          Style::default().fg(Color::Blue),
+        )));
       }
     }
     if let Some((result, _)) = &self.tool_result {
-      content_parts.push(result.clone());
+      content.extend(result.lines().map(|l| Line::from(l.to_string())));
     }
-    let content = content_parts.join("\n\n");
     let mut item = Paragraph::new(content)
       .wrap(Wrap { trim: true })
       .block(block);
