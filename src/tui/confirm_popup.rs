@@ -1,8 +1,9 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::Rect;
-use ratatui::text::Line;
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
 
 use crate::tui::popup::Popup;
 
@@ -28,36 +29,35 @@ impl ConfirmPopup {
       return;
     }
 
-    let message_lines: Vec<&str> = self.message.lines().collect();
-    let popup_height = 5u16 + message_lines.len() as u16;
+    let popup_height = 5u16;
     let popup_y = messages_area.y + messages_area.height - popup_height;
     let popup_area =
       Rect::new(messages_area.x, popup_y, messages_area.width, popup_height);
 
-    let confirm_btn = if self.selected {
-      "  Confirm"
-    } else {
-      "> Confirm"
-    };
-    let cancel_btn = if self.selected {
-      "> Cancel"
-    } else {
-      "  Cancel"
-    };
-    let buttons = format!("    {confirm_btn}    {cancel_btn}");
+    let confirm_btn = Span::styled(
+      " Confirm ",
+      if self.selected {
+        Style::default()
+      } else {
+        Style::default().reversed()
+      },
+    );
+    let cancel_btn = Span::styled(
+      " Cancel ",
+      if self.selected {
+        Style::default().reversed()
+      } else {
+        Style::default()
+      },
+    );
+    let buttons = Line::from(vec![confirm_btn, Span::raw("    "), cancel_btn]);
 
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(""));
-    for line in &message_lines {
-      lines.push(Line::from(*line));
+    let paragraph = Paragraph::new(buttons);
+    if let Some(content_area) =
+      self.popup.draw_header(frame, &self.message, popup_area)
+    {
+      frame.render_widget(paragraph, content_area);
     }
-    lines.push(Line::from(""));
-    lines.push(Line::from(buttons));
-    lines.push(Line::from(""));
-
-    let paragraph =
-      Paragraph::new(lines).block(Block::bordered().title("Confirm"));
-    self.popup.draw(frame, paragraph, popup_area);
   }
 
   pub fn handle_input(&mut self, key: KeyCode) -> bool {

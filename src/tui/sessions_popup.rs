@@ -1,8 +1,11 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::Constraint;
+use ratatui::style::Style;
 use ratatui::text::Line;
-use ratatui::widgets::{Block, BorderType, List, ListItem, ListState};
+use ratatui::widgets::{
+  List, ListItem, ListState, Scrollbar, ScrollbarOrientation, ScrollbarState,
+};
 
 use crate::session_manager::session::Session;
 use crate::tui::popup::Popup;
@@ -38,9 +41,7 @@ impl SessionsPopup {
     let sessions: Vec<ListItem> = self
       .sessions
       .iter()
-      .enumerate()
-      .map(|(i, s)| {
-        let prefix = if i == self.session_index { ">" } else { " " };
+      .map(|s| {
         let current_session = match &self.current_session {
           Some(session) => match session.id == s.id {
             true => "*",
@@ -50,9 +51,9 @@ impl SessionsPopup {
         };
         let id_str = s.id.to_string();
         let timestamp_str = format_timestamp(s.last_interaction);
-        let label = format!("{prefix}{current_session}{id_str}");
+        let label = format!("{current_session}{id_str}");
         let label_width = label.len();
-        let available_width = popup_width.saturating_sub(2);
+        let available_width = popup_width.saturating_sub(4);
         let spacer_width =
           available_width.saturating_sub(label_width + timestamp_str.len());
         let spacer = " ".repeat(spacer_width);
@@ -60,11 +61,24 @@ impl SessionsPopup {
         ListItem::new(content)
       })
       .collect();
-    let sessions = List::new(sessions)
-      .block(Block::bordered().border_type(BorderType::Rounded));
-    self
-      .popup
-      .draw_stateful(frame, sessions, &mut self.list_state, popup_area);
+
+    if let Some(list_area) =
+      self.popup.draw_header(frame, "Sessions", popup_area)
+    {
+      let list =
+        List::new(sessions).highlight_style(Style::default().reversed());
+      frame.render_stateful_widget(list, list_area, &mut self.list_state);
+
+      let mut scrollbar_state =
+        ScrollbarState::new(self.sessions.len()).position(self.session_index);
+      frame.render_stateful_widget(
+        Scrollbar::new(ScrollbarOrientation::VerticalRight)
+          .begin_symbol(None)
+          .end_symbol(None),
+        list_area,
+        &mut scrollbar_state,
+      );
+    }
   }
 
   pub fn handle_input(&mut self, key: KeyCode) -> bool {
