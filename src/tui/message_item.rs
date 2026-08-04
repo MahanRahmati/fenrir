@@ -1,7 +1,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders, Paragraph, Widget, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Widget, Wrap};
 
 const TOP_PADDING: u16 = 1;
 const HORIZONTAL_PADDING: u16 = 2;
@@ -120,6 +120,7 @@ impl MessageItem {
   fn user_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
     let block = Block::default()
       .borders(Borders::ALL)
+      .border_type(BorderType::Rounded)
       .border_style(Style::default().fg(Color::Yellow));
     let item = Self::wrapped_paragraph(self.text.clone()).block(block);
     let height = Self::item_height(&item, width);
@@ -154,6 +155,7 @@ impl MessageItem {
 
     let mut block = Block::default()
       .borders(Borders::ALL)
+      .border_type(BorderType::Rounded)
       .border_style(Style::default().fg(Color::Blue));
     if let Some(name) = &self.tool_name {
       block = block.title(name.clone());

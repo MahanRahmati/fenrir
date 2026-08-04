@@ -11,7 +11,7 @@ use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::style::Style;
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::widgets::{Block, BorderType, Paragraph};
 
 use crate::session_manager::session::Session;
 use crate::tui::confirm_popup::ConfirmPopup;
@@ -59,7 +59,7 @@ impl Tui {
 
     let input = Paragraph::new(self.input.content.as_str())
       .style(Style::default())
-      .block(Block::bordered());
+      .block(Block::bordered().border_type(BorderType::Rounded));
     frame.render_widget(input, input_area);
 
     let statusline = StatusLine::new();
