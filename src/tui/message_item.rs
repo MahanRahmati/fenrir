@@ -4,6 +4,8 @@ use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph, Widget, Wrap};
 
 const TOP_PADDING: u16 = 1;
+const HORIZONTAL_PADDING: u16 = 2;
+const TEXT_EXTRA_PADDING: u16 = 1;
 
 #[derive(PartialEq)]
 pub enum Role {
@@ -14,19 +16,31 @@ pub enum Role {
   ToolResult,
 }
 
+impl Role {
+  fn horizontal_padding(&self) -> u16 {
+    return match self {
+      Role::User | Role::ToolCall | Role::ToolResult => HORIZONTAL_PADDING,
+      Role::Assistant | Role::Reasoning => {
+        HORIZONTAL_PADDING + TEXT_EXTRA_PADDING
+      }
+    };
+  }
+}
+
 pub struct ListMessage {
   paragraph: Paragraph<'static>,
+  horizontal_padding: u16,
 }
 
 impl Widget for ListMessage {
   fn render(self, area: Rect, buf: &mut Buffer) {
     let inner = Rect::new(
-      area.x,
-      area.y + TOP_PADDING,
-      area.width,
+      area.x.saturating_add(self.horizontal_padding),
+      area.y.saturating_add(TOP_PADDING),
+      area.width.saturating_sub(self.horizontal_padding * 2),
       area.height.saturating_sub(TOP_PADDING),
     );
-    if inner.height > 0 {
+    if inner.width > 0 && inner.height > 0 {
       self.paragraph.render(inner, buf);
     }
   }
@@ -78,40 +92,54 @@ impl MessageItem {
   }
 
   pub fn to_list_item(&self, width: u16) -> (ListMessage, u16) {
-    return match self.role {
+    let horizontal_padding = self.role.horizontal_padding();
+    let width = width.saturating_sub(horizontal_padding * 2);
+    let (paragraph, height) = match self.role {
       Role::User => self.user_list_item(width),
       Role::Assistant => self.llm_list_item(width),
       Role::Reasoning => self.reasoning_list_item(width),
       Role::ToolCall | Role::ToolResult => self.tool_list_item(width),
     };
+    return (
+      ListMessage {
+        paragraph,
+        horizontal_padding,
+      },
+      height,
+    );
   }
 
-  fn user_list_item(&self, width: u16) -> (ListMessage, u16) {
+  fn wrapped_paragraph(text: String) -> Paragraph<'static> {
+    return Paragraph::new(text).wrap(Wrap { trim: true });
+  }
+
+  fn item_height(item: &Paragraph, width: u16) -> u16 {
+    return item.line_count(width).max(1) as u16 + TOP_PADDING;
+  }
+
+  fn user_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
     let block = Block::default()
       .borders(Borders::ALL)
       .border_style(Style::default().fg(Color::Yellow));
-    let item = Paragraph::new(self.text.clone())
-      .wrap(Wrap { trim: true })
-      .block(block);
-    let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
-    return (ListMessage { paragraph: item }, height);
+    let item = Self::wrapped_paragraph(self.text.clone()).block(block);
+    let height = Self::item_height(&item, width);
+    return (item, height);
   }
 
-  fn llm_list_item(&self, width: u16) -> (ListMessage, u16) {
-    let item = Paragraph::new(self.text.clone()).wrap(Wrap { trim: true });
-    let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
-    return (ListMessage { paragraph: item }, height);
+  fn llm_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
+    let item = Self::wrapped_paragraph(self.text.clone());
+    let height = Self::item_height(&item, width);
+    return (item, height);
   }
 
-  fn reasoning_list_item(&self, width: u16) -> (ListMessage, u16) {
-    let item = Paragraph::new(self.text.clone())
-      .wrap(Wrap { trim: true })
-      .style(Style::default().dim());
-    let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
-    return (ListMessage { paragraph: item }, height);
+  fn reasoning_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
+    let item =
+      Self::wrapped_paragraph(self.text.clone()).style(Style::default().dim());
+    let height = Self::item_height(&item, width);
+    return (item, height);
   }
 
-  fn tool_list_item(&self, width: u16) -> (ListMessage, u16) {
+  fn tool_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
     if self.role == Role::ToolResult {
       let mut item =
         Paragraph::new(self.text.clone()).wrap(Wrap { trim: true });
@@ -121,7 +149,7 @@ impl MessageItem {
         Style::default().dim()
       });
       let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
-      return (ListMessage { paragraph: item }, height);
+      return (item, height);
     }
 
     let mut block = Block::default()
@@ -152,7 +180,7 @@ impl MessageItem {
       });
     }
     let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
-    return (ListMessage { paragraph: item }, height);
+    return (item, height);
   }
 
   pub fn is_reasoning(&self) -> bool {
