@@ -2,7 +2,7 @@ use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::Constraint;
 use ratatui::text::Line;
-use ratatui::widgets::{Block, List, ListItem};
+use ratatui::widgets::{Block, BorderType, List, ListItem, ListState};
 
 use crate::session_manager::session::Session;
 use crate::tui::popup::Popup;
@@ -14,6 +14,7 @@ pub struct SessionsPopup {
   sessions: Vec<Session>,
   current_session: Option<Session>,
   selected_session_id: Option<i64>,
+  list_state: ListState,
 }
 
 impl SessionsPopup {
@@ -24,10 +25,11 @@ impl SessionsPopup {
       sessions: Vec::new(),
       current_session: None,
       selected_session_id: None,
+      list_state: ListState::default(),
     };
   }
 
-  pub fn draw(&self, frame: &mut Frame) {
+  pub fn draw(&mut self, frame: &mut Frame) {
     let area = frame.area();
     let popup_area =
       area.centered(Constraint::Percentage(40), Constraint::Percentage(20));
@@ -58,8 +60,11 @@ impl SessionsPopup {
         ListItem::new(content)
       })
       .collect();
-    let sessions = List::new(sessions).block(Block::bordered());
-    self.popup.draw(frame, sessions, popup_area);
+    let sessions = List::new(sessions)
+      .block(Block::bordered().border_type(BorderType::Rounded));
+    self
+      .popup
+      .draw_stateful(frame, sessions, &mut self.list_state, popup_area);
   }
 
   pub fn handle_input(&mut self, key: KeyCode) -> bool {
@@ -71,6 +76,7 @@ impl SessionsPopup {
       KeyCode::Up => {
         if self.session_index > 0 {
           self.session_index -= 1;
+          self.list_state.select(Some(self.session_index));
         }
         return true;
       }
@@ -80,6 +86,7 @@ impl SessionsPopup {
         }
         if self.session_index < self.sessions.len() - 1 {
           self.session_index += 1;
+          self.list_state.select(Some(self.session_index));
         }
         return true;
       }
@@ -106,6 +113,8 @@ impl SessionsPopup {
   ) {
     self.sessions = sessions;
     self.current_session = current_session.cloned();
+    self.session_index = 0;
+    self.list_state.select(Some(0));
     self.popup.open_popup();
   }
 

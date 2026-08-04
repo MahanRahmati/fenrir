@@ -1,7 +1,7 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::widgets::{Block, BorderType, Paragraph};
 
 use crate::slash_commands::SlashCommand;
 use crate::tui::popup::Popup;
@@ -29,7 +29,8 @@ impl HelpPopup {
         Line::from(format!("  {} - {}", cmd.name(), cmd.description()))
       }))
       .collect();
-    let paragraph = Paragraph::new(lines).block(Block::bordered());
+    let paragraph = Paragraph::new(lines)
+      .block(Block::bordered().border_type(BorderType::Rounded));
     self.popup.draw(frame, paragraph, popup_area);
   }
 

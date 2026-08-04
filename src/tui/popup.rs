@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::widgets::{Clear, Widget};
+use ratatui::widgets::{Clear, StatefulWidget, Widget};
 
 pub struct Popup {
   show_popup: bool,
@@ -20,6 +20,19 @@ impl Popup {
     if self.show_popup {
       frame.render_widget(Clear, popup_area);
       frame.render_widget(widget, popup_area);
+    }
+  }
+
+  pub fn draw_stateful<W: StatefulWidget>(
+    &self,
+    frame: &mut Frame,
+    widget: W,
+    state: &mut W::State,
+    popup_area: Rect,
+  ) {
+    if self.show_popup {
+      frame.render_widget(Clear, popup_area);
+      frame.render_stateful_widget(widget, popup_area, state);
     }
   }
 
