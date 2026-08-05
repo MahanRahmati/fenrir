@@ -9,7 +9,7 @@ mod statusline;
 
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode};
-use ratatui::layout::{Constraint, Layout, Position};
+use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, BorderType, Paragraph};
 
@@ -20,6 +20,9 @@ use crate::tui::input::Input;
 use crate::tui::messages_list::MessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
+
+const TOP_PADDING: u16 = 1;
+const HORIZONTAL_PADDING: u16 = 2;
 
 pub struct Tui {
   input: Input,
@@ -47,15 +50,13 @@ impl Tui {
   }
 
   pub fn draw(&mut self, frame: &mut Frame) {
-    let layout = Layout::vertical([
-      Constraint::Min(1),
-      Constraint::Length(3),
-      Constraint::Length(1),
-    ]);
-    let [messages_area, input_area, status_bar_area] =
-      frame.area().layout(&layout);
+    let has_messages = !self.messages_list.is_empty();
+    let (messages_area, input_area, status_bar_area) =
+      self.compute_areas(frame, has_messages);
 
-    self.messages_list.draw(frame, messages_area);
+    if has_messages {
+      self.messages_list.draw(frame, messages_area);
+    }
 
     let input = Paragraph::new(self.input.content.as_str())
       .style(Style::default())
@@ -66,14 +67,63 @@ impl Tui {
     frame
       .render_widget(statusline.draw(status_bar_area.width), status_bar_area);
 
-    frame.set_cursor_position(Position::new(
-      input_area.x + self.input.character_index as u16 + 1,
-      input_area.y + 1,
-    ));
+    if !self.any_popup_open() {
+      frame.set_cursor_position(Position::new(
+        input_area.x + self.input.character_index as u16 + 1,
+        input_area.y + 1,
+      ));
+    }
 
     self.sessions_popup.draw(frame);
-    self.help_popup.draw(frame, messages_area);
+    self.help_popup.draw(frame);
     self.confirm_popup.draw(frame, messages_area);
+  }
+
+  fn compute_areas(
+    &self,
+    frame: &Frame,
+    has_messages: bool,
+  ) -> (Rect, Rect, Rect) {
+    let (messages_area, input_area, status_bar_area) = if has_messages {
+      let [messages_area, input_area, status_bar_area] =
+        frame.area().layout(&Layout::vertical([
+          Constraint::Min(1),
+          Constraint::Length(3 + TOP_PADDING * 2),
+          Constraint::Length(1),
+        ]));
+      (messages_area, input_area, status_bar_area)
+    } else {
+      let [messages_area, input_area, _spacer, status_bar_area] =
+        frame.area().layout(&Layout::vertical([
+          Constraint::Min(1),
+          Constraint::Length(3),
+          Constraint::Min(1),
+          Constraint::Length(1),
+        ]));
+      (messages_area, input_area, status_bar_area)
+    };
+
+    let input_area = if has_messages {
+      input_area.inner(Margin {
+        horizontal: HORIZONTAL_PADDING,
+        vertical: TOP_PADDING,
+      })
+    } else {
+      let width = popup::constrained_width(input_area.width).saturating_sub(1);
+      Rect::new(
+        input_area.x + input_area.width.saturating_sub(width) / 2,
+        input_area.y,
+        width,
+        input_area.height,
+      )
+    };
+    return (messages_area, input_area, status_bar_area);
+  }
+
+  fn any_popup_open(&self) -> bool {
+    return self.sessions_popup.is_open()
+      || self.help_popup.is_open()
+      || self.confirm_popup.is_open();
   }
 
   pub fn read_input(&mut self) -> Option<String> {

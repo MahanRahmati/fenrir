@@ -1,11 +1,20 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
-use ratatui::layout::Rect;
+use ratatui::layout::{Margin, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
+use crate::tui::HORIZONTAL_PADDING;
 use crate::tui::popup::Popup;
+
+fn button_style(active: bool) -> Style {
+  return if active {
+    Style::default().reversed()
+  } else {
+    Style::default()
+  };
+}
 
 pub struct ConfirmPopup {
   popup: Popup,
@@ -30,26 +39,16 @@ impl ConfirmPopup {
     }
 
     let popup_height = 5u16;
-    let popup_y = messages_area.y + messages_area.height - popup_height;
+    let popup_y = messages_area.y + messages_area.height - popup_height + 1;
     let popup_area =
-      Rect::new(messages_area.x, popup_y, messages_area.width, popup_height);
+      Rect::new(messages_area.x, popup_y, messages_area.width, popup_height)
+        .inner(Margin {
+          horizontal: HORIZONTAL_PADDING,
+          vertical: 0,
+        });
 
-    let confirm_btn = Span::styled(
-      " Confirm ",
-      if self.selected {
-        Style::default()
-      } else {
-        Style::default().reversed()
-      },
-    );
-    let cancel_btn = Span::styled(
-      " Cancel ",
-      if self.selected {
-        Style::default().reversed()
-      } else {
-        Style::default()
-      },
-    );
+    let confirm_btn = Span::styled(" Confirm ", button_style(!self.selected));
+    let cancel_btn = Span::styled(" Cancel ", button_style(self.selected));
     let buttons = Line::from(vec![confirm_btn, Span::raw("    "), cancel_btn]);
 
     let paragraph = Paragraph::new(buttons);

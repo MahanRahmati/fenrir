@@ -4,8 +4,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Widget, Wrap};
 
-const TOP_PADDING: u16 = 1;
-const HORIZONTAL_PADDING: u16 = 2;
+use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
+
 const TEXT_EXTRA_PADDING: u16 = 1;
 
 #[derive(PartialEq)]

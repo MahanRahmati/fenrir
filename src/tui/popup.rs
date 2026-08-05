@@ -3,6 +3,10 @@ use ratatui::layout::Rect;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
+pub fn constrained_width(screen_width: u16) -> u16 {
+  return screen_width.saturating_mul(50).saturating_div(100).min(80);
+}
+
 pub struct Popup {
   show_popup: bool,
 }

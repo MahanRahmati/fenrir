@@ -22,6 +22,10 @@ impl MessagesList {
     };
   }
 
+  pub fn is_empty(&self) -> bool {
+    return self.messages.is_empty();
+  }
+
   pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
     let builder = ListBuilder::new(|context| {
       let message = &self.messages[context.index];

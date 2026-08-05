@@ -8,7 +8,7 @@ use ratatui::widgets::{
 };
 
 use crate::session_manager::session::Session;
-use crate::tui::popup::Popup;
+use crate::tui::popup::{Popup, constrained_width};
 use crate::utils::datetime::format_timestamp;
 
 pub struct SessionsPopup {
@@ -34,8 +34,10 @@ impl SessionsPopup {
 
   pub fn draw(&mut self, frame: &mut Frame) {
     let area = frame.area();
-    let popup_area =
-      area.centered(Constraint::Percentage(40), Constraint::Percentage(20));
+    let popup_area = area.centered(
+      Constraint::Length(constrained_width(area.width)),
+      Constraint::Percentage(20),
+    );
 
     let popup_width = popup_area.width as usize;
     let sessions: Vec<ListItem> = self
@@ -138,5 +140,9 @@ impl SessionsPopup {
 
   pub fn get_selected_session(&mut self) -> Option<i64> {
     return self.selected_session_id.take();
+  }
+
+  pub fn is_open(&self) -> bool {
+    return self.popup.is_open();
   }
 }

@@ -1,10 +1,10 @@
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::Constraint;
 use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
 
 use crate::slash_commands::SlashCommand;
-use crate::tui::popup::Popup;
+use crate::tui::popup::{Popup, constrained_width};
 
 pub struct HelpPopup {
   popup: Popup,
@@ -17,12 +17,13 @@ impl HelpPopup {
     };
   }
 
-  pub fn draw(&self, frame: &mut Frame, messages_area: Rect) {
+  pub fn draw(&self, frame: &mut Frame) {
     let num_commands = SlashCommand::all().len();
     let popup_height = 4u16 + num_commands as u16;
-    let popup_y = messages_area.y + messages_area.height - popup_height;
-    let popup_area =
-      Rect::new(messages_area.x, popup_y, messages_area.width, popup_height);
+    let popup_area = frame.area().centered(
+      Constraint::Length(constrained_width(frame.area().width)),
+      Constraint::Length(popup_height),
+    );
     let lines: Vec<Line> = SlashCommand::all()
       .iter()
       .map(|cmd| Line::from(format!("{} - {}", cmd.name(), cmd.description())))
@@ -49,5 +50,9 @@ impl HelpPopup {
 
   fn close_help_popup(&mut self) {
     self.popup.close_popup();
+  }
+
+  pub fn is_open(&self) -> bool {
+    return self.popup.is_open();
   }
 }
