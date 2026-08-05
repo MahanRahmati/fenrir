@@ -79,7 +79,7 @@ pub struct PermissionsConfig {
 
 impl Default for PermissionsConfig {
   fn default() -> Self {
-    Self {
+    return Self {
       datetime: true,
       read_file: true,
       write_file: true,
@@ -90,7 +90,7 @@ impl Default for PermissionsConfig {
       list_directories: true,
       project_context: true,
       rust: true,
-    }
+    };
   }
 }
 
