@@ -116,30 +116,39 @@ fn default_restrict_write_tools_to_cwd() -> bool {
 fn default_datetime() -> bool {
   DEFAULT_DATETIME_PERMISSION
 }
+
 fn default_read_file() -> bool {
   DEFAULT_READ_FILE_PERMISSION
 }
+
 fn default_write_file() -> bool {
   DEFAULT_WRITE_FILE_PERMISSION
 }
+
 fn default_edit_file() -> bool {
   DEFAULT_EDIT_FILE_PERMISSION
 }
+
 fn default_remove_file() -> bool {
   DEFAULT_REMOVE_FILE_PERMISSION
 }
+
 fn default_find_file() -> bool {
   DEFAULT_FIND_FILE_PERMISSION
 }
+
 fn default_find_text() -> bool {
   DEFAULT_FIND_TEXT_PERMISSION
 }
+
 fn default_list_directories() -> bool {
   DEFAULT_LIST_DIRECTORIES_PERMISSION
 }
+
 fn default_project_context() -> bool {
   DEFAULT_PROJECT_CONTEXT_PERMISSION
 }
+
 fn default_rust() -> bool {
   DEFAULT_RUST_PERMISSION
 }
