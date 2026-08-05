@@ -1,3 +1,4 @@
+mod button;
 mod confirm_popup;
 mod help_popup;
 mod input;
@@ -76,7 +77,7 @@ impl Tui {
 
     self.sessions_popup.draw(frame);
     self.help_popup.draw(frame);
-    self.confirm_popup.draw(frame, messages_area);
+    self.confirm_popup.draw(frame);
   }
 
   fn compute_areas(

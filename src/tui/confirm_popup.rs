@@ -1,20 +1,12 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
-use ratatui::layout::{Margin, Rect};
-use ratatui::style::Style;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::layout::{Constraint, Rect};
 
-use crate::tui::HORIZONTAL_PADDING;
-use crate::tui::popup::Popup;
+use crate::tui::button::Button;
+use crate::tui::popup::{Popup, constrained_width};
 
-fn button_style(active: bool) -> Style {
-  return if active {
-    Style::default().reversed()
-  } else {
-    Style::default()
-  };
-}
+const BUTTON_HEIGHT: u16 = 3;
+const BUTTON_GAP: u16 = 4;
 
 pub struct ConfirmPopup {
   popup: Popup,
@@ -33,29 +25,39 @@ impl ConfirmPopup {
     };
   }
 
-  pub fn draw(&self, frame: &mut Frame, messages_area: Rect) {
+  pub fn draw(&self, frame: &mut Frame) {
     if !self.popup.is_open() {
       return;
     }
 
-    let popup_height = 5u16;
-    let popup_y = messages_area.y + messages_area.height - popup_height + 1;
-    let popup_area =
-      Rect::new(messages_area.x, popup_y, messages_area.width, popup_height)
-        .inner(Margin {
-          horizontal: HORIZONTAL_PADDING,
-          vertical: 0,
-        });
+    let popup_height = 4u16 + BUTTON_HEIGHT;
+    let popup_area = frame.area().centered(
+      Constraint::Length(constrained_width(frame.area().width)),
+      Constraint::Length(popup_height),
+    );
 
-    let confirm_btn = Span::styled(" Confirm ", button_style(!self.selected));
-    let cancel_btn = Span::styled(" Cancel ", button_style(self.selected));
-    let buttons = Line::from(vec![confirm_btn, Span::raw("    "), cancel_btn]);
-
-    let paragraph = Paragraph::new(buttons);
     if let Some(content_area) =
       self.popup.draw_header(frame, &self.message, popup_area)
     {
-      frame.render_widget(paragraph, content_area);
+      let confirm = Button::new("Confirm").selected(!self.selected);
+      let cancel = Button::new("Cancel").selected(self.selected);
+      let buttons_width = confirm.width() + BUTTON_GAP + cancel.width();
+      let buttons_x =
+        content_area.x + content_area.width.saturating_sub(buttons_width) / 2;
+      let confirm_area = Rect::new(
+        buttons_x,
+        content_area.y + content_area.height - BUTTON_HEIGHT,
+        confirm.width(),
+        BUTTON_HEIGHT,
+      );
+      let cancel_area = Rect::new(
+        confirm_area.x + confirm_area.width + BUTTON_GAP,
+        confirm_area.y,
+        cancel.width(),
+        BUTTON_HEIGHT,
+      );
+      frame.render_widget(confirm, confirm_area);
+      frame.render_widget(cancel, cancel_area);
     }
   }
 
