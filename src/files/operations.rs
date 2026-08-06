@@ -38,6 +38,30 @@ pub async fn write_file(file_path: &str, content: &str) -> FileResult<()> {
     .map_err(|e| FileError::FileWrite(e.to_string()));
 }
 
+pub async fn copy_file(from_path: &str, to_path: &str) -> FileResult<()> {
+  return tokio::fs::copy(from_path, to_path)
+    .await
+    .map_err(|e| FileError::FileCopy(e.to_string()))
+    .map(|_| ());
+}
+
+pub async fn get_modified_time(
+  file_path: &str,
+) -> FileResult<std::time::SystemTime> {
+  return tokio::fs::metadata(file_path)
+    .await
+    .map_err(|e| FileError::FileRead(e.to_string()))?
+    .modified()
+    .map_err(|e| FileError::FileRead(e.to_string()));
+}
+
+pub async fn get_file_size(file_path: &str) -> FileResult<u64> {
+  return tokio::fs::metadata(file_path)
+    .await
+    .map_err(|e| FileError::FileRead(e.to_string()))
+    .map(|meta| meta.len());
+}
+
 pub async fn read_dir(dir_path: &str) -> FileResult<Vec<(String, bool)>> {
   let mut entries = tokio::fs::read_dir(dir_path)
     .await

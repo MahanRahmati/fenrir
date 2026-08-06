@@ -21,6 +21,9 @@ pub enum FileError {
   #[error("Cannot write to file '{0}'. Please check permissions.")]
   FileWrite(String),
 
+  #[error("Cannot copy file '{0}'. Please check permissions.")]
+  FileCopy(String),
+
   #[error("Cannot read directory '{0}'. Please check permissions.")]
   DirectoryRead(String),
 }

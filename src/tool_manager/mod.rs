@@ -9,6 +9,7 @@ mod project_context;
 mod read_file;
 mod remove_file;
 mod rust;
+mod screenshot;
 pub mod tool;
 mod write_file;
 
@@ -27,6 +28,7 @@ use crate::tool_manager::project_context::ProjectContextTool;
 use crate::tool_manager::read_file::ReadFileTool;
 use crate::tool_manager::remove_file::RemoveFileTool;
 use crate::tool_manager::rust::RustTool;
+use crate::tool_manager::screenshot::ScreenshotTool;
 use crate::tool_manager::tool::{Tool, ToolParams, ToolSpec};
 use crate::tool_manager::write_file::WriteFileTool;
 use crate::utils::path::is_path_within;
@@ -73,6 +75,9 @@ impl ToolManager {
     }
     if config.permissions.rust {
       tools.push(Box::new(RustTool));
+    }
+    if config.permissions.screenshot {
+      tools.push(Box::new(ScreenshotTool));
     }
     return Self {
       tools,
