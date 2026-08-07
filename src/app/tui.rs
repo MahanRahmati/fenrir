@@ -135,6 +135,7 @@ impl App {
 
         match self.process_chat(handler).await {
           Ok(_) => {
+            tui.set_usage(self.last_usage());
             terminal.draw(|frame| tui.draw(frame)).ok();
           }
           Err(e) => {

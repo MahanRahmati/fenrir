@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::provider_manager::errors::{
   ProviderManagerError, ProviderManagerResult,
 };
+pub use crate::provider_manager::provider::ChatUsage;
 pub use crate::provider_manager::provider::ToolCall;
 use crate::provider_manager::provider::{ChatResponse, ChatStream, Provider};
 use crate::provider_manager::providers::openai_compatible::OpenAICompatibleProvider;

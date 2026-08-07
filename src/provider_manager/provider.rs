@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
 use futures::Stream;
+use serde::Deserialize;
 
 use crate::provider_manager::errors::ProviderManagerResult;
 use crate::session_manager::Message;
@@ -18,16 +19,23 @@ pub struct ToolCall {
   pub arguments: String,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct ChatUsage {
+  pub prompt_tokens: u64,
+}
+
 pub struct ChatResponse {
   pub content: Option<String>,
   pub reasoning: Option<String>,
   pub tool_calls: Vec<ToolCall>,
+  pub usage: Option<ChatUsage>,
 }
 
 pub struct ChatStreamDelta {
   pub content: Option<String>,
   pub reasoning: Option<String>,
   pub tool_calls: Vec<StreamToolCallDelta>,
+  pub usage: Option<ChatUsage>,
 }
 
 pub struct StreamToolCallDelta {

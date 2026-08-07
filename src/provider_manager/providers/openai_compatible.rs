@@ -14,7 +14,7 @@ use crate::provider_manager::errors::{
   ProviderManagerError, ProviderManagerResult,
 };
 use crate::provider_manager::provider::{
-  ChatResponse, ChatStream, ChatStreamDelta, Model, Provider,
+  ChatResponse, ChatStream, ChatStreamDelta, ChatUsage, Model, Provider,
   StreamToolCallDelta, ToolCall,
 };
 use crate::session_manager::Message;
@@ -30,6 +30,13 @@ struct ChatCompletionRequest {
   #[serde(skip_serializing_if = "Vec::is_empty")]
   tools: Vec<ChatTool>,
   stream: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  stream_options: Option<StreamOptions>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StreamOptions {
+  include_usage: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -92,6 +99,7 @@ struct ToolFunction {
 #[derive(Debug, Deserialize)]
 struct ChatCompletionResponse {
   choices: Vec<ResponseChoice>,
+  usage: Option<ChatUsage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,6 +130,7 @@ struct ApiFunctionCall {
 #[derive(Debug, Deserialize)]
 struct ChatCompletionStreamResponse {
   choices: Vec<StreamChoice>,
+  usage: Option<ChatUsage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -298,6 +307,13 @@ impl OpenAICompatibleProvider {
       messages: chat_messages,
       tools: chat_tools,
       stream,
+      stream_options: if stream {
+        Some(StreamOptions {
+          include_usage: true,
+        })
+      } else {
+        None
+      },
     };
 
     return Ok(request);
@@ -315,6 +331,16 @@ fn parse_sse_chunk(
   }
   match serde_json::from_str::<ChatCompletionStreamResponse>(&chunk.data) {
     Ok(stream_resp) => {
+      if stream_resp.choices.is_empty()
+        && let Some(usage) = stream_resp.usage
+      {
+        return Some(Ok(ChatStreamDelta {
+          content: None,
+          reasoning: None,
+          tool_calls: Vec::new(),
+          usage: Some(usage),
+        }));
+      }
       let choice = stream_resp.choices.into_iter().next()?;
       let delta = choice.delta;
       let tool_calls = delta
@@ -331,6 +357,7 @@ fn parse_sse_chunk(
         content: delta.content,
         reasoning: delta.reasoning_content,
         tool_calls,
+        usage: None,
       }));
     }
     Err(e) => {
@@ -417,6 +444,7 @@ impl Provider for OpenAICompatibleProvider {
       content,
       reasoning,
       tool_calls,
+      usage: response.usage,
     });
   }
 

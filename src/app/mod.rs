@@ -12,6 +12,7 @@ use crate::database::DB;
 use crate::persona_manager::PersonaManager;
 use crate::persona_manager::TITLES_PERSONA;
 use crate::prompt::Prompt;
+use crate::provider_manager::ChatUsage;
 use crate::provider_manager::ProviderManager;
 use crate::provider_manager::ToolCall;
 use crate::session_manager::Message;
@@ -36,6 +37,7 @@ pub struct App {
   persona_manager: PersonaManager,
   shutdown: Shutdown,
   config: Config,
+  last_usage: Option<ChatUsage>,
 }
 
 impl App {
@@ -52,6 +54,7 @@ impl App {
       persona_manager,
       shutdown,
       config,
+      last_usage: None,
     };
   }
 
@@ -89,6 +92,10 @@ impl App {
       .filter(|cmd| !(matches!(cmd, SlashCommand::Personas) && has_session))
       .cloned()
       .collect();
+  }
+
+  pub fn last_usage(&self) -> Option<ChatUsage> {
+    return self.last_usage;
   }
 
   pub async fn process_chat<F>(
@@ -193,11 +200,16 @@ impl App {
 
       let mut content_buffer = String::new();
       let mut reasoning_buffer = String::new();
+      let mut stream_usage: Option<ChatUsage> = None;
       let mut tool_call_builders: HashMap<usize, ToolCall> = HashMap::new();
 
       while let Some(chunk_result) = stream.next().await {
         let delta =
           chunk_result.map_err(|e| RuntimeError::Provider(e.to_string()))?;
+
+        if let Some(usage) = delta.usage {
+          stream_usage = Some(usage);
+        }
 
         if let Some(text) = delta.content {
           content_buffer.push_str(&text);
@@ -236,6 +248,10 @@ impl App {
             entry.arguments.push_str(&args);
           }
         }
+      }
+
+      if let Some(usage) = stream_usage {
+        self.last_usage = Some(usage);
       }
 
       if !content_buffer.is_empty() {
@@ -289,6 +305,10 @@ impl App {
         .chat(messages, &tools)
         .await
         .map_err(|e| RuntimeError::Provider(e.to_string()))?;
+
+      if let Some(usage) = response.usage {
+        self.last_usage = Some(usage);
+      }
 
       if self.config.general.show_reasoning
         && let Some(ref reasoning) = response.reasoning

@@ -18,6 +18,7 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, BorderType, Paragraph};
 
 use crate::persona_manager::Persona;
+use crate::provider_manager::ChatUsage;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 use crate::tui::completion_popup::CompletionPopup;
@@ -41,6 +42,7 @@ pub struct Tui {
   personas_popup: PersonasPopup,
   confirm_popup: ConfirmPopup,
   completion_popup: CompletionPopup,
+  usage: Option<ChatUsage>,
 }
 
 impl Tui {
@@ -54,7 +56,12 @@ impl Tui {
       personas_popup: PersonasPopup::new(),
       confirm_popup: ConfirmPopup::new(),
       completion_popup: CompletionPopup::new(),
+      usage: None,
     };
+  }
+
+  pub fn set_usage(&mut self, usage: Option<ChatUsage>) {
+    self.usage = usage;
   }
 
   pub fn is_running(&self) -> bool {
@@ -76,7 +83,7 @@ impl Tui {
       .block(Block::bordered().border_type(BorderType::Rounded));
     frame.render_widget(input, input_area);
 
-    let statusline = StatusLine::new();
+    let statusline = StatusLine::new(self.usage);
     frame
       .render_widget(statusline.draw(status_bar_area.width), status_bar_area);
 
