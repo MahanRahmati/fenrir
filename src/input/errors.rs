@@ -5,6 +5,9 @@ pub enum InputError {
   #[error("Input is empty")]
   EmptyInput,
 
+  #[error("End of input on stdin")]
+  Eof,
+
   #[error("Cannot read input from stdin: '{0}'.")]
   StdinRead(String),
 }

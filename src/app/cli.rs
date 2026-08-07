@@ -20,6 +20,7 @@ impl App {
 
       let input = match read_from_stdin() {
         Ok(input) => input,
+        Err(InputError::Eof) => break,
         Err(InputError::EmptyInput) => continue,
         Err(e) => return Err(RuntimeError::Input(e.to_string())),
       };
@@ -204,6 +205,7 @@ fn print_indexed_list(lines: &[String]) {
 fn read_index(count: usize, name: &str) -> RuntimeResult<Option<usize>> {
   let input = match read_from_stdin() {
     Ok(input) => input,
+    Err(InputError::Eof) => return Ok(None),
     Err(InputError::EmptyInput) => return Ok(None),
     Err(e) => return Err(RuntimeError::Input(e.to_string())),
   };
