@@ -32,7 +32,12 @@ impl SessionManager {
       .db
       .execute(
         INSERT_SESSION,
-        (session.id, session.created_at, session.last_interaction),
+        (
+          session.id,
+          session.title.clone(),
+          session.created_at,
+          session.last_interaction,
+        ),
       )
       .await
     {
@@ -170,6 +175,31 @@ impl SessionManager {
     return Ok(());
   }
 
+  pub async fn update_current_session_title(
+    &mut self,
+    title: &str,
+  ) -> SessionManagerResult<()> {
+    let session_id = match self.current_session {
+      Some(id) => id,
+      None => return Err(SessionManagerError::NoCurrentSession),
+    };
+    if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
+    {
+      session.title = Some(title.to_string());
+      match self
+        .db
+        .execute(UPDATE_SESSION_TITLE, (title, session_id))
+        .await
+      {
+        Ok(_) => {}
+        Err(e) => {
+          return Err(SessionManagerError::DatabaseError(e.to_string()));
+        }
+      }
+    }
+    return Ok(());
+  }
+
   pub async fn load_session_from_db(
     &mut self,
     id: i64,
@@ -198,7 +228,7 @@ impl SessionManager {
         ));
       }
     };
-    let created_at: i64 = match row.get(1) {
+    let title: String = match row.get(1) {
       Ok(v) => v,
       Err(_) => {
         return Err(SessionManagerError::SessionLoadFailed(
@@ -206,7 +236,16 @@ impl SessionManager {
         ));
       }
     };
-    let last_interaction: i64 = match row.get(2) {
+    let title = if title.is_empty() { None } else { Some(title) };
+    let created_at: i64 = match row.get(2) {
+      Ok(v) => v,
+      Err(_) => {
+        return Err(SessionManagerError::SessionLoadFailed(
+          "Invalid session data".to_string(),
+        ));
+      }
+    };
+    let last_interaction: i64 = match row.get(3) {
       Ok(v) => v,
       Err(_) => {
         return Err(SessionManagerError::SessionLoadFailed(
@@ -267,6 +306,7 @@ impl SessionManager {
       id: session_id,
       created_at,
       last_interaction,
+      title,
       messages,
     };
 
@@ -289,11 +329,16 @@ impl SessionManager {
         Ok(v) => v,
         Err(_) => continue,
       };
-      let created_at: i64 = match row.get(1) {
+      let title: String = match row.get(1) {
         Ok(v) => v,
         Err(_) => continue,
       };
-      let last_interaction: i64 = match row.get(2) {
+      let title = if title.is_empty() { None } else { Some(title) };
+      let created_at: i64 = match row.get(2) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let last_interaction: i64 = match row.get(3) {
         Ok(v) => v,
         Err(_) => continue,
       };
@@ -302,6 +347,7 @@ impl SessionManager {
         id,
         created_at,
         last_interaction,
+        title,
         messages: Vec::new(),
       };
 

@@ -11,4 +11,5 @@ pub const REVIEWER_PERSONA: Persona = Persona::new(
     "If you're uncertain and can't verify it with the available tools, say \"I'm not sure about X\" rather than flagging it as a definite issue.",
     "Be direct and clear about bugs, and communicate severity without overstating it. State the scenarios, environments, or inputs necessary for the bug to arise. Be matter-of-fact, not accusatory or overly positive. Avoid flattery and comments that don't help the reader.",
   ],
+  true,
 );

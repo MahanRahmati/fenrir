@@ -1,10 +1,12 @@
 mod default;
 mod persona;
 mod reviewer;
+mod titles;
 
 use crate::persona_manager::default::DEFAULT_PERSONA;
 pub use crate::persona_manager::persona::Persona;
 use crate::persona_manager::reviewer::REVIEWER_PERSONA;
+pub use crate::persona_manager::titles::TITLES_PERSONA;
 
 pub struct PersonaManager {
   current_persona: Persona,
@@ -21,13 +23,16 @@ impl PersonaManager {
     return &self.current_persona;
   }
 
-  pub fn list(&self) -> &'static [Persona] {
-    return &[DEFAULT_PERSONA, REVIEWER_PERSONA];
+  pub fn list(&self) -> Vec<Persona> {
+    return [DEFAULT_PERSONA, REVIEWER_PERSONA, TITLES_PERSONA]
+      .into_iter()
+      .filter(|p| p.is_selectable())
+      .collect();
   }
 
   pub fn set(&mut self, name: &str) -> Result<(), String> {
-    let persona = self
-      .list()
+    let personas = self.list();
+    let persona = personas
       .iter()
       .find(|p| p.name() == name)
       .ok_or_else(|| format!("Unknown persona: {name}"))?;

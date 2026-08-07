@@ -34,7 +34,8 @@ impl App {
         continue;
       }
       if let Some(persona_index) = tui.get_selected_persona() {
-        let persona = &self.persona_manager.list()[persona_index];
+        let personas = self.persona_manager.list();
+        let persona = &personas[persona_index];
         self
           .persona_manager
           .set(persona.name())
@@ -68,7 +69,7 @@ impl App {
               continue;
             }
             tui.open_personas_popup(
-              self.persona_manager.list(),
+              &self.persona_manager.list(),
               Some(self.persona_manager.current()),
             );
             continue;

@@ -33,7 +33,10 @@ impl SessionsPopup {
             Some(session) if session.id == s.id => "*",
             _ => " ",
           };
-          let label = format!("{marker}{}", s.id);
+          let label = format!(
+            "{marker}{}",
+            s.title.as_deref().unwrap_or("Untitled Session")
+          );
           let timestamp_str = format_timestamp(s.last_interaction);
           let spacer_width = popup_width
             .saturating_sub(4)

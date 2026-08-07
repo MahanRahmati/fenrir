@@ -4,6 +4,7 @@ pub struct Persona {
   description: &'static str,
   identity: &'static str,
   instructions: &'static [&'static str],
+  selectable: bool,
 }
 
 impl Persona {
@@ -12,12 +13,14 @@ impl Persona {
     description: &'static str,
     identity: &'static str,
     instructions: &'static [&'static str],
+    selectable: bool,
   ) -> Self {
     return Self {
       name,
       description,
       identity,
       instructions,
+      selectable,
     };
   }
 
@@ -35,5 +38,9 @@ impl Persona {
 
   pub fn instructions(&self) -> &[&'static str] {
     return self.instructions;
+  }
+
+  pub fn is_selectable(&self) -> bool {
+    return self.selectable;
   }
 }

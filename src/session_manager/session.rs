@@ -32,6 +32,8 @@ pub struct ToolFunction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
   pub id: i64,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub title: Option<String>,
   pub created_at: i64,
   pub last_interaction: i64,
   pub messages: Vec<Message>,
@@ -42,6 +44,7 @@ impl Session {
     let now = Utc::now().timestamp();
     return Self {
       id: now,
+      title: None,
       created_at: now,
       last_interaction: now,
       messages: Vec::new(),

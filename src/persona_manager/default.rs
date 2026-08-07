@@ -5,4 +5,5 @@ pub const DEFAULT_PERSONA: Persona = Persona::new(
   "General-purpose assistant",
   "You are Fenrir, a helpful AI assistant.",
   &[],
+  true,
 );

@@ -51,7 +51,7 @@ impl PersonasPopup {
 
   pub fn open_personas_popup(
     &mut self,
-    personas: &'static [Persona],
+    personas: &[Persona],
     current_persona: Option<&Persona>,
   ) {
     self.personas = personas.to_vec();

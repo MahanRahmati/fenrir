@@ -163,9 +163,9 @@ impl App {
           Some(current) if current.id == session.id => "*",
           _ => " ",
         };
+        let title = session.title.as_deref().unwrap_or("Untitled Session");
         format!(
-          "{marker}{}  {}",
-          session.id,
+          "{marker}{title}  {}",
           format_timestamp(session.last_interaction)
         )
       })
@@ -181,7 +181,13 @@ impl App {
       .load_session_from_db(session_id)
       .await
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
-    println!("--- Session {session_id} ---");
+    println!(
+      "--- {} ---",
+      sessions[index]
+        .title
+        .as_deref()
+        .unwrap_or("Untitled Session")
+    );
     if let Some(session) = self.session_manager.get_current_session() {
       print_session_messages(session);
     }
