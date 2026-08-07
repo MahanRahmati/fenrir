@@ -23,6 +23,7 @@ impl DB {
       .place_data_file(DEFAULT_DB_NAME)
       .map_err(|e| DatabaseError::Initialization(e.to_string()))?;
     let db = turso::Builder::new_local(db_path.to_string_lossy().as_ref())
+      .experimental_multiprocess_wal(true)
       .build()
       .await
       .map_err(|e| DatabaseError::Initialization(e.to_string()))?;
@@ -63,7 +64,16 @@ impl DB {
           (migration.name.as_str(), Utc::now().timestamp()),
         )
         .await
-        .map_err(|e| DatabaseError::Migration(e.to_string()))?;
+        .map_err(|e| DatabaseError::Migration(e.to_string()))
+        .or_else(|e| {
+          if let DatabaseError::Migration(message) = e {
+            if message.contains("UNIQUE") {
+              return Ok(0);
+            }
+            return Err(DatabaseError::Migration(message));
+          }
+          return Err(e);
+        })?;
     }
     return Ok(());
   }
@@ -97,6 +107,9 @@ impl DB {
     let conn = self
       .db
       .connect()
+      .map_err(|e| DatabaseError::Connection(e.to_string()))?;
+    conn
+      .busy_timeout(std::time::Duration::from_millis(500))
       .map_err(|e| DatabaseError::Connection(e.to_string()))?;
     return Ok(conn);
   }
