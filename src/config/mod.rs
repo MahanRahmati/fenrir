@@ -76,6 +76,7 @@ pub struct PermissionsConfig {
   pub project_context: bool,
   pub rust: bool,
   pub screenshot: bool,
+  pub notify: bool,
 }
 
 impl Default for PermissionsConfig {
@@ -92,6 +93,7 @@ impl Default for PermissionsConfig {
       project_context: true,
       rust: true,
       screenshot: true,
+      notify: true,
     };
   }
 }
