@@ -1,8 +1,8 @@
 use crate::config::Config;
+use crate::persona_manager::Persona;
 use crate::tool_manager::tool::ToolSpec;
 use crate::utils::datetime::get_current_datetime;
 
-const IDENTITY: &str = "You are Fenrir, a helpful AI assistant.";
 const TOOLS: &str = "Use tools when appropriate.";
 const EDIT: &str = "Before editing files, read them with `append_loc=true` for accurate line numbers. Prefer many small edits over one large one.";
 const VERIFY: &str = "After making changes, use available tools to verify they work (e.g. `rust` tool for Rust projects if available).";
@@ -15,9 +15,13 @@ pub struct Prompt {
 }
 
 impl Prompt {
-  pub fn new(config: &Config, tool_specs: &[ToolSpec]) -> Self {
+  pub fn new(
+    config: &Config,
+    tool_specs: &[ToolSpec],
+    persona: &Persona,
+  ) -> Self {
     let mut parts: Vec<String> = Vec::new();
-    parts.push(IDENTITY.to_string());
+    parts.push(persona.identity().to_string());
 
     if !tool_specs.is_empty() {
       let tools_list = tool_specs
@@ -29,6 +33,9 @@ impl Prompt {
     }
 
     let mut guidelines: Vec<&str> = Vec::new();
+    for instruction in persona.instructions() {
+      guidelines.push(instruction);
+    }
     guidelines.push(TOOLS);
     if config.permissions.read_file && config.permissions.edit_file {
       guidelines.push(EDIT);

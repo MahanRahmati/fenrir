@@ -9,6 +9,7 @@ use futures::StreamExt;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
 use crate::database::DB;
+use crate::persona_manager::PersonaManager;
 use crate::prompt::Prompt;
 use crate::provider_manager::ProviderManager;
 use crate::provider_manager::ToolCall;
@@ -29,6 +30,7 @@ pub struct App {
   session_manager: SessionManager,
   provider_manager: ProviderManager,
   tool_manager: ToolManager,
+  persona_manager: PersonaManager,
   shutdown: Shutdown,
   config: Config,
 }
@@ -38,11 +40,13 @@ impl App {
     let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new(&config);
     let provider_manager = ProviderManager::new(config.clone());
+    let persona_manager = PersonaManager::new();
     let shutdown = Shutdown::new();
     return App {
       session_manager,
       provider_manager,
       tool_manager,
+      persona_manager,
       shutdown,
       config,
     };
@@ -60,8 +64,11 @@ impl App {
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
     vlog!("Created session with ID: {}", session_id);
 
-    let prompt =
-      Prompt::new(&self.config, &self.tool_manager.get_tools_specs());
+    let prompt = Prompt::new(
+      &self.config,
+      &self.tool_manager.get_tools_specs(),
+      self.persona_manager.current(),
+    );
     vlog!("Prompt: {}", prompt.get_system_prompt());
     self
       .session_manager
