@@ -7,6 +7,7 @@ mod input;
 mod logging;
 mod mentions;
 mod network;
+mod persona_manager;
 mod prompt;
 mod provider_manager;
 mod session_manager;
