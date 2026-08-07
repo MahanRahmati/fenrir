@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::config::ProviderModel;
+use crate::files::operations::{read_bytes, read_to_string};
+use crate::mentions::{PathKind, classify_path, extract_paths, mime_type};
 use crate::network::HttpClient;
 use crate::network::sse::SSEChunk;
 use crate::provider_manager::errors::{
@@ -18,6 +20,8 @@ use crate::provider_manager::provider::{
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
 use crate::vlog;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatCompletionRequest {
@@ -31,11 +35,30 @@ struct ChatCompletionRequest {
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatMessage {
   role: String,
-  content: Option<String>,
+  content: Option<ChatContent>,
   #[serde(skip_serializing_if = "Option::is_none")]
   tool_calls: Option<Vec<ChatToolCall>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum ChatContent {
+  Text(String),
+  Parts(Vec<ContentPart>),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ContentPart {
+  Text { text: String },
+  ImageUrl { image_url: ImageUrlPart },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ImageUrlPart {
+  url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -170,45 +193,93 @@ impl OpenAICompatibleProvider {
     return Some(headers);
   }
 
-  fn build_request(
+  async fn build_request(
     &self,
     model: String,
     messages: &[Message],
     tools: &[ToolSpec],
     stream: bool,
-  ) -> ChatCompletionRequest {
-    let chat_messages: Vec<ChatMessage> = messages
-      .iter()
-      .filter(|msg| msg.role != "reasoning")
-      .map(|msg| {
-        let content = if msg.content.is_empty() {
-          None
+  ) -> ProviderManagerResult<ChatCompletionRequest> {
+    let mut chat_messages: Vec<ChatMessage> = Vec::new();
+    for msg in messages {
+      if msg.role == "reasoning" {
+        continue;
+      }
+
+      let content = if msg.content.is_empty() {
+        None
+      } else if msg.role != "user" {
+        Some(ChatContent::Text(msg.content.clone()))
+      } else {
+        let paths = extract_paths(&msg.content);
+        if paths.is_empty() {
+          Some(ChatContent::Text(msg.content.clone()))
         } else {
-          Some(msg.content.clone())
-        };
+          let mut parts = vec![ContentPart::Text {
+            text: msg.content.clone(),
+          }];
+          for path in paths {
+            let kind = classify_path(&path).ok_or_else(|| {
+              ProviderManagerError::ProviderError(format!(
+                "Cannot attach '{path}': unsupported file (no extension)"
+              ))
+            })?;
+            match kind {
+              PathKind::Image => {
+                let bytes = read_bytes(&path).await.map_err(|e| {
+                  ProviderManagerError::ProviderError(format!(
+                    "Cannot attach '@{path}': {e}"
+                  ))
+                })?;
+                let mime = mime_type(&path).ok_or_else(|| {
+                  ProviderManagerError::ProviderError(format!(
+                    "Cannot attach '@{path}': unsupported image type"
+                  ))
+                })?;
+                let encoded = STANDARD.encode(&bytes);
+                parts.push(ContentPart::ImageUrl {
+                  image_url: ImageUrlPart {
+                    url: format!("data:{mime};base64,{encoded}"),
+                  },
+                });
+              }
+              PathKind::Text => {
+                let contents = read_to_string(&path).await.map_err(|e| {
+                  ProviderManagerError::ProviderError(format!(
+                    "Cannot attach '@{path}': {e}"
+                  ))
+                })?;
+                parts.push(ContentPart::Text {
+                  text: format!("@{path}:\n{contents}"),
+                });
+              }
+            }
+          }
+          Some(ChatContent::Parts(parts))
+        }
+      };
 
-        let tool_calls = msg.tool_calls.as_ref().map(|calls| {
-          calls
-            .iter()
-            .map(|tc| ChatToolCall {
-              id: tc.id.clone(),
-              call_type: tc.call_type.clone(),
-              function: ChatToolFunction {
-                name: tc.function.name.clone(),
-                arguments: tc.function.arguments.clone(),
-              },
-            })
-            .collect()
-        });
+      let tool_calls = msg.tool_calls.as_ref().map(|calls| {
+        calls
+          .iter()
+          .map(|tc| ChatToolCall {
+            id: tc.id.clone(),
+            call_type: tc.call_type.clone(),
+            function: ChatToolFunction {
+              name: tc.function.name.clone(),
+              arguments: tc.function.arguments.clone(),
+            },
+          })
+          .collect()
+      });
 
-        return ChatMessage {
-          role: msg.role.clone(),
-          content,
-          tool_calls,
-          tool_call_id: msg.tool_call_id.clone(),
-        };
-      })
-      .collect();
+      chat_messages.push(ChatMessage {
+        role: msg.role.clone(),
+        content,
+        tool_calls,
+        tool_call_id: msg.tool_call_id.clone(),
+      });
+    }
 
     let chat_tools: Vec<ChatTool> = tools
       .iter()
@@ -229,7 +300,7 @@ impl OpenAICompatibleProvider {
       stream,
     };
 
-    return request;
+    return Ok(request);
   }
 }
 
@@ -300,7 +371,7 @@ impl Provider for OpenAICompatibleProvider {
       .ok_or_else(|| ProviderManagerError::NoActiveModel)?
       .name
       .clone();
-    let request = self.build_request(model, messages, tools, false);
+    let request = self.build_request(model, messages, tools, false).await?;
     let headers = self.build_headers();
 
     vlog!("Sending chat request to open ai compatible server");
@@ -360,7 +431,7 @@ impl Provider for OpenAICompatibleProvider {
       .ok_or_else(|| ProviderManagerError::NoActiveModel)?
       .name
       .clone();
-    let request = self.build_request(model, messages, tools, true);
+    let request = self.build_request(model, messages, tools, true).await?;
     let headers = self.build_headers();
 
     vlog!("Sending streaming chat request to open ai compatible server");

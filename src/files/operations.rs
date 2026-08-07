@@ -32,6 +32,12 @@ pub async fn read_to_string(file_path: &str) -> FileResult<String> {
     .map_err(|e| FileError::FileRead(e.to_string()));
 }
 
+pub async fn read_bytes(file_path: &str) -> FileResult<Vec<u8>> {
+  return tokio::fs::read(file_path)
+    .await
+    .map_err(|e| FileError::FileRead(e.to_string()));
+}
+
 pub async fn write_file(file_path: &str, content: &str) -> FileResult<()> {
   return tokio::fs::write(file_path, content)
     .await

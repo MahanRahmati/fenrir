@@ -5,6 +5,7 @@ mod database;
 mod files;
 mod input;
 mod logging;
+mod mentions;
 mod network;
 mod prompt;
 mod provider_manager;

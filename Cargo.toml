@@ -29,6 +29,7 @@ turso = "0.6.1"
 async-trait = "0.1.91"
 ratatui = { version = "0.30.2", features = ["unstable-rendered-line-info"] }
 tui-widget-list = "0.15.3"
+base64 = "0.23.1"
 
 [lints.clippy]
 needless_return = "allow"
