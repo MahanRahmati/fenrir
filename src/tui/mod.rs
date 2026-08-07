@@ -1,4 +1,5 @@
 mod button;
+mod completion_popup;
 mod confirm_popup;
 mod help_popup;
 mod input;
@@ -19,6 +20,7 @@ use ratatui::widgets::{Block, BorderType, Paragraph};
 use crate::persona_manager::Persona;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
+use crate::tui::completion_popup::CompletionPopup;
 use crate::tui::confirm_popup::ConfirmPopup;
 use crate::tui::help_popup::HelpPopup;
 use crate::tui::input::Input;
@@ -38,6 +40,7 @@ pub struct Tui {
   sessions_popup: SessionsPopup,
   personas_popup: PersonasPopup,
   confirm_popup: ConfirmPopup,
+  completion_popup: CompletionPopup,
 }
 
 impl Tui {
@@ -50,6 +53,7 @@ impl Tui {
       sessions_popup: SessionsPopup::new(),
       personas_popup: PersonasPopup::new(),
       confirm_popup: ConfirmPopup::new(),
+      completion_popup: CompletionPopup::new(),
     };
   }
 
@@ -66,6 +70,7 @@ impl Tui {
       self.messages_list.draw(frame, messages_area);
     }
 
+    self.completion_popup.draw(frame, input_area);
     let input = Paragraph::new(self.input.content.as_str())
       .style(Style::default())
       .block(Block::bordered().border_type(BorderType::Rounded));
@@ -133,10 +138,11 @@ impl Tui {
     return self.sessions_popup.is_open()
       || self.personas_popup.is_open()
       || self.help_popup.is_open()
-      || self.confirm_popup.is_open();
+      || self.confirm_popup.is_open()
+      || self.completion_popup.is_open();
   }
 
-  pub fn read_input(&mut self) -> Option<String> {
+  pub async fn read_input(&mut self) -> Option<String> {
     let event = match event::read() {
       Ok(e) => e,
       Err(e) => {
@@ -160,6 +166,14 @@ impl Tui {
       if self.personas_popup.handle_input(key.code) {
         return None;
       }
+      if self.completion_popup.is_open()
+        && self
+          .completion_popup
+          .handle_input(key.code, &mut self.input)
+          .await
+      {
+        return None;
+      }
 
       match key.code {
         KeyCode::Enter => {
@@ -169,10 +183,22 @@ impl Tui {
           }
           return Some(input);
         }
-        KeyCode::Char(to_insert) => self.input.enter_char(to_insert),
-        KeyCode::Backspace => self.input.delete_char(),
-        KeyCode::Left => self.input.move_cursor_left(),
-        KeyCode::Right => self.input.move_cursor_right(),
+        KeyCode::Char(to_insert) => {
+          self.input.enter_char(to_insert);
+          self.completion_popup.refresh(&self.input).await;
+        }
+        KeyCode::Backspace => {
+          self.input.delete_char();
+          self.completion_popup.refresh(&self.input).await;
+        }
+        KeyCode::Left => {
+          self.input.move_cursor_left();
+          self.completion_popup.refresh(&self.input).await;
+        }
+        KeyCode::Right => {
+          self.input.move_cursor_right();
+          self.completion_popup.refresh(&self.input).await;
+        }
         _ => {}
       };
     }

@@ -26,6 +26,13 @@ pub async fn file_exists(file_path: &str) -> bool {
   return tokio::fs::metadata(file_path).await.is_ok();
 }
 
+pub async fn is_dir(file_path: &str) -> bool {
+  return tokio::fs::metadata(file_path)
+    .await
+    .map(|metadata| metadata.is_dir())
+    .unwrap_or(false);
+}
+
 pub async fn read_to_string(file_path: &str) -> FileResult<String> {
   return tokio::fs::read_to_string(file_path)
     .await

@@ -22,7 +22,7 @@ impl App {
         .draw(|frame| tui.draw(frame))
         .map_err(|e| RuntimeError::Tui(e.to_string()))?;
 
-      let input = tui.read_input();
+      let input = tui.read_input().await;
       if let Some(session_id) = tui.get_selected_session() {
         self
           .session_manager
