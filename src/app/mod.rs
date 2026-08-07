@@ -15,6 +15,7 @@ use crate::provider_manager::ProviderManager;
 use crate::provider_manager::ToolCall;
 use crate::session_manager::SessionManager;
 use crate::shutdown::Shutdown;
+use crate::slash_commands::SlashCommand;
 use crate::tool_manager::ToolManager;
 use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
@@ -77,6 +78,15 @@ impl App {
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
     return Ok(());
+  }
+
+  pub fn available_commands(&self) -> Vec<SlashCommand> {
+    let has_session = self.session_manager.get_current_session().is_some();
+    return SlashCommand::all()
+      .iter()
+      .filter(|cmd| !(matches!(cmd, SlashCommand::Personas) && has_session))
+      .cloned()
+      .collect();
   }
 
   pub async fn process_chat<F>(

@@ -8,6 +8,9 @@ pub enum RuntimeError {
   #[error("Session error: {0}")]
   Session(String),
 
+  #[error("Persona error: {0}")]
+  Persona(String),
+
   #[error("Provider error: {0}")]
   Provider(String),
 

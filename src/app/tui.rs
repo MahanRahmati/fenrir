@@ -7,17 +7,11 @@ use ratatui::crossterm::event::{
 
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent};
-use crate::prompt::Prompt;
 use crate::slash_commands::{SlashCommand, parse_command};
 use crate::tui::Tui;
-use crate::vlog;
 
 impl App {
   pub async fn run_tui(&mut self) -> RuntimeResult<String> {
-    let prompt =
-      Prompt::new(&self.config, &self.tool_manager.get_tools_specs());
-    vlog!("Prompt: {}", prompt.get_system_prompt());
-
     let mut terminal = ratatui::init();
     crossterm::execute!(stdout(), EnableMouseCapture)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
@@ -39,6 +33,15 @@ impl App {
         tui.update_messages(current_session);
         continue;
       }
+      if let Some(persona_index) = tui.get_selected_persona() {
+        let persona = &self.persona_manager.list()[persona_index];
+        self
+          .persona_manager
+          .set(persona.name())
+          .map_err(RuntimeError::Persona)?;
+        tui.add_message(format!("Persona set to: {}", persona.name()));
+        continue;
+      }
       if let Some(input) = input {
         match parse_command(&input) {
           Ok(Some(SlashCommand::Exit)) => {
@@ -46,7 +49,8 @@ impl App {
             break;
           }
           Ok(Some(SlashCommand::Help)) => {
-            tui.open_help_popup();
+            let commands = self.available_commands();
+            tui.open_help_popup(commands);
             continue;
           }
           Ok(Some(SlashCommand::Sessions)) => {
@@ -59,8 +63,19 @@ impl App {
             tui.open_sessions_popup(sessions, current_session);
             continue;
           }
+          Ok(Some(SlashCommand::Personas)) => {
+            if self.session_manager.get_current_session().is_some() {
+              continue;
+            }
+            tui.open_personas_popup(
+              self.persona_manager.list(),
+              Some(self.persona_manager.current()),
+            );
+            continue;
+          }
           Ok(Some(SlashCommand::New)) => {
             self.session_manager.clear_current_session();
+            self.persona_manager.reset();
             tui.update_messages(None);
             continue;
           }

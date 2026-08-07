@@ -4,6 +4,7 @@ mod help_popup;
 mod input;
 mod message_item;
 mod messages_list;
+mod personas_popup;
 mod popup;
 mod sessions_popup;
 mod statusline;
@@ -14,11 +15,14 @@ use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, BorderType, Paragraph};
 
+use crate::persona_manager::Persona;
 use crate::session_manager::session::Session;
+use crate::slash_commands::SlashCommand;
 use crate::tui::confirm_popup::ConfirmPopup;
 use crate::tui::help_popup::HelpPopup;
 use crate::tui::input::Input;
 use crate::tui::messages_list::MessagesList;
+use crate::tui::personas_popup::PersonasPopup;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
 
@@ -31,6 +35,7 @@ pub struct Tui {
   running: bool,
   help_popup: HelpPopup,
   sessions_popup: SessionsPopup,
+  personas_popup: PersonasPopup,
   confirm_popup: ConfirmPopup,
 }
 
@@ -42,6 +47,7 @@ impl Tui {
       running: true,
       help_popup: HelpPopup::new(),
       sessions_popup: SessionsPopup::new(),
+      personas_popup: PersonasPopup::new(),
       confirm_popup: ConfirmPopup::new(),
     };
   }
@@ -76,6 +82,7 @@ impl Tui {
     }
 
     self.sessions_popup.draw(frame);
+    self.personas_popup.draw(frame);
     self.help_popup.draw(frame);
     self.confirm_popup.draw(frame);
   }
@@ -123,6 +130,7 @@ impl Tui {
 
   fn any_popup_open(&self) -> bool {
     return self.sessions_popup.is_open()
+      || self.personas_popup.is_open()
       || self.help_popup.is_open()
       || self.confirm_popup.is_open();
   }
@@ -146,6 +154,9 @@ impl Tui {
       }
       self.help_popup.handle_input();
       if self.sessions_popup.handle_input(key.code) {
+        return None;
+      }
+      if self.personas_popup.handle_input(key.code) {
         return None;
       }
 
@@ -195,8 +206,8 @@ impl Tui {
     self.messages_list.update_messages(session);
   }
 
-  pub fn open_help_popup(&mut self) {
-    self.help_popup.open_help_popup();
+  pub fn open_help_popup(&mut self, commands: Vec<SlashCommand>) {
+    self.help_popup.open_help_popup(commands);
   }
 
   pub fn open_sessions_popup(
@@ -211,6 +222,20 @@ impl Tui {
 
   pub fn get_selected_session(&mut self) -> Option<i64> {
     return self.sessions_popup.get_selected_session();
+  }
+
+  pub fn open_personas_popup(
+    &mut self,
+    personas: &'static [Persona],
+    current_persona: Option<&Persona>,
+  ) {
+    self
+      .personas_popup
+      .open_personas_popup(personas, current_persona);
+  }
+
+  pub fn get_selected_persona(&mut self) -> Option<usize> {
+    return self.personas_popup.get_selected_persona();
   }
 
   pub fn open_confirm_popup(&mut self, message: String) {

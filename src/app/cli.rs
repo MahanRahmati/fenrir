@@ -5,6 +5,7 @@ use crate::app::{App, AppEvent};
 use crate::input::confirm_with;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
+use crate::persona_manager::Persona;
 use crate::session_manager::session::Session;
 use crate::slash_commands::{SlashCommand, parse_command};
 use crate::utils::datetime::format_timestamp;
@@ -28,7 +29,7 @@ impl App {
         Ok(Some(SlashCommand::Exit)) => break,
         Ok(Some(SlashCommand::Help)) => {
           println!("Available commands:");
-          for cmd in SlashCommand::all() {
+          for cmd in self.available_commands() {
             println!("  {}: {}", cmd.name(), cmd.description());
           }
           continue;
@@ -37,8 +38,16 @@ impl App {
           self.handle_sessions_command().await?;
           continue;
         }
+        Ok(Some(SlashCommand::Personas)) => {
+          if self.session_manager.get_current_session().is_some() {
+            continue;
+          }
+          self.handle_personas_command()?;
+          continue;
+        }
         Ok(Some(SlashCommand::New)) => {
           self.session_manager.clear_current_session();
+          self.persona_manager.reset();
           println!("Started a new session.");
           continue;
         }
@@ -113,6 +122,34 @@ impl App {
     return Ok(String::new());
   }
 
+  fn handle_personas_command(&mut self) -> RuntimeResult<()> {
+    let personas = self.persona_manager.list();
+    let current_name = self.persona_manager.current().name();
+    for (index, persona) in personas.iter().enumerate() {
+      let marker = if persona.name() == current_name {
+        "*"
+      } else {
+        " "
+      };
+      println!(
+        "{marker}[{index}] {} - {}",
+        persona.name(),
+        persona.description()
+      );
+    }
+    println!("Enter persona index to select (or empty to skip): ");
+    let Some(index) = read_persona_index(personas)? else {
+      return Ok(());
+    };
+    let persona = &personas[index];
+    self
+      .persona_manager
+      .set(persona.name())
+      .map_err(RuntimeError::Persona)?;
+    println!("Persona set to: {}", persona.name());
+    return Ok(());
+  }
+
   async fn handle_sessions_command(&mut self) -> RuntimeResult<()> {
     let sessions = self
       .session_manager
@@ -173,6 +210,26 @@ fn read_session_index(sessions: &[Session]) -> RuntimeResult<Option<i64>> {
     }
   };
   return Ok(Some(session_id));
+}
+
+fn read_persona_index(personas: &[Persona]) -> RuntimeResult<Option<usize>> {
+  let input = match read_from_stdin() {
+    Ok(input) => input,
+    Err(InputError::EmptyInput) => return Ok(None),
+    Err(e) => return Err(RuntimeError::Input(e.to_string())),
+  };
+  let index = match input.trim().parse::<usize>() {
+    Ok(index) => index,
+    Err(_) => {
+      println!("Invalid persona index: {input}");
+      return Ok(None);
+    }
+  };
+  if index >= personas.len() {
+    println!("No persona at index {index}.");
+    return Ok(None);
+  }
+  return Ok(Some(index));
 }
 
 fn print_session_messages(session: &Session) {
