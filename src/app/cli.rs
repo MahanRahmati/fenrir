@@ -5,7 +5,6 @@ use crate::app::{App, AppEvent};
 use crate::input::confirm_with;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
-use crate::persona_manager::Persona;
 use crate::session_manager::session::Session;
 use crate::slash_commands::{SlashCommand, parse_command};
 use crate::utils::datetime::format_timestamp;
@@ -125,20 +124,16 @@ impl App {
   fn handle_personas_command(&mut self) -> RuntimeResult<()> {
     let personas = self.persona_manager.list();
     let current_name = self.persona_manager.current().name();
-    for (index, persona) in personas.iter().enumerate() {
-      let marker = if persona.name() == current_name {
-        "*"
-      } else {
-        " "
-      };
-      println!(
-        "{marker}[{index}] {} - {}",
-        persona.name(),
-        persona.description()
-      );
-    }
+    let lines: Vec<String> = personas
+      .iter()
+      .map(|p| {
+        let marker = if p.name() == current_name { "*" } else { " " };
+        format!("{marker}{} - {}", p.name(), p.description())
+      })
+      .collect();
+    print_indexed_list(&lines);
     println!("Enter persona index to select (or empty to skip): ");
-    let Some(index) = read_persona_index(personas)? else {
+    let Some(index) = read_index(personas.len(), "persona")? else {
       return Ok(());
     };
     let persona = &personas[index];
@@ -161,21 +156,26 @@ impl App {
       println!("No sessions found.");
       return Ok(());
     }
-    for (index, session) in sessions.iter().enumerate() {
-      let marker = match current_session {
-        Some(current) if current.id == session.id => "*",
-        _ => " ",
-      };
-      println!(
-        "{marker}[{index}] {}  {}",
-        session.id,
-        format_timestamp(session.last_interaction)
-      );
-    }
+    let lines: Vec<String> = sessions
+      .iter()
+      .map(|session| {
+        let marker = match current_session {
+          Some(current) if current.id == session.id => "*",
+          _ => " ",
+        };
+        format!(
+          "{marker}{}  {}",
+          session.id,
+          format_timestamp(session.last_interaction)
+        )
+      })
+      .collect();
+    print_indexed_list(&lines);
     println!("Enter session index to switch to (or empty to skip): ");
-    let Some(session_id) = read_session_index(&sessions)? else {
+    let Some(index) = read_index(sessions.len(), "session")? else {
       return Ok(());
     };
+    let session_id = sessions[index].id;
     self
       .session_manager
       .load_session_from_db(session_id)
@@ -189,30 +189,13 @@ impl App {
   }
 }
 
-fn read_session_index(sessions: &[Session]) -> RuntimeResult<Option<i64>> {
-  let input = match read_from_stdin() {
-    Ok(input) => input,
-    Err(InputError::EmptyInput) => return Ok(None),
-    Err(e) => return Err(RuntimeError::Input(e.to_string())),
-  };
-  let index = match input.trim().parse::<usize>() {
-    Ok(index) => index,
-    Err(_) => {
-      println!("Invalid session index: {input}");
-      return Ok(None);
-    }
-  };
-  let session_id = match sessions.get(index) {
-    Some(session) => session.id,
-    None => {
-      println!("No session at index {index}.");
-      return Ok(None);
-    }
-  };
-  return Ok(Some(session_id));
+fn print_indexed_list(lines: &[String]) {
+  for (index, line) in lines.iter().enumerate() {
+    println!("[{index}] {line}");
+  }
 }
 
-fn read_persona_index(personas: &[Persona]) -> RuntimeResult<Option<usize>> {
+fn read_index(count: usize, name: &str) -> RuntimeResult<Option<usize>> {
   let input = match read_from_stdin() {
     Ok(input) => input,
     Err(InputError::EmptyInput) => return Ok(None),
@@ -221,12 +204,12 @@ fn read_persona_index(personas: &[Persona]) -> RuntimeResult<Option<usize>> {
   let index = match input.trim().parse::<usize>() {
     Ok(index) => index,
     Err(_) => {
-      println!("Invalid persona index: {input}");
+      println!("Invalid {name} index: {input}");
       return Ok(None);
     }
   };
-  if index >= personas.len() {
-    println!("No persona at index {index}.");
+  if index >= count {
+    println!("No {name} at index {index}.");
     return Ok(None);
   }
   return Ok(Some(index));

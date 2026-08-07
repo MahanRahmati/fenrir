@@ -6,6 +6,7 @@ mod message_item;
 mod messages_list;
 mod personas_popup;
 mod popup;
+mod popup_list;
 mod sessions_popup;
 mod statusline;
 
