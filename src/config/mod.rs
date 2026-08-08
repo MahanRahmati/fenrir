@@ -75,6 +75,7 @@ pub struct PermissionsConfig {
   pub list_directories: bool,
   pub project_context: bool,
   pub rust: bool,
+  pub go: bool,
   pub screenshot: bool,
   pub notify: bool,
 }
@@ -92,6 +93,7 @@ impl Default for PermissionsConfig {
       list_directories: true,
       project_context: true,
       rust: true,
+      go: true,
       screenshot: true,
       notify: true,
     };

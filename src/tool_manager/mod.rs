@@ -3,6 +3,7 @@ mod edit_file;
 mod errors;
 mod find_file;
 mod find_text;
+mod go;
 mod helpers;
 mod list_directories;
 mod notify;
@@ -24,6 +25,7 @@ use crate::tool_manager::edit_file::EditFileTool;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::find_file::FindFileTool;
 use crate::tool_manager::find_text::FindTextTool;
+use crate::tool_manager::go::GoTool;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
 use crate::tool_manager::notify::NotifyTool;
 use crate::tool_manager::project_context::ProjectContextTool;
@@ -47,7 +49,6 @@ impl ToolManager {
     let restrict_write_tools_to_cwd =
       config.general.restrict_write_tools_to_cwd;
     let mut tools: Vec<Box<dyn Tool>> = Vec::new();
-
     if config.permissions.datetime {
       tools.push(Box::new(DateTimeTool));
     }
@@ -77,6 +78,9 @@ impl ToolManager {
     }
     if config.permissions.rust {
       tools.push(Box::new(RustTool));
+    }
+    if config.permissions.go {
+      tools.push(Box::new(GoTool));
     }
     if config.permissions.screenshot {
       tools.push(Box::new(ScreenshotTool));
