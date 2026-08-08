@@ -5,10 +5,10 @@ mod queries;
 use chrono::Utc;
 use turso::{Database, Rows};
 
-use crate::config::DEFAULT_DIRECTORY;
 use crate::database::errors::{DatabaseError, DatabaseResult};
 use crate::database::migrations::list_migrations;
 use crate::database::queries::*;
+use crate::utils::xdg;
 
 const DEFAULT_DB_NAME: &str = "database.db";
 
@@ -18,10 +18,8 @@ pub struct DB {
 
 impl DB {
   pub async fn load() -> DatabaseResult<Self> {
-    let xdg_dirs = xdg::BaseDirectories::with_prefix(DEFAULT_DIRECTORY);
-    let db_path = xdg_dirs
-      .place_data_file(DEFAULT_DB_NAME)
-      .map_err(|e| DatabaseError::Initialization(e.to_string()))?;
+    let db_path = xdg::place_data_file(DEFAULT_DB_NAME)
+      .map_err(DatabaseError::Initialization)?;
     let db = turso::Builder::new_local(db_path.to_string_lossy().as_ref())
       .experimental_multiprocess_wal(true)
       .build()

@@ -2,10 +2,9 @@ pub mod errors;
 
 use std::path::PathBuf;
 
-use xdg::BaseDirectories;
-
 use crate::config::errors::{ConfigError, ConfigResult};
 use crate::files::operations;
+use crate::utils::xdg;
 
 pub const DEFAULT_DIRECTORY: &str = "fenrir";
 const DEFAULT_CONFIG_NAME: &str = "config.toml";
@@ -102,8 +101,7 @@ impl Default for PermissionsConfig {
 
 impl Config {
   pub async fn load() -> ConfigResult<Config> {
-    let xdg_dirs = BaseDirectories::with_prefix(DEFAULT_DIRECTORY);
-    let config_path = match xdg_dirs.find_config_file(DEFAULT_CONFIG_NAME) {
+    let config_path = match xdg::find_config_file(DEFAULT_CONFIG_NAME) {
       Some(path) => path,
       None => {
         let default_config = Config::default();
@@ -124,10 +122,8 @@ impl Config {
       }
     }
     let default_config = Config::default();
-    let xdg_dirs = BaseDirectories::with_prefix(DEFAULT_DIRECTORY);
-    let config_path = xdg_dirs
-      .place_config_file(DEFAULT_CONFIG_NAME)
-      .map_err(|e| ConfigError::FileRead(e.to_string()))?;
+    let config_path = xdg::place_config_file(DEFAULT_CONFIG_NAME)
+      .map_err(ConfigError::FileRead)?;
     return Config::save_to_path(default_config, config_path).await;
   }
 
