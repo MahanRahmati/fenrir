@@ -3,15 +3,14 @@ use std::time::{Duration, Instant, SystemTime};
 
 use chrono::Local;
 use tokio::time;
-use xdg::BaseDirectories;
 
 use crate::capability::errors::*;
-use crate::config::DEFAULT_DIRECTORY;
 use crate::files::operations::{
   copy_file, create_directory_all, get_file_size, get_modified_time, read_dir,
   remove_file,
 };
 use crate::utils::process;
+use crate::utils::xdg;
 
 const SCREENSHOT_ARGS: &[&str] = &[
   "--session",
@@ -67,6 +66,11 @@ pub async fn screenshot(path: Option<String>) -> CapabilityErrorResult<String> {
       reason: format!("Cannot determine save location: {e}"),
     })?,
   };
+  let destination = resolve_destination(destination).await.map_err(|e| {
+    CapabilityError::Screenshot {
+      reason: format!("Cannot determine save location: {e}"),
+    }
+  })?;
 
   if let Some(parent) = Path::new(&destination).parent()
     && let Some(parent_str) = parent.as_os_str().to_str()
@@ -110,7 +114,32 @@ pub async fn screenshot(path: Option<String>) -> CapabilityErrorResult<String> {
       }
     })?;
 
-  return Ok(format!("Screenshot saved to '{destination}'"));
+  return Ok(destination);
+}
+
+async fn resolve_destination(destination: String) -> Result<String, String> {
+  let path = Path::new(&destination);
+  if path.is_dir()
+    || destination.ends_with(std::path::MAIN_SEPARATOR)
+    || path.extension().is_none()
+  {
+    let dir = destination.trim_end_matches(std::path::MAIN_SEPARATOR);
+    create_directory_all(dir)
+      .await
+      .map_err(|e| format!("Cannot create directory '{dir}': {e}"))?;
+    return Ok(
+      Path::new(dir)
+        .join(timestamped_name("screenshot"))
+        .to_string_lossy()
+        .to_string(),
+    );
+  }
+  return Ok(destination);
+}
+
+fn timestamped_name(prefix: &str) -> String {
+  let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
+  return format!("{prefix}_{timestamp}.png");
 }
 
 fn picture_dirs() -> Vec<PathBuf> {
@@ -125,15 +154,11 @@ fn picture_dirs() -> Vec<PathBuf> {
 }
 
 fn default_destination() -> Result<String, String> {
-  let xdg_dirs = BaseDirectories::with_prefix(DEFAULT_DIRECTORY);
-  let data_home = xdg_dirs
-    .get_data_home()
-    .ok_or_else(|| "cannot determine the data home directory".to_string())?;
+  let data_home = xdg::data_home()?;
   let dir = data_home.join("screenshots");
-  let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
   return Ok(
     dir
-      .join(format!("screenshot_{timestamp}.png"))
+      .join(timestamped_name("screenshot"))
       .to_string_lossy()
       .to_string(),
   );

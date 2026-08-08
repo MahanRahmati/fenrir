@@ -32,11 +32,12 @@ impl Tool for ScreenshotTool {
 
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_optional_param::<String>(&params, "screenshot", "path");
-    return screenshot::screenshot(path).await.map_err(|e| {
+    let destination = screenshot::screenshot(path).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
         name: "screenshot".to_string(),
-        reason: format!("Failed to take screenshot: {e}."),
+        reason: e.to_string(),
       }
-    });
+    })?;
+    return Ok(format!("Screenshot saved to '{destination}'"));
   }
 }
