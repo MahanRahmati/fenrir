@@ -1,4 +1,5 @@
 mod app;
+mod capability;
 mod cli;
 mod config;
 mod database;
