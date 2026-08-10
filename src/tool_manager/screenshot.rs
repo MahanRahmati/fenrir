@@ -1,5 +1,4 @@
 use crate::capability::screenshot;
-
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::get_optional_param;
 use crate::tool_manager::tool::{Tool, ToolParams};

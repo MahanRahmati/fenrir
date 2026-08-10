@@ -1,3 +1,4 @@
+mod control_keyboard;
 mod datetime;
 mod edit_file;
 mod errors;
@@ -20,6 +21,7 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::config::Config;
+use crate::tool_manager::control_keyboard::ControlKeyboardTool;
 use crate::tool_manager::datetime::DateTimeTool;
 use crate::tool_manager::edit_file::EditFileTool;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
@@ -87,6 +89,9 @@ impl ToolManager {
     }
     if config.permissions.notify {
       tools.push(Box::new(NotifyTool));
+    }
+    if config.permissions.control_keyboard {
+      tools.push(Box::new(ControlKeyboardTool));
     }
     return Self {
       tools,
