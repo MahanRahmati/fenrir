@@ -217,55 +217,10 @@ impl OpenAICompatibleProvider {
 
       let content = if msg.content.is_empty() {
         None
-      } else if msg.role != "user" {
+      } else if msg.role != "user" && msg.role != "tool" {
         Some(ChatContent::Text(msg.content.clone()))
       } else {
-        let paths = extract_paths(&msg.content);
-        if paths.is_empty() {
-          Some(ChatContent::Text(msg.content.clone()))
-        } else {
-          let mut parts = vec![ContentPart::Text {
-            text: msg.content.clone(),
-          }];
-          for path in paths {
-            let kind = classify_path(&path).ok_or_else(|| {
-              ProviderManagerError::ProviderError(format!(
-                "Cannot attach '{path}': unsupported file (no extension)"
-              ))
-            })?;
-            match kind {
-              PathKind::Image => {
-                let bytes = read_bytes(&path).await.map_err(|e| {
-                  ProviderManagerError::ProviderError(format!(
-                    "Cannot attach '@{path}': {e}"
-                  ))
-                })?;
-                let mime = mime_type(&path).ok_or_else(|| {
-                  ProviderManagerError::ProviderError(format!(
-                    "Cannot attach '@{path}': unsupported image type"
-                  ))
-                })?;
-                let encoded = STANDARD.encode(&bytes);
-                parts.push(ContentPart::ImageUrl {
-                  image_url: ImageUrlPart {
-                    url: format!("data:{mime};base64,{encoded}"),
-                  },
-                });
-              }
-              PathKind::Text => {
-                let contents = read_to_string(&path).await.map_err(|e| {
-                  ProviderManagerError::ProviderError(format!(
-                    "Cannot attach '@{path}': {e}"
-                  ))
-                })?;
-                parts.push(ContentPart::Text {
-                  text: format!("@{path}:\n{contents}"),
-                });
-              }
-            }
-          }
-          Some(ChatContent::Parts(parts))
-        }
+        Some(build_content_parts(&msg.content, msg.role == "user").await?)
       };
 
       let tool_calls = msg.tool_calls.as_ref().map(|calls| {
@@ -318,6 +273,78 @@ impl OpenAICompatibleProvider {
 
     return Ok(request);
   }
+}
+
+async fn build_content_parts(
+  content: &str,
+  strict: bool,
+) -> ProviderManagerResult<ChatContent> {
+  let paths = extract_paths(content);
+  if paths.is_empty() {
+    return Ok(ChatContent::Text(content.to_string()));
+  }
+  let mut parts = vec![ContentPart::Text {
+    text: content.to_string(),
+  }];
+  for path in paths {
+    let kind = match classify_path(&path) {
+      Some(kind) => kind,
+      None => {
+        if strict {
+          return Err(ProviderManagerError::ProviderError(format!(
+            "Cannot attach '{path}': unsupported file (no extension)"
+          )));
+        }
+        continue;
+      }
+    };
+    match kind {
+      PathKind::Image => {
+        let bytes = match read_bytes(&path).await {
+          Ok(bytes) => bytes,
+          Err(e) => {
+            if strict {
+              return Err(ProviderManagerError::ProviderError(format!(
+                "Cannot attach '@{path}': {e}"
+              )));
+            }
+            continue;
+          }
+        };
+        let Some(mime) = mime_type(&path) else {
+          if strict {
+            return Err(ProviderManagerError::ProviderError(format!(
+              "Cannot attach '@{path}': unsupported image type"
+            )));
+          }
+          continue;
+        };
+        let encoded = STANDARD.encode(&bytes);
+        parts.push(ContentPart::ImageUrl {
+          image_url: ImageUrlPart {
+            url: format!("data:{mime};base64,{encoded}"),
+          },
+        });
+      }
+      PathKind::Text => {
+        let contents = match read_to_string(&path).await {
+          Ok(contents) => contents,
+          Err(e) => {
+            if strict {
+              return Err(ProviderManagerError::ProviderError(format!(
+                "Cannot attach '@{path}': {e}"
+              )));
+            }
+            continue;
+          }
+        };
+        parts.push(ContentPart::Text {
+          text: format!("@{path}:\n{contents}"),
+        });
+      }
+    }
+  }
+  return Ok(ChatContent::Parts(parts));
 }
 
 fn parse_sse_chunk(
