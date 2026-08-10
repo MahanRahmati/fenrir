@@ -7,7 +7,7 @@ pub struct DateTimeTool;
 #[async_trait::async_trait]
 impl Tool for DateTimeTool {
   fn name(&self) -> &str {
-    return "Date Time";
+    return "date_time";
   }
 
   fn description(&self) -> &str {
