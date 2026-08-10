@@ -39,11 +39,11 @@ pub async fn press_key_on_keyboard(key: &str) -> CapabilityErrorResult<String> {
 
 fn key_combination(key: &str) -> CapabilityErrorResult<Vec<i32>> {
   let mut codes = Vec::new();
-  for part in key.split('+').map(|p| p.trim()) {
+  for part in key.split('+').map(|p| p.trim().to_ascii_lowercase()) {
     if part.is_empty() {
       continue;
     }
-    if let Some(key) = Key::from_name(part) {
+    if let Some(key) = Key::from_name(&part) {
       codes.push(key.evdev_code());
       continue;
     }
@@ -210,8 +210,8 @@ impl Key {
 
 fn char_evdev_code(c: char) -> Option<(i32, bool)> {
   return match c {
-    'a'..='z' => Some((30 + (c as i32 - 'a' as i32), false)),
-    'A'..='Z' => Some((30 + (c as i32 - 'A' as i32), true)),
+    'a'..='z' => Some((letter_evdev_code(c)?, false)),
+    'A'..='Z' => Some((letter_evdev_code(c)?, true)),
     '1'..='9' => Some((2 + (c as i32 - '1' as i32), false)),
     '0' => Some((11, false)),
     ' ' => Some((57, false)),
@@ -247,6 +247,38 @@ fn char_evdev_code(c: char) -> Option<(i32, bool)> {
     '<' => Some((51, true)),
     '>' => Some((52, true)),
     '?' => Some((53, true)),
+    _ => None,
+  };
+}
+
+fn letter_evdev_code(c: char) -> Option<i32> {
+  return match c.to_ascii_lowercase() {
+    'a' => Some(30),
+    'b' => Some(48),
+    'c' => Some(46),
+    'd' => Some(32),
+    'e' => Some(18),
+    'f' => Some(33),
+    'g' => Some(34),
+    'h' => Some(35),
+    'i' => Some(23),
+    'j' => Some(36),
+    'k' => Some(37),
+    'l' => Some(38),
+    'm' => Some(50),
+    'n' => Some(49),
+    'o' => Some(24),
+    'p' => Some(25),
+    'q' => Some(16),
+    'r' => Some(19),
+    's' => Some(31),
+    't' => Some(20),
+    'u' => Some(22),
+    'v' => Some(47),
+    'w' => Some(17),
+    'x' => Some(45),
+    'y' => Some(21),
+    'z' => Some(44),
     _ => None,
   };
 }
