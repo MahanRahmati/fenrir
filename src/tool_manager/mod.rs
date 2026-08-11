@@ -1,3 +1,4 @@
+mod browser;
 mod control_keyboard;
 mod datetime;
 mod edit_file;
@@ -22,6 +23,7 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::config::Config;
+use crate::tool_manager::browser::BrowserTool;
 use crate::tool_manager::control_keyboard::ControlKeyboardTool;
 use crate::tool_manager::datetime::DateTimeTool;
 use crate::tool_manager::edit_file::EditFileTool;
@@ -97,6 +99,9 @@ impl ToolManager {
     }
     if config.permissions.music {
       tools.push(Box::new(MusicTool));
+    }
+    if config.permissions.browser {
+      tools.push(Box::new(BrowserTool));
     }
     return Self {
       tools,
