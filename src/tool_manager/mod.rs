@@ -7,6 +7,7 @@ mod find_text;
 mod go;
 mod helpers;
 mod list_directories;
+mod music;
 mod notify;
 mod project_context;
 mod read_file;
@@ -29,6 +30,7 @@ use crate::tool_manager::find_file::FindFileTool;
 use crate::tool_manager::find_text::FindTextTool;
 use crate::tool_manager::go::GoTool;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
+use crate::tool_manager::music::MusicTool;
 use crate::tool_manager::notify::NotifyTool;
 use crate::tool_manager::project_context::ProjectContextTool;
 use crate::tool_manager::read_file::ReadFileTool;
@@ -92,6 +94,9 @@ impl ToolManager {
     }
     if config.permissions.control_keyboard {
       tools.push(Box::new(ControlKeyboardTool));
+    }
+    if config.permissions.music {
+      tools.push(Box::new(MusicTool));
     }
     return Self {
       tools,

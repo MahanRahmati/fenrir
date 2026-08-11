@@ -78,6 +78,7 @@ pub struct PermissionsConfig {
   pub screenshot: bool,
   pub notify: bool,
   pub control_keyboard: bool,
+  pub music: bool,
 }
 
 impl Default for PermissionsConfig {
@@ -97,6 +98,7 @@ impl Default for PermissionsConfig {
       screenshot: true,
       notify: true,
       control_keyboard: true,
+      music: true,
     };
   }
 }
