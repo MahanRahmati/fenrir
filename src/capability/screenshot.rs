@@ -27,7 +27,14 @@ const POLL_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const STABILITY_INTERVAL: Duration = Duration::from_millis(300);
 
-pub async fn screenshot(path: Option<String>) -> CapabilityErrorResult<String> {
+pub async fn screenshot(
+  path: Option<String>,
+  delay: Option<u64>,
+) -> CapabilityErrorResult<String> {
+  if let Some(delay) = delay {
+    time::sleep(Duration::from_secs(delay)).await;
+  }
+
   let dirs = picture_dirs();
   let snapshot = existing_pngs(&dirs).await;
   let call_start = SystemTime::now();

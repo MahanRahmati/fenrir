@@ -12,7 +12,7 @@ impl Tool for ScreenshotTool {
   }
 
   fn description(&self) -> &str {
-    return "Take a full-screen screenshot and save it to a file. Returns the path of the saved screenshot.";
+    return "Take a full-screen screenshot and save it to a file. Returns the path of the saved screenshot. Optionally wait a number of seconds before taking it.";
   }
 
   fn parameters(&self) -> serde_json::Value {
@@ -20,6 +20,7 @@ impl Tool for ScreenshotTool {
       "type": "object",
       "properties": {
         "path": {"type": "string", "description": "Where to save the screenshot. Defaults to a file in the fenrir data directory."},
+        "delay": {"type": "string", "description": "Number of seconds to wait before taking the screenshot, e.g. '5'"},
       },
       "required": [],
     });
@@ -31,12 +32,14 @@ impl Tool for ScreenshotTool {
 
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_optional_param::<String>(&params, "screenshot", "path");
-    let destination = screenshot::screenshot(path).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: "screenshot".to_string(),
-        reason: e.to_string(),
-      }
-    })?;
+    let delay = get_optional_param::<u64>(&params, "screenshot", "delay");
+    let destination =
+      screenshot::screenshot(path, delay).await.map_err(|e| {
+        ToolManagerError::ExecutionFailed {
+          name: "screenshot".to_string(),
+          reason: e.to_string(),
+        }
+      })?;
     return Ok(format!("Screenshot saved to '{destination}'"));
   }
 }
