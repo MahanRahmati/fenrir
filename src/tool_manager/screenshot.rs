@@ -40,6 +40,6 @@ impl Tool for ScreenshotTool {
           reason: e.to_string(),
         }
       })?;
-    return Ok(format!("Screenshot saved to '{destination}'"));
+    return Ok(format!("Screenshot saved to @{destination}"));
   }
 }
