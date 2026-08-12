@@ -7,6 +7,9 @@ pub enum CapabilityError {
 
   #[error("Failed to control the keyboard: {reason}.")]
   Keyboard { reason: String },
+
+  #[error("Failed to query or control a window: {reason}.")]
+  Window { reason: String },
 }
 
 pub type CapabilityErrorResult<T> = Result<T, CapabilityError>;

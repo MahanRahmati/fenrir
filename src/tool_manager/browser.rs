@@ -1,5 +1,6 @@
+use crate::capability::window;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
-use crate::tool_manager::helpers::get_param;
+use crate::tool_manager::helpers::{get_optional_param, get_param};
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::process;
 
@@ -12,7 +13,7 @@ impl Tool for BrowserTool {
   }
 
   fn description(&self) -> &str {
-    return "Control the web browser";
+    return "Control the web browser. Opens URLs in the default browser application and focuses its window";
   }
 
   fn parameters(&self) -> serde_json::Value {
@@ -21,11 +22,15 @@ impl Tool for BrowserTool {
       "properties": {
         "action": {
           "type": "string",
-          "description": "Action: open_url (open a URL in the browser)",
+          "description": "Action: open_url (open a URL in the default browser and focus the browser window)",
         },
         "url": {
           "type": "string",
           "description": "For open_url: the URL to open",
+        },
+        "focus_delay": {
+          "type": "string",
+          "description": "For open_url: number of seconds to wait before focusing the browser window, e.g. '5'",
         },
       },
       "required": ["action"],
@@ -42,6 +47,10 @@ impl Tool for BrowserTool {
     match action.as_str() {
       "open_url" => {
         let url = get_param::<String>(&params, "browser", "url")?;
+        let focus_delay =
+          get_optional_param::<u64>(&params, "browser", "focus_delay");
+
+        let window_ids = get_window_ids().await?;
 
         let output = process::run("xdg-open", &[&url]).await.map_err(|e| {
           ToolManagerError::ExecutionFailed {
@@ -63,7 +72,10 @@ impl Tool for BrowserTool {
           });
         }
 
-        return Ok(format!("Opened {url} in the default browser"));
+        let focus_note =
+          focus_new_browser_window(&window_ids, focus_delay).await?;
+
+        return Ok(format!("Opened {url} in the default browser{focus_note}"));
       }
       _ => {
         return Err(ToolManagerError::ExecutionFailed {
@@ -72,5 +84,31 @@ impl Tool for BrowserTool {
         });
       }
     }
+  }
+}
+
+async fn get_window_ids() -> ToolManagerResult<Vec<String>> {
+  let window_ids = window::window_ids().await.map_err(|e| {
+    ToolManagerError::ExecutionFailed {
+      name: "browser".to_string(),
+      reason: e.to_string(),
+    }
+  })?;
+  return Ok(window_ids);
+}
+
+async fn focus_new_browser_window(
+  before_ids: &[String],
+  focus_delay: Option<u64>,
+) -> ToolManagerResult<String> {
+  match window::activate_window(before_ids, focus_delay).await {
+    Ok(_) => match window::active_window().await {
+      Ok(info) => Ok(format!(" and focused the browser window: {info}")),
+      Err(_) => Ok(" and focused the browser window".to_string()),
+    },
+    Err(e) => Err(ToolManagerError::ExecutionFailed {
+      name: "browser".to_string(),
+      reason: format!("Browser window could not be focused: {e}"),
+    }),
   }
 }
