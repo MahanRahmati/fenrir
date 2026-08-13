@@ -9,6 +9,7 @@ use crate::files::operations::{
   copy_file, create_directory_all, get_file_size, get_modified_time, read_dir,
   remove_file,
 };
+use crate::utils::image::optimize_image;
 use crate::utils::process;
 use crate::utils::sleep::poll;
 use crate::utils::xdg;
@@ -114,7 +115,7 @@ pub async fn screenshot(
     });
   }
 
-  let destination = optimize_png(&destination).await;
+  let destination = optimize_image(&destination).await;
 
   remove_file(&source.to_string_lossy()).await.map_err(|e| {
       CapabilityError::Screenshot {
@@ -225,38 +226,5 @@ async fn is_stable(path: &Path) -> bool {
   return match (first, second) {
     (Some(first), Some(second)) => first == second && first > 0,
     _ => false,
-  };
-}
-
-async fn optimize_png(path: &str) -> String {
-  let jpeg_path = jpeg_path_for(path);
-  let output = process::run(
-    "magick",
-    &[
-      path,
-      "-background",
-      "white",
-      "-alpha",
-      "remove",
-      "-quality",
-      "85",
-      jpeg_path.as_str(),
-    ],
-  )
-  .await;
-  if let Ok(output) = output
-    && output.exit_code.is_success()
-  {
-    let _ = remove_file(path).await;
-    return jpeg_path;
-  }
-  let _ = process::run("optipng", &["-quiet", "-o2", path]).await;
-  return path.to_string();
-}
-
-fn jpeg_path_for(path: &str) -> String {
-  return match path.rsplit_once('.') {
-    Some((stem, _)) => format!("{stem}.jpg"),
-    None => format!("{path}.jpg"),
   };
 }
