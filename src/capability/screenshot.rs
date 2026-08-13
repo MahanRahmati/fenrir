@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use chrono::Local;
 use tokio::time;
@@ -10,6 +10,7 @@ use crate::files::operations::{
   remove_file,
 };
 use crate::utils::process;
+use crate::utils::sleep::poll;
 use crate::utils::xdg;
 
 const SCREENSHOT_ARGS: &[&str] = &[
@@ -192,24 +193,29 @@ async fn wait_for_new_png(
   snapshot: &[PathBuf],
   start: SystemTime,
 ) -> Option<PathBuf> {
-  let deadline = Instant::now() + POLL_TIMEOUT;
-  loop {
-    for path in existing_pngs(dirs).await {
-      if snapshot.contains(&path) {
-        continue;
-      }
-      let modified = get_modified_time(&path.to_string_lossy())
-        .await
-        .unwrap_or(start);
-      if modified >= start && is_stable(&path).await {
-        return Some(path);
-      }
+  return poll(POLL_TIMEOUT, POLL_INTERVAL, || {
+    newest_png(dirs, snapshot, start)
+  })
+  .await;
+}
+
+async fn newest_png(
+  dirs: &[PathBuf],
+  snapshot: &[PathBuf],
+  start: SystemTime,
+) -> Option<PathBuf> {
+  for path in existing_pngs(dirs).await {
+    if snapshot.contains(&path) {
+      continue;
     }
-    if Instant::now() >= deadline {
-      return None;
+    let modified = get_modified_time(&path.to_string_lossy())
+      .await
+      .unwrap_or(start);
+    if modified >= start && is_stable(&path).await {
+      return Some(path);
     }
-    time::sleep(POLL_INTERVAL).await;
   }
+  return None;
 }
 
 async fn is_stable(path: &Path) -> bool {
