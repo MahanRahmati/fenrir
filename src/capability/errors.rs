@@ -13,6 +13,9 @@ pub enum CapabilityError {
 
   #[error("Failed to control the browser: {reason}.")]
   Browser { reason: String },
+
+  #[error("Failed to process the PDF: {reason}.")]
+  Pdf { reason: String },
 }
 
 pub type CapabilityErrorResult<T> = Result<T, CapabilityError>;

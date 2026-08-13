@@ -5,9 +5,12 @@ use futures::{StreamExt, future};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::capability::pdf;
 use crate::config::ProviderModel;
 use crate::files::operations::{read_bytes, read_to_string};
-use crate::mentions::{PathKind, classify_path, extract_paths, mime_type};
+use crate::mentions::{
+  PathKind, classify_path, extract_paths, mime_type, strip_mentions,
+};
 use crate::network::HttpClient;
 use crate::network::sse::SSEChunk;
 use crate::provider_manager::errors::{
@@ -283,9 +286,11 @@ async fn build_content_parts(
   if paths.is_empty() {
     return Ok(ChatContent::Text(content.to_string()));
   }
-  let mut parts = vec![ContentPart::Text {
-    text: content.to_string(),
-  }];
+  let text = strip_mentions(content);
+  let mut parts = Vec::new();
+  if !text.trim().is_empty() {
+    parts.push(ContentPart::Text { text });
+  }
   for path in paths {
     let kind = match classify_path(&path) {
       Some(kind) => kind,
@@ -320,6 +325,9 @@ async fn build_content_parts(
           continue;
         };
         let encoded = STANDARD.encode(&bytes);
+        parts.push(ContentPart::Text {
+          text: format!("@{path} (attached as image below)"),
+        });
         parts.push(ContentPart::ImageUrl {
           image_url: ImageUrlPart {
             url: format!("data:{mime};base64,{encoded}"),
@@ -340,6 +348,25 @@ async fn build_content_parts(
         };
         parts.push(ContentPart::Text {
           text: format!("@{path}:\n{contents}"),
+        });
+      }
+      PathKind::Pdf => {
+        let info = match pdf::pdf_info(&path).await {
+          Ok(info) => info,
+          Err(e) => {
+            if strict {
+              return Err(ProviderManagerError::ProviderError(format!(
+                "Cannot inspect '@{path}': {e}"
+              )));
+            }
+            continue;
+          }
+        };
+        parts.push(ContentPart::Text {
+          text: format!(
+            "@{path} ({} pages, {}). Pages are not attached — use the read_pdf tool with the path (without the @ symbol) and a 1-based page number to view any page as an image.",
+            info.pages, info.file_size
+          ),
         });
       }
     }

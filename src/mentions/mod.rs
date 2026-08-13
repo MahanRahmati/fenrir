@@ -3,6 +3,7 @@ const PUNCTUATION: &[char] = &[',', ';', '.', '?', '!', ')', ']', '}'];
 pub enum PathKind {
   Image,
   Text,
+  Pdf,
 }
 
 pub fn extract_paths(content: &str) -> Vec<String> {
@@ -38,6 +39,7 @@ pub fn classify_path(path: &str) -> Option<PathKind> {
 
   return match extension.to_ascii_lowercase().as_str() {
     "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" => Some(PathKind::Image),
+    "pdf" => Some(PathKind::Pdf),
     _ => Some(PathKind::Text),
   };
 }

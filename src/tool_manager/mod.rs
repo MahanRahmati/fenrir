@@ -12,6 +12,7 @@ mod music;
 mod notify;
 mod project_context;
 mod read_file;
+mod read_pdf;
 mod remove_file;
 mod rust;
 mod screenshot;
@@ -36,6 +37,7 @@ use crate::tool_manager::music::MusicTool;
 use crate::tool_manager::notify::NotifyTool;
 use crate::tool_manager::project_context::ProjectContextTool;
 use crate::tool_manager::read_file::ReadFileTool;
+use crate::tool_manager::read_pdf::ReadPdfTool;
 use crate::tool_manager::remove_file::RemoveFileTool;
 use crate::tool_manager::rust::RustTool;
 use crate::tool_manager::screenshot::ScreenshotTool;
@@ -60,6 +62,9 @@ impl ToolManager {
     }
     if config.permissions.read_file {
       tools.push(Box::new(ReadFileTool));
+    }
+    if config.permissions.read_pdf {
+      tools.push(Box::new(ReadPdfTool));
     }
     if config.permissions.write_file {
       tools.push(Box::new(WriteFileTool));

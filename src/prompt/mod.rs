@@ -9,6 +9,7 @@ const VERIFY: &str = "After making changes, use available tools to verify they w
 const CWD_RESTRICTED: &str = "Tools are restricted to the current working directory. Always use paths within the current directory; paths outside the current working directory are blocked.";
 const CONCISE: &str = "Be concise and direct.";
 const PATHS: &str = "Show file paths clearly when working with files.";
+const MENTIONS: &str = "Files mentioned with @path are automatically attached to the message (as text, or as an image). Never use read_file on an attached file.";
 
 pub struct Prompt {
   system_prompt: String,
@@ -46,6 +47,7 @@ impl Prompt {
     guidelines.push(VERIFY);
     guidelines.push(CONCISE);
     guidelines.push(PATHS);
+    guidelines.push(MENTIONS);
 
     let guidelines_list = guidelines
       .iter()
