@@ -9,6 +9,7 @@ use futures::StreamExt;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
 use crate::database::DB;
+use crate::mentions::strip_mentions;
 use crate::persona_manager::PersonaManager;
 use crate::persona_manager::TITLES_PERSONA;
 use crate::prompt::Prompt;
@@ -122,6 +123,7 @@ impl App {
       .iter()
       .find(|m| m.role == "user")
       .map(|m| m.content.clone())
+      .map(|content| strip_mentions(&content))
       .unwrap_or_default();
     if first_message.is_empty() {
       return Ok(());

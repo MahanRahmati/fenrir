@@ -22,6 +22,14 @@ pub fn extract_paths(content: &str) -> Vec<String> {
   return paths;
 }
 
+pub fn strip_mentions(content: &str) -> String {
+  return content
+    .split_whitespace()
+    .filter(|token| !token.starts_with('@'))
+    .collect::<Vec<_>>()
+    .join(" ");
+}
+
 pub fn classify_path(path: &str) -> Option<PathKind> {
   let extension = match path.rsplit_once('.') {
     Some((_, extension)) if !extension.is_empty() => extension,
