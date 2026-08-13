@@ -1,10 +1,13 @@
 use crate::capability::window;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
-use crate::tool_manager::helpers::{get_optional_param, get_param};
+use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::process;
+use crate::utils::sleep::delay;
 
 pub struct BrowserTool;
+
+const DEFAULT_FOCUS_DELAY: u64 = 5;
 
 #[async_trait::async_trait]
 impl Tool for BrowserTool {
@@ -28,10 +31,6 @@ impl Tool for BrowserTool {
           "type": "string",
           "description": "For open_url: the URL to open",
         },
-        "focus_delay": {
-          "type": "string",
-          "description": "For open_url: number of seconds to wait before focusing the browser window, e.g. '5'",
-        },
       },
       "required": ["action"],
     });
@@ -47,10 +46,6 @@ impl Tool for BrowserTool {
     match action.as_str() {
       "open_url" => {
         let url = get_param::<String>(&params, "browser", "url")?;
-        let focus_delay =
-          get_optional_param::<u64>(&params, "browser", "focus_delay");
-
-        let window_ids = get_window_ids().await?;
 
         let output = process::run("xdg-open", &[&url]).await.map_err(|e| {
           ToolManagerError::ExecutionFailed {
@@ -72,10 +67,17 @@ impl Tool for BrowserTool {
           });
         }
 
-        let focus_note =
-          focus_new_browser_window(&window_ids, focus_delay).await?;
+        delay(Some(DEFAULT_FOCUS_DELAY)).await;
+        let browser_id = get_browser_window_id().await?;
+        let id =
+          window::focus_window(&browser_id, None).await.map_err(|e| {
+            ToolManagerError::ExecutionFailed {
+              name: "browser".to_string(),
+              reason: format!("Browser window could not be focused: {e}"),
+            }
+          })?;
 
-        return Ok(format!("Opened {url} in the default browser{focus_note}"));
+        return Ok(format!("Opened {url} in the default browser{id}"));
       }
       _ => {
         return Err(ToolManagerError::ExecutionFailed {
@@ -87,6 +89,43 @@ impl Tool for BrowserTool {
   }
 }
 
+async fn get_browser_window_id() -> ToolManagerResult<String> {
+  let window_ids = get_window_ids().await?;
+  if window_ids.is_empty() {
+    return Err(ToolManagerError::ExecutionFailed {
+      name: "browser".to_string(),
+      reason: "No open windows found".to_string(),
+    });
+  }
+
+  for window_id in &window_ids {
+    let class = window::window_class(window_id).await;
+    let Ok(class) = class else {
+      continue;
+    };
+    if is_browser_class(&class) {
+      return Ok(window_id.to_string());
+    }
+  }
+
+  return Err(ToolManagerError::ExecutionFailed {
+    name: "browser".to_string(),
+    reason: "No open browser windows found".to_string(),
+  });
+}
+
+fn is_browser_class(class: &str) -> bool {
+  const BROWSERS: &[&str] = &[
+    "helium",
+    "chromium",
+    "chrome",
+    "brave",
+    "firefox",
+    "librewolf",
+  ];
+  return BROWSERS.iter().any(|browser| class.contains(browser));
+}
+
 async fn get_window_ids() -> ToolManagerResult<Vec<String>> {
   let window_ids = window::window_ids().await.map_err(|e| {
     ToolManagerError::ExecutionFailed {
@@ -95,20 +134,4 @@ async fn get_window_ids() -> ToolManagerResult<Vec<String>> {
     }
   })?;
   return Ok(window_ids);
-}
-
-async fn focus_new_browser_window(
-  before_ids: &[String],
-  focus_delay: Option<u64>,
-) -> ToolManagerResult<String> {
-  match window::activate_window(before_ids, focus_delay).await {
-    Ok(_) => match window::active_window().await {
-      Ok(info) => Ok(format!(" and focused the browser window: {info}")),
-      Err(_) => Ok(" and focused the browser window".to_string()),
-    },
-    Err(e) => Err(ToolManagerError::ExecutionFailed {
-      name: "browser".to_string(),
-      reason: format!("Browser window could not be focused: {e}"),
-    }),
-  }
 }
