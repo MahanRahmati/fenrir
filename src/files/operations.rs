@@ -58,6 +58,12 @@ pub async fn copy_file(from_path: &str, to_path: &str) -> FileResult<()> {
     .map(|_| ());
 }
 
+pub async fn rename_file(from_path: &str, to_path: &str) -> FileResult<()> {
+  return tokio::fs::rename(from_path, to_path)
+    .await
+    .map_err(|e| FileError::FileRename(e.to_string()));
+}
+
 pub async fn get_modified_time(
   file_path: &str,
 ) -> FileResult<std::time::SystemTime> {
