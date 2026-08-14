@@ -166,7 +166,9 @@ impl Tui {
       if self.confirm_popup.handle_input(key.code) {
         return None;
       }
-      self.help_popup.handle_input();
+      if self.help_popup.handle_input(key.code) {
+        return None;
+      }
       if self.sessions_popup.handle_input(key.code) {
         return None;
       }

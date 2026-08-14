@@ -147,8 +147,9 @@ impl CompletionPopup {
       return;
     }
 
-    let height =
-      (self.candidates.len().min(MAX_POPUP_HEIGHT) as u16).saturating_add(4);
+    let height = (self.candidates.len().min(MAX_POPUP_HEIGHT) as u16)
+      .saturating_add(4)
+      .min(input_area.y);
     let popup_area = Rect::new(
       input_area.x,
       input_area.y.saturating_sub(height),

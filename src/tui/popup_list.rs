@@ -6,7 +6,9 @@ use ratatui::widgets::{
   List, ListItem, ListState, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
 
-use crate::tui::popup::{Popup, constrained_width};
+use crate::tui::popup::{Popup, constrained_height, constrained_width};
+
+const MAX_VISIBLE_ITEMS: u16 = 10;
 
 pub struct PopupList {
   popup: Popup,
@@ -32,9 +34,11 @@ impl PopupList {
     F: FnOnce(usize) -> Vec<ListItem<'static>>,
   {
     let area = frame.area();
+    let popup_height =
+      constrained_height(self.item_count as u16, MAX_VISIBLE_ITEMS) + 4;
     let popup_area = area.centered(
       Constraint::Length(constrained_width(area.width)),
-      Constraint::Percentage(30),
+      Constraint::Length(popup_height.min(area.height)),
     );
 
     if let Some(list_area) = self.popup.draw_header(frame, title, popup_area) {
@@ -42,15 +46,17 @@ impl PopupList {
       let list = List::new(items).highlight_style(Style::default().reversed());
       frame.render_stateful_widget(list, list_area, &mut self.list_state);
 
-      let mut scrollbar_state =
-        ScrollbarState::new(self.item_count).position(self.item_index);
-      frame.render_stateful_widget(
-        Scrollbar::new(ScrollbarOrientation::VerticalRight)
-          .begin_symbol(None)
-          .end_symbol(None),
-        list_area,
-        &mut scrollbar_state,
-      );
+      if self.item_count > MAX_VISIBLE_ITEMS as usize {
+        let mut scrollbar_state =
+          ScrollbarState::new(self.item_count).position(self.item_index);
+        frame.render_stateful_widget(
+          Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None),
+          list_area,
+          &mut scrollbar_state,
+        );
+      }
     }
   }
 

@@ -7,6 +7,10 @@ pub fn constrained_width(screen_width: u16) -> u16 {
   return screen_width.saturating_mul(50).saturating_div(100).min(80);
 }
 
+pub fn constrained_height(content_rows: u16, max_rows: u16) -> u16 {
+  return content_rows.min(max_rows);
+}
+
 pub struct Popup {
   show_popup: bool,
 }
