@@ -73,7 +73,9 @@ impl App {
 
     let prompt = Prompt::new(
       &self.config,
-      &self.tool_manager.get_tools_specs(),
+      &self
+        .tool_manager
+        .get_tools_specs(self.persona_manager.current().allowed_tools()),
       self.persona_manager.current(),
     );
     vlog!("Prompt: {}", prompt.get_system_prompt());
@@ -192,7 +194,9 @@ impl App {
         .ok_or(RuntimeError::Session("No active session".into()))?;
 
       let messages = &session.messages;
-      let tools = self.tool_manager.get_tools_specs();
+      let tools = self
+        .tool_manager
+        .get_tools_specs(self.persona_manager.current().allowed_tools());
 
       let mut stream = self
         .provider_manager
@@ -300,7 +304,9 @@ impl App {
         .ok_or_else(|| RuntimeError::Session("No active session".into()))?;
 
       let messages = &session.messages;
-      let tools = self.tool_manager.get_tools_specs();
+      let tools = self
+        .tool_manager
+        .get_tools_specs(self.persona_manager.current().allowed_tools());
 
       let response = self
         .provider_manager
@@ -369,6 +375,26 @@ impl App {
         tool_call.name,
         tool_call.arguments
       );
+
+      let tool_access = self.persona_manager.current().allowed_tools();
+      if !tool_access.allows(&tool_call.name) {
+        let result = format!(
+          "Tool '{}' is not available for the current persona",
+          tool_call.name
+        );
+        self
+          .session_manager
+          .add_tool_result_to_current_session(&tool_call.id, &result)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        if self.config.general.show_tools {
+          on_event(AppEvent::ToolResult {
+            result,
+            error: true,
+          });
+        }
+        continue;
+      }
 
       self
         .session_manager

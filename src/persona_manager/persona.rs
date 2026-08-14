@@ -1,9 +1,25 @@
+#[derive(Debug, Clone, Copy)]
+pub enum ToolAccess {
+  All,
+  Only(&'static [&'static str]),
+}
+
+impl ToolAccess {
+  pub fn allows(&self, name: &str) -> bool {
+    return match self {
+      ToolAccess::All => true,
+      ToolAccess::Only(tools) => tools.contains(&name),
+    };
+  }
+}
+
 #[derive(Debug, Clone)]
 pub struct Persona {
   name: &'static str,
   description: &'static str,
   identity: &'static str,
   instructions: &'static [&'static str],
+  allowed_tools: ToolAccess,
   selectable: bool,
 }
 
@@ -13,6 +29,7 @@ impl Persona {
     description: &'static str,
     identity: &'static str,
     instructions: &'static [&'static str],
+    allowed_tools: ToolAccess,
     selectable: bool,
   ) -> Self {
     return Self {
@@ -20,6 +37,7 @@ impl Persona {
       description,
       identity,
       instructions,
+      allowed_tools,
       selectable,
     };
   }
@@ -38,6 +56,10 @@ impl Persona {
 
   pub fn instructions(&self) -> &[&'static str] {
     return self.instructions;
+  }
+
+  pub fn allowed_tools(&self) -> ToolAccess {
+    return self.allowed_tools;
   }
 
   pub fn is_selectable(&self) -> bool {

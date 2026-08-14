@@ -24,6 +24,7 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::config::Config;
+use crate::persona_manager::ToolAccess;
 use crate::tool_manager::browser::BrowserTool;
 use crate::tool_manager::control_keyboard::ControlKeyboardTool;
 use crate::tool_manager::datetime::DateTimeTool;
@@ -115,8 +116,13 @@ impl ToolManager {
     };
   }
 
-  pub fn get_tools_specs(&self) -> Vec<ToolSpec> {
-    return self.tools.iter().map(|t| t.to_tool_spec()).collect();
+  pub fn get_tools_specs(&self, tool_access: ToolAccess) -> Vec<ToolSpec> {
+    return self
+      .tools
+      .iter()
+      .filter(|t| tool_access.allows(t.name()))
+      .map(|t| t.to_tool_spec())
+      .collect();
   }
 
   pub async fn execute_tool(

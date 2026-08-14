@@ -1,10 +1,12 @@
 mod default;
 mod persona;
+mod researcher;
 mod reviewer;
 mod titles;
 
 use crate::persona_manager::default::DEFAULT_PERSONA;
-pub use crate::persona_manager::persona::Persona;
+pub use crate::persona_manager::persona::{Persona, ToolAccess};
+use crate::persona_manager::researcher::RESEARCHER_PERSONA;
 use crate::persona_manager::reviewer::REVIEWER_PERSONA;
 pub use crate::persona_manager::titles::TITLES_PERSONA;
 
@@ -24,10 +26,15 @@ impl PersonaManager {
   }
 
   pub fn list(&self) -> Vec<Persona> {
-    return [DEFAULT_PERSONA, REVIEWER_PERSONA, TITLES_PERSONA]
-      .into_iter()
-      .filter(|p| p.is_selectable())
-      .collect();
+    return [
+      DEFAULT_PERSONA,
+      RESEARCHER_PERSONA,
+      REVIEWER_PERSONA,
+      TITLES_PERSONA,
+    ]
+    .into_iter()
+    .filter(|p| p.is_selectable())
+    .collect();
   }
 
   pub fn set(&mut self, name: &str) -> Result<(), String> {
