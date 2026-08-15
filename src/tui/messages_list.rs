@@ -11,6 +11,7 @@ pub struct MessagesList {
   messages: Vec<MessageItem>,
   list_state: ListState,
   follow: bool,
+  viewport_height: u16,
 }
 
 impl MessagesList {
@@ -19,6 +20,7 @@ impl MessagesList {
       messages: Vec::new(),
       list_state: ListState::default(),
       follow: true,
+      viewport_height: 0,
     };
   }
 
@@ -27,6 +29,7 @@ impl MessagesList {
   }
 
   pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
+    self.viewport_height = area.height;
     let builder = ListBuilder::new(|context| {
       let message = &self.messages[context.index];
       message.to_list_item(context.cross_axis_size)
@@ -65,6 +68,18 @@ impl MessagesList {
     self.list_state.next();
     self.follow = !self.messages.is_empty()
       && self.list_state.selected == Some(self.messages.len() - 1);
+  }
+
+  pub fn scroll_page_older(&mut self) {
+    for _ in 0..self.viewport_height {
+      self.scroll_older();
+    }
+  }
+
+  pub fn scroll_page_newer(&mut self) {
+    for _ in 0..self.viewport_height {
+      self.scroll_newer();
+    }
   }
 
   pub fn add_message(&mut self, message: String) {

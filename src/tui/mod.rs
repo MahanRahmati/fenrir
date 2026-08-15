@@ -250,6 +250,12 @@ impl Tui {
           self.input.move_cursor_down();
           self.completion_popup.refresh(&self.input).await;
         }
+        KeyCode::PageUp => {
+          self.messages_list.scroll_page_older();
+        }
+        KeyCode::PageDown => {
+          self.messages_list.scroll_page_newer();
+        }
         _ => {}
       };
     }
