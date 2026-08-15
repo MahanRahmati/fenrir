@@ -1,6 +1,5 @@
 use crate::config::Config;
 use crate::persona_manager::Persona;
-use crate::tool_manager::tool::ToolSpec;
 use crate::utils::datetime::get_current_datetime;
 
 const TOOLS: &str = "Use tools when appropriate.";
@@ -16,22 +15,9 @@ pub struct Prompt {
 }
 
 impl Prompt {
-  pub fn new(
-    config: &Config,
-    tool_specs: &[ToolSpec],
-    persona: &Persona,
-  ) -> Self {
+  pub fn new(config: &Config, persona: &Persona) -> Self {
     let mut parts: Vec<String> = Vec::new();
     parts.push(persona.identity().to_string());
-
-    if !tool_specs.is_empty() {
-      let tools_list = tool_specs
-        .iter()
-        .map(|t| format!("- {}: {}", t.name, t.description))
-        .collect::<Vec<String>>()
-        .join("\n");
-      parts.push(format!("Available tools:\n{tools_list}"));
-    }
 
     let mut guidelines: Vec<&str> = Vec::new();
     for instruction in persona.instructions() {

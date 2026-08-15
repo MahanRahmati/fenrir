@@ -71,13 +71,7 @@ impl App {
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
     vlog!("Created session with ID: {}", session_id);
 
-    let prompt = Prompt::new(
-      &self.config,
-      &self
-        .tool_manager
-        .get_tools_specs(self.persona_manager.current().allowed_tools()),
-      self.persona_manager.current(),
-    );
+    let prompt = Prompt::new(&self.config, self.persona_manager.current());
     vlog!("Prompt: {}", prompt.get_system_prompt());
     self
       .session_manager
@@ -131,7 +125,7 @@ impl App {
       return Ok(());
     }
 
-    let prompt = Prompt::new(&self.config, &[], &TITLES_PERSONA);
+    let prompt = Prompt::new(&self.config, &TITLES_PERSONA);
     let now = chrono::Utc::now().timestamp();
     let messages = vec![
       Message {
