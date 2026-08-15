@@ -1,6 +1,6 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
+use ratatui::widgets::{Block, BorderType, Paragraph};
 
 pub const MAX_INPUT_HEIGHT: u16 = 8;
 
@@ -73,12 +73,12 @@ impl Input {
   }
 
   fn byte_index(&self) -> usize {
-    self
+    return self
       .content
       .char_indices()
       .map(|(i, _)| i)
       .nth(self.character_index)
-      .unwrap_or(self.content.len())
+      .unwrap_or(self.content.len());
   }
 
   pub fn delete_char(&mut self) {
@@ -96,7 +96,7 @@ impl Input {
   }
 
   fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-    new_cursor_pos.clamp(0, self.content.chars().count())
+    return new_cursor_pos.clamp(0, self.content.chars().count());
   }
 
   pub fn wrapped_line_count(&self) -> usize {
@@ -200,19 +200,16 @@ impl Input {
     let end = (start + visible).min(wrapped.len());
     let mut lines: Vec<Line> = wrapped[start..end]
       .iter()
-      .cloned()
-      .map(Line::from)
+      .map(|line| Line::from(format!(" {line}")))
       .collect();
-    lines.push(Line::default());
+    lines.push(Line::from("─".repeat(self.width + 2)));
     lines.push(Line::from(Span::styled(
-      self.persona_name.clone(),
+      format!(" {}", self.persona_name),
       Style::default().fg(Color::Yellow).bold(),
     )));
-    Paragraph::new(lines).style(Style::default()).block(
-      Block::bordered()
-        .border_type(BorderType::Rounded)
-        .padding(Padding::new(1, 1, 0, 0)),
-    )
+    return Paragraph::new(lines)
+      .style(Style::default())
+      .block(Block::bordered().border_type(BorderType::Rounded));
   }
 
   const fn reset_cursor(&mut self) {
