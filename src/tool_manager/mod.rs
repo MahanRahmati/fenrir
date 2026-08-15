@@ -46,6 +46,12 @@ use crate::tool_manager::tool::{Tool, ToolParams, ToolSpec};
 use crate::tool_manager::write_file::WriteFileTool;
 use crate::utils::path::is_path_within;
 
+pub enum ToolRejection {
+  NotAllowedForPersona,
+  CwdRestriction { path: String },
+  UserDeclined,
+}
+
 pub struct ToolManager {
   tools: Vec<Box<dyn Tool>>,
   tool_timeout: Duration,
@@ -178,23 +184,31 @@ impl ToolManager {
     return !is_path_within(path, &cwd);
   }
 
-  pub fn confirm_if_needed(
+  pub fn approve_tool_call(
     &self,
     name: &str,
     params: &ToolParams,
+    tool_access: ToolAccess,
     confirm: &mut impl FnMut(&str) -> bool,
-  ) -> bool {
+  ) -> Result<(), ToolRejection> {
+    if !tool_access.allows(name) {
+      return Err(ToolRejection::NotAllowedForPersona);
+    }
     if !self.needs_confirmation(name, params) {
-      return true;
+      return Ok(());
     }
     if self.restrict_write_tools_to_cwd {
-      return false;
+      let path = params.get("path").cloned().unwrap_or_default();
+      return Err(ToolRejection::CwdRestriction { path });
     }
     let path = match params.get("path") {
       Some(p) => p.as_str(),
-      None => return true,
+      None => return Ok(()),
     };
     let msg = format!("Tool \"{name}\" wants to access: {path}");
-    return confirm(&msg);
+    if confirm(&msg) {
+      return Ok(());
+    }
+    return Err(ToolRejection::UserDeclined);
   }
 }

@@ -21,6 +21,7 @@ use crate::session_manager::SessionManager;
 use crate::shutdown::Shutdown;
 use crate::slash_commands::SlashCommand;
 use crate::tool_manager::ToolManager;
+use crate::tool_manager::ToolRejection;
 use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
 
@@ -370,26 +371,6 @@ impl App {
         tool_call.arguments
       );
 
-      let tool_access = self.persona_manager.current().allowed_tools();
-      if !tool_access.allows(&tool_call.name) {
-        let result = format!(
-          "Tool '{}' is not available for the current persona",
-          tool_call.name
-        );
-        self
-          .session_manager
-          .add_tool_result_to_current_session(&tool_call.id, &result)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
-        if self.config.general.show_tools {
-          on_event(AppEvent::ToolResult {
-            result,
-            error: true,
-          });
-        }
-        continue;
-      }
-
       self
         .session_manager
         .add_tool_call_to_current_session(
@@ -411,22 +392,43 @@ impl App {
 
       let mut confirm =
         |msg: &str| on_event(AppEvent::Confirm(msg.to_string()));
-      if !self.tool_manager.confirm_if_needed(
+      let tool_access = self.persona_manager.current().allowed_tools();
+      if let Err(rejection) = self.tool_manager.approve_tool_call(
         &tool_call.name,
         &params,
+        tool_access,
         &mut confirm,
       ) {
-        let result = "Tool execution cancelled by user".to_string();
+        let (result, error) = match rejection {
+          ToolRejection::NotAllowedForPersona => (
+            format!(
+              "Tool '{}' is not available for the current persona. Use only the tools available to this persona.",
+              tool_call.name
+            ),
+            true,
+          ),
+          ToolRejection::CwdRestriction { path } => (
+            format!(
+              "Tool '{}' was blocked: the target path '{}' is outside the current working directory. Tools are restricted to the current working directory; retry with a path inside it.",
+              tool_call.name, path
+            ),
+            true,
+          ),
+          ToolRejection::UserDeclined => (
+            format!(
+              "Tool '{}' was cancelled by the user. Respect the user's decision; do not retry the same action unless the user asks.",
+              tool_call.name
+            ),
+            false,
+          ),
+        };
         self
           .session_manager
           .add_tool_result_to_current_session(&tool_call.id, &result)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
         if self.config.general.show_tools {
-          on_event(AppEvent::ToolResult {
-            result,
-            error: false,
-          });
+          on_event(AppEvent::ToolResult { result, error });
         }
         continue;
       }
