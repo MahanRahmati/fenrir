@@ -1,6 +1,6 @@
-use ratatui::style::Style;
-use ratatui::text::Line;
-use ratatui::widgets::{Block, BorderType, Paragraph};
+use ratatui::style::{Color, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
 
 pub const MAX_INPUT_HEIGHT: u16 = 8;
 
@@ -9,6 +9,7 @@ pub struct Input {
   pub character_index: usize,
   pub width: usize,
   pub scroll_offset: usize,
+  persona_name: String,
 }
 
 impl Input {
@@ -18,7 +19,12 @@ impl Input {
       character_index: 0,
       width: 1,
       scroll_offset: 0,
+      persona_name: String::new(),
     };
+  }
+
+  pub fn set_persona(&mut self, name: &str) {
+    self.persona_name = name.to_string();
   }
 
   pub fn move_cursor_left(&mut self) {
@@ -174,32 +180,39 @@ impl Input {
   }
 
   pub fn set_width(&mut self, box_width: u16) {
-    self.width = (box_width.saturating_sub(2) as usize).max(1);
+    self.width = (box_width.saturating_sub(4) as usize).max(1);
   }
 
   pub fn desired_box_height(&self, max_height: u16) -> u16 {
     let wrapped = self.wrapped_line_count();
-    let visible = wrapped.min((MAX_INPUT_HEIGHT - 2) as usize);
-    (2 + visible as u16).min(max_height).max(3)
+    let visible = wrapped.min((MAX_INPUT_HEIGHT - 4) as usize);
+    (4 + visible as u16).min(max_height).max(4)
   }
 
   pub fn update_scroll_for_height(&mut self, area_height: u16) {
-    self.update_scroll(area_height.saturating_sub(2) as usize);
+    self.update_scroll(area_height.saturating_sub(4) as usize);
   }
 
   pub fn widget(&self, area_height: u16) -> Paragraph<'static> {
-    let visible = area_height.saturating_sub(2) as usize;
+    let visible = area_height.saturating_sub(4) as usize;
     let wrapped = self.wrapped_lines();
     let start = self.scroll_offset;
     let end = (start + visible).min(wrapped.len());
-    let lines: Vec<Line> = wrapped[start..end]
+    let mut lines: Vec<Line> = wrapped[start..end]
       .iter()
       .cloned()
       .map(Line::from)
       .collect();
-    Paragraph::new(lines)
-      .style(Style::default())
-      .block(Block::bordered().border_type(BorderType::Rounded))
+    lines.push(Line::default());
+    lines.push(Line::from(Span::styled(
+      self.persona_name.clone(),
+      Style::default().fg(Color::Yellow).bold(),
+    )));
+    Paragraph::new(lines).style(Style::default()).block(
+      Block::bordered()
+        .border_type(BorderType::Rounded)
+        .padding(Padding::new(1, 1, 0, 0)),
+    )
   }
 
   const fn reset_cursor(&mut self) {

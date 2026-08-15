@@ -62,6 +62,10 @@ impl Tui {
     self.usage = usage;
   }
 
+  pub fn set_persona(&mut self, name: &str) {
+    self.input.set_persona(name);
+  }
+
   pub fn is_running(&self) -> bool {
     return self.running;
   }
@@ -87,7 +91,7 @@ impl Tui {
     if !self.any_popup_open() {
       let (cursor_row, cursor_col) = self.input.cursor_position();
       frame.set_cursor_position(Position::new(
-        input_area.x + cursor_col as u16 + 1,
+        input_area.x + cursor_col as u16 + 2,
         input_area.y + (cursor_row - self.input.scroll_offset) as u16 + 1,
       ));
     }

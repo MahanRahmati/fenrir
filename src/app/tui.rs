@@ -25,6 +25,7 @@ impl App {
     )
     .map_err(|e| RuntimeError::Tui(e.to_string()))?;
     let mut tui = Tui::new();
+    tui.set_persona(self.persona_manager.current().name());
 
     while tui.is_running() && !self.shutdown.is_cancelled() {
       terminal
@@ -49,7 +50,7 @@ impl App {
           .persona_manager
           .set(persona.name())
           .map_err(RuntimeError::Persona)?;
-        tui.add_message(format!("Persona set to: {}", persona.name()));
+        tui.set_persona(persona.name());
         continue;
       }
       if let Some(input) = input {
@@ -86,6 +87,7 @@ impl App {
           Ok(Some(SlashCommand::New)) => {
             self.session_manager.clear_current_session();
             self.persona_manager.reset();
+            tui.set_persona(self.persona_manager.current().name());
             tui.update_messages(None);
             continue;
           }
