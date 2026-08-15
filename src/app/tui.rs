@@ -3,6 +3,8 @@ use std::io::stdout;
 use ratatui::crossterm;
 use ratatui::crossterm::event::{
   self, DisableMouseCapture, EnableMouseCapture, Event,
+  KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+  PushKeyboardEnhancementFlags,
 };
 
 use crate::app::errors::{RuntimeError, RuntimeResult};
@@ -15,6 +17,13 @@ impl App {
     let mut terminal = ratatui::init();
     crossterm::execute!(stdout(), EnableMouseCapture)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+    crossterm::execute!(
+      stdout(),
+      PushKeyboardEnhancementFlags(
+        KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+      )
+    )
+    .map_err(|e| RuntimeError::Tui(e.to_string()))?;
     let mut tui = Tui::new();
 
     while tui.is_running() && !self.shutdown.is_cancelled() {
@@ -147,6 +156,8 @@ impl App {
     }
 
     crossterm::execute!(stdout(), DisableMouseCapture)
+      .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+    crossterm::execute!(stdout(), PopKeyboardEnhancementFlags)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
     ratatui::restore();
     return Ok(String::new());

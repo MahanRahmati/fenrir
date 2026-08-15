@@ -12,10 +12,8 @@ mod sessions_popup;
 mod statusline;
 
 use ratatui::Frame;
-use ratatui::crossterm::event::{self, Event, KeyCode};
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
-use ratatui::style::Style;
-use ratatui::widgets::{Block, BorderType, Paragraph};
 
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
@@ -78,19 +76,19 @@ impl Tui {
     }
 
     self.completion_popup.draw(frame, input_area);
-    let input = Paragraph::new(self.input.content.as_str())
-      .style(Style::default())
-      .block(Block::bordered().border_type(BorderType::Rounded));
-    frame.render_widget(input, input_area);
+
+    self.input.update_scroll_for_height(input_area.height);
+    frame.render_widget(self.input.widget(input_area.height), input_area);
 
     let statusline = StatusLine::new(self.usage);
     frame
       .render_widget(statusline.draw(status_bar_area.width), status_bar_area);
 
     if !self.any_popup_open() {
+      let (cursor_row, cursor_col) = self.input.cursor_position();
       frame.set_cursor_position(Position::new(
-        input_area.x + self.input.character_index as u16 + 1,
-        input_area.y + 1,
+        input_area.x + cursor_col as u16 + 1,
+        input_area.y + (cursor_row - self.input.scroll_offset) as u16 + 1,
       ));
     }
 
@@ -101,15 +99,37 @@ impl Tui {
   }
 
   fn compute_areas(
-    &self,
+    &mut self,
     frame: &Frame,
     has_messages: bool,
   ) -> (Rect, Rect, Rect) {
+    let screen_width = frame.area().width;
+    let screen_height = frame.area().height;
+
+    let box_width = if has_messages {
+      screen_width.saturating_sub(HORIZONTAL_PADDING * 2)
+    } else {
+      popup::constrained_width(screen_width).saturating_sub(1)
+    };
+    self.input.set_width(box_width);
+
+    let box_height = self.input.desired_box_height(if has_messages {
+      screen_height.saturating_sub(4)
+    } else {
+      screen_height.saturating_sub(2)
+    });
+
+    let slot_height = if has_messages {
+      box_height + TOP_PADDING * 2
+    } else {
+      box_height
+    };
+
     let (messages_area, input_area, status_bar_area) = if has_messages {
       let [messages_area, input_area, status_bar_area] =
         frame.area().layout(&Layout::vertical([
           Constraint::Min(1),
-          Constraint::Length(3 + TOP_PADDING * 2),
+          Constraint::Length(slot_height),
           Constraint::Length(1),
         ]));
       (messages_area, input_area, status_bar_area)
@@ -117,7 +137,7 @@ impl Tui {
       let [messages_area, input_area, _spacer, status_bar_area] =
         frame.area().layout(&Layout::vertical([
           Constraint::Min(1),
-          Constraint::Length(3),
+          Constraint::Length(slot_height),
           Constraint::Min(1),
           Constraint::Length(1),
         ]));
@@ -163,6 +183,9 @@ impl Tui {
     }
 
     if let Some(key) = event.as_key_press_event() {
+      let is_shift_enter = key.code == KeyCode::Enter
+        && key.modifiers.contains(KeyModifiers::SHIFT);
+
       if self.confirm_popup.handle_input(key.code) {
         return None;
       }
@@ -175,6 +198,13 @@ impl Tui {
       if self.personas_popup.handle_input(key.code) {
         return None;
       }
+
+      if is_shift_enter {
+        self.input.enter_char('\n');
+        self.completion_popup.refresh(&self.input).await;
+        return None;
+      }
+
       if self.completion_popup.is_open()
         && self
           .completion_popup
@@ -206,6 +236,14 @@ impl Tui {
         }
         KeyCode::Right => {
           self.input.move_cursor_right();
+          self.completion_popup.refresh(&self.input).await;
+        }
+        KeyCode::Up => {
+          self.input.move_cursor_up();
+          self.completion_popup.refresh(&self.input).await;
+        }
+        KeyCode::Down => {
+          self.input.move_cursor_down();
           self.completion_popup.refresh(&self.input).await;
         }
         _ => {}
