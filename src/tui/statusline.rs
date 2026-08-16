@@ -9,10 +9,11 @@ pub struct StatusLine {
   cwd: String,
   version: &'static str,
   usage: Option<ChatUsage>,
+  processing: bool,
 }
 
 impl StatusLine {
-  pub fn new(usage: Option<ChatUsage>) -> Self {
+  pub fn new(usage: Option<ChatUsage>, processing: bool) -> Self {
     let cwd = std::env::current_dir()
       .map(|p| p.display().to_string())
       .unwrap_or_default();
@@ -21,6 +22,7 @@ impl StatusLine {
       cwd,
       version,
       usage,
+      processing,
     };
   }
 
@@ -41,35 +43,46 @@ impl StatusLine {
     return Some(format!("{:.1}K", tokens as f64 / 1000.0));
   }
 
-  pub fn draw(&self, width: u16) -> Paragraph<'_> {
-    let cwd_display = Self::to_relative_path(&self.cwd);
-    let version_display = format!("v{}", self.version);
+  fn left_label(&self) -> String {
+    let left_label = if self.processing {
+      "Processing...".to_string()
+    } else {
+      Self::to_relative_path(&self.cwd)
+    };
+    return left_label;
+  }
+
+  fn right_label(&self) -> String {
     let usage_display =
       self.usage.and_then(|u| Self::format_usage(u.prompt_tokens));
+    let version_display = format!("v{}", self.version);
+    let mut right_label = String::new();
+    if let Some(usage) = usage_display {
+      right_label = format!("{usage} ");
+    }
+    right_label = format!("{right_label}{version_display}");
+    return right_label;
+  }
+
+  pub fn draw(&self, width: u16) -> Paragraph<'_> {
+    let left_label = self.left_label();
+    let right_label = self.right_label();
     let w = width as usize;
     let max_len = w.saturating_sub(4).max(8);
-    let cwd_width = if cwd_display.len() > max_len {
-      let start = cwd_display.len() - max_len;
-      format!("...{}", &cwd_display[start..])
+    let left_label = if left_label.len() > max_len {
+      let start = left_label.len() - max_len;
+      format!("...{}", &left_label[start..])
     } else {
-      cwd_display
+      left_label
     };
 
-    let spacer = w.saturating_sub(
-      cwd_width.len()
-        + usage_display.as_ref().map_or(0, |u| u.len() + 1)
-        + version_display.len()
-        + 1,
-    );
-
-    let mut spans = vec![Span::raw(cwd_width), Span::raw(" ".repeat(spacer))];
-    if let Some(usage) = usage_display {
-      spans.push(Span::raw(usage));
-      spans.push(Span::raw(" "));
-    }
-    spans.push(Span::raw(version_display));
+    let spacer = w.saturating_sub(left_label.len() + right_label.len() + 1);
+    let spans = vec![
+      Span::raw(left_label),
+      Span::raw(" ".repeat(spacer)),
+      Span::raw(right_label),
+    ];
     let line = Line::from(spans);
-
     return Paragraph::new(line);
   }
 }

@@ -108,6 +108,11 @@ impl App {
 
         tui.add_message(input);
 
+        tui.set_processing(true);
+        terminal
+          .draw(|frame| tui.draw(frame))
+          .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+
         let handler = |event: AppEvent| -> bool {
           match event {
             AppEvent::Token { text, reasoning } => {
@@ -146,10 +151,12 @@ impl App {
 
         match self.process_chat(handler).await {
           Ok(_) => {
+            tui.set_processing(false);
             tui.set_usage(self.last_usage());
             terminal.draw(|frame| tui.draw(frame)).ok();
           }
           Err(e) => {
+            tui.set_processing(false);
             tui.add_message(format!("Error: {e}"));
             continue;
           }

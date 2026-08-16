@@ -41,6 +41,7 @@ pub struct Tui {
   confirm_popup: ConfirmPopup,
   completion_popup: CompletionPopup,
   usage: Option<ChatUsage>,
+  processing: bool,
 }
 
 impl Tui {
@@ -55,11 +56,16 @@ impl Tui {
       confirm_popup: ConfirmPopup::new(),
       completion_popup: CompletionPopup::new(),
       usage: None,
+      processing: false,
     };
   }
 
   pub fn set_usage(&mut self, usage: Option<ChatUsage>) {
     self.usage = usage;
+  }
+
+  pub fn set_processing(&mut self, processing: bool) {
+    self.processing = processing;
   }
 
   pub fn set_persona(&mut self, name: &str) {
@@ -84,7 +90,7 @@ impl Tui {
     self.input.update_scroll_for_height(input_area.height);
     frame.render_widget(self.input.widget(input_area.height), input_area);
 
-    let statusline = StatusLine::new(self.usage);
+    let statusline = StatusLine::new(self.usage, self.processing);
     frame
       .render_widget(statusline.draw(status_bar_area.width), status_bar_area);
 
