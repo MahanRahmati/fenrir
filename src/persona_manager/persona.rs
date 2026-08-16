@@ -2,6 +2,7 @@
 pub enum ToolAccess {
   All,
   Only(&'static [&'static str]),
+  None,
 }
 
 impl ToolAccess {
@@ -9,6 +10,7 @@ impl ToolAccess {
     return match self {
       ToolAccess::All => true,
       ToolAccess::Only(tools) => tools.contains(&name),
+      ToolAccess::None => false,
     };
   }
 }
@@ -60,6 +62,14 @@ impl Persona {
 
   pub fn allowed_tools(&self) -> ToolAccess {
     return self.allowed_tools;
+  }
+
+  pub fn uses_tools(&self) -> bool {
+    return match self.allowed_tools {
+      ToolAccess::All => true,
+      ToolAccess::Only(tools) => !tools.is_empty(),
+      ToolAccess::None => false,
+    };
   }
 
   pub fn is_selectable(&self) -> bool {

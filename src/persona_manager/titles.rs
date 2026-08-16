@@ -23,6 +23,6 @@ pub const TITLES_PERSONA: Persona = Persona::new(
     "If the user message is short or conversational (e.g. \"hello\", \"lol\", \"what's up\"), create a title reflecting the tone or intent (such as Greeting, Quick check-in, Light chat, Intro message).",
     "Examples: \"debug 500 errors in production\" -> \"Debugging production 500 errors\"; \"@src/auth.rs add refresh token support\" -> \"Auth refresh token support\"; \"@utils/parser.rs this is broken\" -> \"Parser bug fix\"; \"@src/main.rs add dark mode toggle\" -> \"Dark mode toggle in main\"; \"look at @config.toml\" -> \"Config review\".",
   ],
-  ToolAccess::All,
+  ToolAccess::None,
   false,
 );
