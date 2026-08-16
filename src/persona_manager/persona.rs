@@ -64,14 +64,6 @@ impl Persona {
     return self.allowed_tools;
   }
 
-  pub fn uses_tools(&self) -> bool {
-    return match self.allowed_tools {
-      ToolAccess::All => true,
-      ToolAccess::Only(tools) => !tools.is_empty(),
-      ToolAccess::None => false,
-    };
-  }
-
   pub fn is_selectable(&self) -> bool {
     return self.selectable;
   }
