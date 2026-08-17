@@ -1,4 +1,5 @@
 pub mod datetime;
+pub mod hash;
 pub mod image;
 pub mod path;
 pub mod process;
