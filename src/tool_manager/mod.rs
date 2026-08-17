@@ -1,4 +1,5 @@
 mod browser;
+mod cache;
 mod control_keyboard;
 mod datetime;
 mod edit_file;
@@ -68,7 +69,7 @@ impl ToolManager {
       tools.push(Box::new(DateTimeTool));
     }
     if config.permissions.read_file {
-      tools.push(Box::new(ReadFileTool));
+      tools.push(Box::new(ReadFileTool::new()));
     }
     if config.permissions.read_pdf {
       tools.push(Box::new(ReadPdfTool));
@@ -151,6 +152,12 @@ impl ToolManager {
     return Err(ToolManagerError::NotFound {
       name: name.to_string(),
     });
+  }
+
+  pub fn reset_cache(&self) {
+    for tool in &self.tools {
+      tool.reset_cache();
+    }
   }
 
   fn find_tool(&self, name: &str) -> Option<&dyn Tool> {

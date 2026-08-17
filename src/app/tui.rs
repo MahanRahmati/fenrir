@@ -39,6 +39,7 @@ impl App {
           .load_session_from_db(session_id)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        self.tool_manager.reset_cache();
         let current_session = self.session_manager.get_current_session();
         tui.update_messages(current_session);
         continue;
@@ -86,6 +87,7 @@ impl App {
           }
           Ok(Some(SlashCommand::New)) => {
             self.session_manager.clear_current_session();
+            self.tool_manager.reset_cache();
             self.persona_manager.reset();
             tui.set_persona(self.persona_manager.current().name());
             tui.update_messages(None);

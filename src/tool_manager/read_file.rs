@@ -1,9 +1,47 @@
 use crate::files::operations::read_to_string;
+use crate::tool_manager::cache::ToolCache;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::utils::hash;
+use crate::utils::path::resolve_path;
 
-pub struct ReadFileTool;
+#[derive(Clone)]
+struct ReadEntry {
+  hash: u64,
+  start: usize,
+  end: usize,
+}
+
+pub struct ReadFileTool {
+  cache: ToolCache<String, ReadEntry>,
+}
+
+impl ReadFileTool {
+  pub fn new() -> Self {
+    return Self {
+      cache: ToolCache::new(),
+    };
+  }
+
+  fn read_empty(&self, path: &str, hash: u64) -> ToolManagerResult<String> {
+    let key = cache_key(path);
+    if let Some(entry) = self.cache.get(&key)
+      && entry.hash == hash
+    {
+      return Ok("File unchanged since last read.".to_string());
+    }
+    self.cache.insert(
+      key,
+      ReadEntry {
+        hash,
+        start: 0,
+        end: 0,
+      },
+    );
+    return Ok("".to_string());
+  }
+}
 
 #[async_trait::async_trait]
 impl Tool for ReadFileTool {
@@ -12,7 +50,7 @@ impl Tool for ReadFileTool {
   }
 
   fn description(&self) -> &str {
-    return "Read the contents of a file. Optionally specify a 1-based line range. If append_loc is true, each line is prefixed with its line number (e.g. \"1\u{2192} ...\").";
+    return "Read the contents of a file. Optionally specify a 1-based line range. If append_loc is true, each line is prefixed with its line number (e.g. \"1\u{2192} ...\"). Re-reading an unchanged file with the same path and line range returns a short confirmation instead of the content.";
   }
 
   fn parameters(&self) -> serde_json::Value {
@@ -32,6 +70,10 @@ impl Tool for ReadFileTool {
     return true;
   }
 
+  fn reset_cache(&self) {
+    self.cache.clear();
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let path = get_param::<String>(&params, "read_file", "path")?;
 
@@ -42,12 +84,9 @@ impl Tool for ReadFileTool {
       }
     })?;
 
+    let hash = hash::file_hash(&content);
     let lines: Vec<&str> = content.lines().collect();
     let total_lines = lines.len();
-
-    if total_lines == 0 {
-      return Ok("".to_string());
-    }
 
     let start_line: usize =
       get_optional_param::<usize>(&params, "read_file", "start_line")
@@ -57,6 +96,10 @@ impl Tool for ReadFileTool {
     let end_line: Option<usize> =
       get_optional_param::<usize>(&params, "read_file", "end_line")
         .map(|v: usize| v.saturating_sub(1));
+
+    if total_lines == 0 {
+      return self.read_empty(&path, hash);
+    }
 
     let start = start_line.min(total_lines - 1);
     let end = end_line
@@ -72,6 +115,15 @@ impl Tool for ReadFileTool {
           end + 1
         ),
       });
+    }
+
+    let key = cache_key(&path);
+    if let Some(entry) = self.cache.get(&key)
+      && entry.hash == hash
+      && entry.start == start + 1
+      && entry.end == end + 1
+    {
+      return Ok("File unchanged since last read.".to_string());
     }
 
     let selected_lines = &lines[start..=end];
@@ -90,6 +142,20 @@ impl Tool for ReadFileTool {
       selected_lines.join("\n")
     };
 
+    self.cache.insert(
+      key,
+      ReadEntry {
+        hash,
+        start: start + 1,
+        end: end + 1,
+      },
+    );
+
     return Ok(output);
   }
+}
+
+fn cache_key(path: &str) -> String {
+  let cwd = std::env::current_dir().unwrap_or_default();
+  return resolve_path(path, &cwd).to_string_lossy().to_string();
 }

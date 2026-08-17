@@ -47,6 +47,7 @@ impl App {
         }
         Ok(Some(SlashCommand::New)) => {
           self.session_manager.clear_current_session();
+          self.tool_manager.reset_cache();
           self.persona_manager.reset();
           println!("Started a new session.");
           continue;
@@ -182,6 +183,7 @@ impl App {
       .load_session_from_db(session_id)
       .await
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
+    self.tool_manager.reset_cache();
     println!(
       "--- {} ---",
       sessions[index]
