@@ -1,6 +1,10 @@
 use std::path::{Component, Path, PathBuf};
 
 pub fn is_path_within(path_str: &str, cwd: &Path) -> bool {
+  return resolve_path(path_str, cwd).starts_with(cwd);
+}
+
+pub fn resolve_path(path_str: &str, cwd: &Path) -> PathBuf {
   let path = Path::new(path_str);
   let resolved = if path.is_relative() {
     cwd.join(path)
@@ -8,12 +12,10 @@ pub fn is_path_within(path_str: &str, cwd: &Path) -> bool {
     path.to_path_buf()
   };
 
-  let normalized = match std::fs::canonicalize(&resolved) {
+  return match std::fs::canonicalize(&resolved) {
     Ok(p) => p,
     Err(_) => normalize(&resolved),
   };
-
-  return normalized.starts_with(cwd);
 }
 
 fn normalize(path: &Path) -> PathBuf {
