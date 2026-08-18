@@ -59,8 +59,12 @@ impl PersonasPopup {
     self.list.open(self.personas.len());
   }
 
-  pub fn get_selected_persona(&mut self) -> Option<usize> {
-    return self.list.take_selected();
+  pub fn get_selected_persona(&mut self) -> Option<String> {
+    return self
+      .list
+      .take_selected()
+      .and_then(|index| self.personas.get(index))
+      .map(|p| p.name().to_string());
   }
 
   pub fn is_open(&self) -> bool {

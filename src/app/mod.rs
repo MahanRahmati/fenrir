@@ -1,4 +1,5 @@
 mod cli;
+mod command;
 pub mod errors;
 mod tui;
 
@@ -6,6 +7,7 @@ use std::collections::HashMap;
 
 use futures::StreamExt;
 
+use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
 use crate::database::DB;
@@ -94,6 +96,61 @@ impl App {
 
   pub fn last_usage(&self) -> Option<ChatUsage> {
     return self.last_usage;
+  }
+
+  pub async fn handle_command(
+    &mut self,
+    command: AppCommand,
+  ) -> RuntimeResult<AppCommandResult> {
+    return match command {
+      AppCommand::Exit => Ok(AppCommandResult::Exit),
+      AppCommand::Help => Ok(AppCommandResult::Help(self.available_commands())),
+      AppCommand::ListSessions => {
+        let sessions = self
+          .session_manager
+          .list_sessions()
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        let current = self.session_manager.get_current_session().map(|s| s.id);
+        return Ok(AppCommandResult::Sessions { sessions, current });
+      }
+      AppCommand::LoadSession { id } => {
+        self
+          .session_manager
+          .load_session_from_db(id)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        self.tool_manager.reset_cache();
+        let Some(session) = self.session_manager.get_current_session().cloned()
+        else {
+          return Err(RuntimeError::Session("No active session".into()));
+        };
+        return Ok(AppCommandResult::Session(session));
+      }
+      AppCommand::ListPersonas => {
+        if self.session_manager.get_current_session().is_some() {
+          return Ok(AppCommandResult::Noop);
+        }
+        let personas = self.persona_manager.list();
+        let current = self.persona_manager.current().name().to_string();
+        return Ok(AppCommandResult::Personas { personas, current });
+      }
+      AppCommand::SelectPersona { name } => {
+        self
+          .persona_manager
+          .set(&name)
+          .map_err(RuntimeError::Persona)?;
+        return Ok(AppCommandResult::Noop);
+      }
+      AppCommand::New => {
+        self.session_manager.clear_current_session();
+        self.tool_manager.reset_cache();
+        self.persona_manager.reset();
+        return Ok(AppCommandResult::Persona(
+          self.persona_manager.current().name().to_string(),
+        ));
+      }
+    };
   }
 
   pub async fn process_chat<F>(

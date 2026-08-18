@@ -1,12 +1,12 @@
 use std::io::Write;
 
+use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent};
 use crate::input::confirm_with;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::session_manager::session::Session;
-use crate::slash_commands::{SlashCommand, parse_command};
 use crate::utils::datetime::format_timestamp;
 use crate::vlog;
 
@@ -25,38 +25,88 @@ impl App {
         Err(e) => return Err(RuntimeError::Input(e.to_string())),
       };
 
-      match parse_command(&input) {
-        Ok(Some(SlashCommand::Exit)) => break,
-        Ok(Some(SlashCommand::Help)) => {
-          println!("Available commands:");
-          for cmd in self.available_commands() {
-            println!("  {}: {}", cmd.name(), cmd.description());
-          }
-          continue;
-        }
-        Ok(Some(SlashCommand::Sessions)) => {
-          self.handle_sessions_command().await?;
-          continue;
-        }
-        Ok(Some(SlashCommand::Personas)) => {
-          if self.session_manager.get_current_session().is_some() {
-            continue;
-          }
-          self.handle_personas_command()?;
-          continue;
-        }
-        Ok(Some(SlashCommand::New)) => {
-          self.session_manager.clear_current_session();
-          self.tool_manager.reset_cache();
-          self.persona_manager.reset();
-          println!("Started a new session.");
-          continue;
-        }
-        Ok(None) => {}
+      let command = match AppCommand::parse(&input) {
+        Ok(Some(command)) => Some(command),
+        Ok(None) => None,
         Err(e) => {
           println!("Error: {e}");
           continue;
         }
+      };
+
+      if let Some(command) = command {
+        match self.handle_command(command).await? {
+          AppCommandResult::Exit => break,
+          AppCommandResult::Help(commands) => {
+            println!("Available commands:");
+            for cmd in commands {
+              println!("  {}: {}", cmd.name(), cmd.description());
+            }
+          }
+          AppCommandResult::Sessions { sessions, current } => {
+            if sessions.is_empty() {
+              println!("No sessions found.");
+              continue;
+            }
+            let lines: Vec<String> = sessions
+              .iter()
+              .map(|session| {
+                let marker = match current {
+                  Some(id) if id == session.id => "*",
+                  _ => " ",
+                };
+                let title =
+                  session.title.as_deref().unwrap_or("Untitled Session");
+                format!(
+                  "{marker}{title}  {}",
+                  format_timestamp(session.last_interaction)
+                )
+              })
+              .collect();
+            print_indexed_list(&lines);
+            println!("Enter session index to switch to (or empty to skip): ");
+            let Some(index) = read_index(sessions.len(), "session")? else {
+              continue;
+            };
+            let session_id = sessions[index].id;
+            if let AppCommandResult::Session(session) = self
+              .handle_command(AppCommand::LoadSession { id: session_id })
+              .await?
+            {
+              println!(
+                "--- {} ---",
+                session.title.as_deref().unwrap_or("Untitled Session")
+              );
+              print_session_messages(&session);
+            }
+          }
+          AppCommandResult::Personas { personas, current } => {
+            let lines: Vec<String> = personas
+              .iter()
+              .map(|p| {
+                let marker = if p.name() == current { "*" } else { " " };
+                format!("{marker}{} - {}", p.name(), p.description())
+              })
+              .collect();
+            print_indexed_list(&lines);
+            println!("Enter persona index to select (or empty to skip): ");
+            let Some(index) = read_index(personas.len(), "persona")? else {
+              continue;
+            };
+            let persona = &personas[index];
+            self
+              .handle_command(AppCommand::SelectPersona {
+                name: persona.name().to_string(),
+              })
+              .await?;
+            println!("Persona set to: {}", persona.name());
+          }
+          AppCommandResult::Persona(_) => {
+            println!("Started a new session.");
+          }
+          _ => {}
+        }
+        continue;
       }
 
       self.ensure_session_with_system_message().await?;
@@ -121,80 +171,6 @@ impl App {
     }
 
     return Ok(String::new());
-  }
-
-  fn handle_personas_command(&mut self) -> RuntimeResult<()> {
-    let personas = self.persona_manager.list();
-    let current_name = self.persona_manager.current().name();
-    let lines: Vec<String> = personas
-      .iter()
-      .map(|p| {
-        let marker = if p.name() == current_name { "*" } else { " " };
-        format!("{marker}{} - {}", p.name(), p.description())
-      })
-      .collect();
-    print_indexed_list(&lines);
-    println!("Enter persona index to select (or empty to skip): ");
-    let Some(index) = read_index(personas.len(), "persona")? else {
-      return Ok(());
-    };
-    let persona = &personas[index];
-    self
-      .persona_manager
-      .set(persona.name())
-      .map_err(RuntimeError::Persona)?;
-    println!("Persona set to: {}", persona.name());
-    return Ok(());
-  }
-
-  async fn handle_sessions_command(&mut self) -> RuntimeResult<()> {
-    let sessions = self
-      .session_manager
-      .list_sessions()
-      .await
-      .map_err(|e| RuntimeError::Session(e.to_string()))?;
-    let current_session = self.session_manager.get_current_session();
-    if sessions.is_empty() {
-      println!("No sessions found.");
-      return Ok(());
-    }
-    let lines: Vec<String> = sessions
-      .iter()
-      .map(|session| {
-        let marker = match current_session {
-          Some(current) if current.id == session.id => "*",
-          _ => " ",
-        };
-        let title = session.title.as_deref().unwrap_or("Untitled Session");
-        format!(
-          "{marker}{title}  {}",
-          format_timestamp(session.last_interaction)
-        )
-      })
-      .collect();
-    print_indexed_list(&lines);
-    println!("Enter session index to switch to (or empty to skip): ");
-    let Some(index) = read_index(sessions.len(), "session")? else {
-      return Ok(());
-    };
-    let session_id = sessions[index].id;
-    self
-      .session_manager
-      .load_session_from_db(session_id)
-      .await
-      .map_err(|e| RuntimeError::Session(e.to_string()))?;
-    self.tool_manager.reset_cache();
-    println!(
-      "--- {} ---",
-      sessions[index]
-        .title
-        .as_deref()
-        .unwrap_or("Untitled Session")
-    );
-    if let Some(session) = self.session_manager.get_current_session() {
-      print_session_messages(session);
-    }
-    return Ok(());
   }
 }
 

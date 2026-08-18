@@ -303,7 +303,7 @@ impl Tui {
   pub fn open_sessions_popup(
     &mut self,
     sessions: Vec<Session>,
-    current_session: Option<&Session>,
+    current_session: Option<i64>,
   ) {
     self
       .sessions_popup
@@ -324,7 +324,7 @@ impl Tui {
       .open_personas_popup(personas, current_persona);
   }
 
-  pub fn get_selected_persona(&mut self) -> Option<usize> {
+  pub fn get_selected_persona(&mut self) -> Option<String> {
     return self.personas_popup.get_selected_persona();
   }
 

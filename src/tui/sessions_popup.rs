@@ -10,7 +10,7 @@ use crate::utils::datetime::format_timestamp;
 pub struct SessionsPopup {
   list: PopupList,
   sessions: Vec<Session>,
-  current_session: Option<Session>,
+  current_session: Option<i64>,
 }
 
 impl SessionsPopup {
@@ -30,7 +30,7 @@ impl SessionsPopup {
         .iter()
         .map(|s| {
           let marker = match current_session {
-            Some(session) if session.id == s.id => "*",
+            Some(id) if *id == s.id => "*",
             _ => " ",
           };
           let label = format!(
@@ -56,10 +56,10 @@ impl SessionsPopup {
   pub fn open_sessions_popup(
     &mut self,
     sessions: Vec<Session>,
-    current_session: Option<&Session>,
+    current_session: Option<i64>,
   ) {
     self.sessions = sessions;
-    self.current_session = current_session.cloned();
+    self.current_session = current_session;
     self.list.open(self.sessions.len());
   }
 
