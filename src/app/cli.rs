@@ -2,13 +2,68 @@ use std::io::Write;
 
 use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
-use crate::app::{App, AppEvent};
+use crate::app::{App, AppEvent, EventSink};
 use crate::input::confirm_with;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::session_manager::session::Session;
 use crate::utils::datetime::format_timestamp;
 use crate::vlog;
+
+struct CliSink {
+  stdout: std::io::Stdout,
+  reasoning_open: bool,
+  reasoning_ends_with_newline: bool,
+}
+
+#[async_trait::async_trait]
+impl EventSink for CliSink {
+  fn on_event(&mut self, event: AppEvent) {
+    match event {
+      AppEvent::Token { text, reasoning } => {
+        if reasoning {
+          if !self.reasoning_open {
+            print!("Reasoning: ");
+            self.reasoning_open = true;
+          }
+          self.reasoning_ends_with_newline = text.ends_with('\n');
+          print!("{text}");
+        } else {
+          if self.reasoning_open {
+            self.reasoning_open = false;
+            if !self.reasoning_ends_with_newline {
+              println!();
+            }
+          }
+          print!("{text}");
+        }
+        self.stdout.flush().ok();
+      }
+      AppEvent::ToolCall { name, arguments } => {
+        if self.reasoning_open {
+          self.reasoning_open = false;
+          if !self.reasoning_ends_with_newline {
+            println!();
+          }
+        }
+        println!("[tool] {name}({arguments})");
+        self.stdout.flush().ok();
+      }
+      AppEvent::ToolResult { result, error } => {
+        if error {
+          println!("[error] {result}");
+        } else {
+          println!("[result] {result}");
+        }
+        self.stdout.flush().ok();
+      }
+    }
+  }
+
+  async fn confirm(&mut self, message: &str) -> bool {
+    return confirm_with(&format!("{message} (y/N): "));
+  }
+}
 
 impl App {
   pub async fn run(&mut self) -> RuntimeResult<String> {
@@ -117,56 +172,13 @@ impl App {
         .await
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
-      let mut stdout = std::io::stdout();
-      let mut reasoning_open = false;
-      let mut reasoning_ends_with_newline = false;
-      let handler = |event: AppEvent| -> bool {
-        match event {
-          AppEvent::Token { text, reasoning } => {
-            if reasoning {
-              if !reasoning_open {
-                print!("Reasoning: ");
-                reasoning_open = true;
-              }
-              reasoning_ends_with_newline = text.ends_with('\n');
-              print!("{text}");
-            } else {
-              if reasoning_open {
-                reasoning_open = false;
-                if !reasoning_ends_with_newline {
-                  println!();
-                }
-              }
-              print!("{text}");
-            }
-            stdout.flush().ok();
-            return true;
-          }
-          AppEvent::Confirm(msg) => confirm_with(&format!("{msg} (y/N): ")),
-          AppEvent::ToolCall { name, arguments } => {
-            if reasoning_open {
-              reasoning_open = false;
-              if !reasoning_ends_with_newline {
-                println!();
-              }
-            }
-            println!("[tool] {name}({arguments})");
-            stdout.flush().ok();
-            return true;
-          }
-          AppEvent::ToolResult { result, error } => {
-            if error {
-              println!("[error] {result}");
-            } else {
-              println!("[result] {result}");
-            }
-            stdout.flush().ok();
-            return true;
-          }
-        }
+      let mut sink = CliSink {
+        stdout: std::io::stdout(),
+        reasoning_open: false,
+        reasoning_ends_with_newline: false,
       };
 
-      self.process_chat(handler).await?;
+      self.process_chat(&mut sink).await?;
       println!();
     }
 

@@ -1,7 +1,10 @@
 mod cli;
 mod command;
 pub mod errors;
+mod event;
 mod tui;
+
+pub use event::{AppEvent, EventSink};
 
 use std::collections::HashMap;
 
@@ -22,17 +25,11 @@ use crate::session_manager::Message;
 use crate::session_manager::SessionManager;
 use crate::shutdown::Shutdown;
 use crate::slash_commands::SlashCommand;
+use crate::tool_manager::ToolApproval;
 use crate::tool_manager::ToolManager;
 use crate::tool_manager::ToolRejection;
 use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
-
-pub enum AppEvent {
-  Token { text: String, reasoning: bool },
-  Confirm(String),
-  ToolCall { name: String, arguments: String },
-  ToolResult { result: String, error: bool },
-}
 
 pub struct App {
   session_manager: SessionManager,
@@ -153,18 +150,15 @@ impl App {
     };
   }
 
-  pub async fn process_chat<F>(
+  pub async fn process_chat(
     &mut self,
-    mut on_event: F,
-  ) -> RuntimeResult<String>
-  where
-    F: FnMut(AppEvent) -> bool,
-  {
+    sink: &mut impl EventSink,
+  ) -> RuntimeResult<String> {
     self.generate_session_title().await?;
     if self.config.general.stream {
-      return self.process_chat_stream(&mut on_event).await;
+      return self.process_chat_stream(sink).await;
     }
-    return self.process_chat_non_streaming(&mut on_event).await;
+    return self.process_chat_non_streaming(sink).await;
   }
 
   async fn generate_session_title(&mut self) -> RuntimeResult<()> {
@@ -230,13 +224,10 @@ impl App {
     return Ok(());
   }
 
-  async fn process_chat_stream<F>(
+  async fn process_chat_stream(
     &mut self,
-    on_event: &mut F,
-  ) -> RuntimeResult<String>
-  where
-    F: FnMut(AppEvent) -> bool,
-  {
+    sink: &mut impl EventSink,
+  ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
 
     loop {
@@ -271,7 +262,7 @@ impl App {
 
         if let Some(text) = delta.content {
           content_buffer.push_str(&text);
-          on_event(AppEvent::Token {
+          sink.on_event(AppEvent::Token {
             text,
             reasoning: false,
           });
@@ -279,7 +270,7 @@ impl App {
 
         if let Some(text) = delta.reasoning {
           if self.config.general.show_reasoning {
-            on_event(AppEvent::Token {
+            sink.on_event(AppEvent::Token {
               text: text.clone(),
               reasoning: true,
             });
@@ -334,19 +325,16 @@ impl App {
 
       let tool_calls: Vec<ToolCall> =
         tool_call_builders.into_values().collect();
-      self.execute_tool_calls(&tool_calls, on_event).await?;
+      self.execute_tool_calls(&tool_calls, sink).await?;
     }
 
     return Ok(assistant_content);
   }
 
-  async fn process_chat_non_streaming<F>(
+  async fn process_chat_non_streaming(
     &mut self,
-    on_event: &mut F,
-  ) -> RuntimeResult<String>
-  where
-    F: FnMut(AppEvent) -> bool,
-  {
+    sink: &mut impl EventSink,
+  ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
 
     loop {
@@ -373,14 +361,14 @@ impl App {
       if self.config.general.show_reasoning
         && let Some(ref reasoning) = response.reasoning
       {
-        on_event(AppEvent::Token {
+        sink.on_event(AppEvent::Token {
           text: reasoning.clone(),
           reasoning: true,
         });
       }
 
       if let Some(ref content) = response.content {
-        on_event(AppEvent::Token {
+        sink.on_event(AppEvent::Token {
           text: content.clone(),
           reasoning: false,
         });
@@ -408,18 +396,16 @@ impl App {
         break;
       }
 
-      self
-        .execute_tool_calls(&response.tool_calls, on_event)
-        .await?;
+      self.execute_tool_calls(&response.tool_calls, sink).await?;
     }
 
     return Ok(assistant_content);
   }
 
-  async fn execute_tool_calls<F: FnMut(AppEvent) -> bool>(
+  async fn execute_tool_calls(
     &mut self,
     tool_calls: &[ToolCall],
-    on_event: &mut F,
+    sink: &mut impl EventSink,
   ) -> RuntimeResult<()> {
     for tool_call in tool_calls {
       vlog!(
@@ -439,7 +425,7 @@ impl App {
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
       if self.config.general.show_tools {
-        on_event(AppEvent::ToolCall {
+        sink.on_event(AppEvent::ToolCall {
           name: tool_call.name.clone(),
           arguments: tool_call.arguments.clone(),
         });
@@ -447,15 +433,24 @@ impl App {
 
       let params = parse_tool_params(&tool_call.arguments);
 
-      let mut confirm =
-        |msg: &str| on_event(AppEvent::Confirm(msg.to_string()));
       let tool_access = self.persona_manager.current().allowed_tools();
-      if let Err(rejection) = self.tool_manager.approve_tool_call(
+      let approval = self.tool_manager.approve_tool_call(
         &tool_call.name,
         &params,
         tool_access,
-        &mut confirm,
-      ) {
+      );
+      let rejection = match approval {
+        ToolApproval::Allowed => None,
+        ToolApproval::NeedsConfirmation { message } => {
+          if sink.confirm(&message).await {
+            None
+          } else {
+            Some(ToolRejection::UserDeclined)
+          }
+        }
+        ToolApproval::Rejected(rejection) => Some(rejection),
+      };
+      if let Some(rejection) = rejection {
         let (result, error) = match rejection {
           ToolRejection::NotAllowedForPersona => (
             format!(
@@ -485,7 +480,7 @@ impl App {
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
         if self.config.general.show_tools {
-          on_event(AppEvent::ToolResult { result, error });
+          sink.on_event(AppEvent::ToolResult { result, error });
         }
         continue;
       }
@@ -513,7 +508,7 @@ impl App {
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
       if self.config.general.show_tools {
-        on_event(AppEvent::ToolResult {
+        sink.on_event(AppEvent::ToolResult {
           result: result_str,
           error,
         });

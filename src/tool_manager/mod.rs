@@ -53,6 +53,12 @@ pub enum ToolRejection {
   UserDeclined,
 }
 
+pub enum ToolApproval {
+  Allowed,
+  NeedsConfirmation { message: String },
+  Rejected(ToolRejection),
+}
+
 pub struct ToolManager {
   tools: Vec<Box<dyn Tool>>,
   tool_timeout: Duration,
@@ -196,26 +202,22 @@ impl ToolManager {
     name: &str,
     params: &ToolParams,
     tool_access: ToolAccess,
-    confirm: &mut impl FnMut(&str) -> bool,
-  ) -> Result<(), ToolRejection> {
+  ) -> ToolApproval {
     if !tool_access.allows(name) {
-      return Err(ToolRejection::NotAllowedForPersona);
+      return ToolApproval::Rejected(ToolRejection::NotAllowedForPersona);
     }
     if !self.needs_confirmation(name, params) {
-      return Ok(());
+      return ToolApproval::Allowed;
     }
     if self.restrict_write_tools_to_cwd {
       let path = params.get("path").cloned().unwrap_or_default();
-      return Err(ToolRejection::CwdRestriction { path });
+      return ToolApproval::Rejected(ToolRejection::CwdRestriction { path });
     }
     let path = match params.get("path") {
       Some(p) => p.as_str(),
-      None => return Ok(()),
+      None => return ToolApproval::Allowed,
     };
     let msg = format!("Tool \"{name}\" wants to access: {path}");
-    if confirm(&msg) {
-      return Ok(());
-    }
-    return Err(ToolRejection::UserDeclined);
+    return ToolApproval::NeedsConfirmation { message: msg };
   }
 }
