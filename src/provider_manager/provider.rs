@@ -49,7 +49,7 @@ pub type ChatStream =
   Pin<Box<dyn Stream<Item = ProviderManagerResult<ChatStreamDelta>> + Send>>;
 
 #[async_trait::async_trait]
-pub trait Provider {
+pub trait Provider: Send + Sync {
   fn name(&self) -> &str;
   fn list_models(&self) -> Vec<Model>;
   fn set_active_model(&mut self, model: Model);

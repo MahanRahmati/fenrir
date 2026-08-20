@@ -12,7 +12,7 @@ pub struct ToolSpec {
 }
 
 #[async_trait::async_trait]
-pub trait Tool {
+pub trait Tool: Send + Sync {
   fn name(&self) -> &str;
   fn description(&self) -> &str;
   fn parameters(&self) -> serde_json::Value {
