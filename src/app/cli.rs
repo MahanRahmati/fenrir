@@ -1,5 +1,7 @@
 use std::io::Write;
 
+use tokio_util::sync::CancellationToken;
+
 use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
@@ -178,7 +180,8 @@ impl App {
         reasoning_ends_with_newline: false,
       };
 
-      self.process_chat(&mut sink).await?;
+      let cancel = CancellationToken::new();
+      self.process_chat(&mut sink, &cancel).await?;
       println!();
     }
 

@@ -9,6 +9,7 @@ pub use event::{AppEvent, EventSink};
 use std::collections::HashMap;
 
 use futures::StreamExt;
+use tokio_util::sync::CancellationToken;
 
 use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
@@ -153,12 +154,16 @@ impl App {
   pub async fn process_chat(
     &mut self,
     sink: &mut impl EventSink,
+    cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
+    if cancel.is_cancelled() {
+      return Ok(String::new());
+    }
     self.generate_session_title().await?;
     if self.config.general.stream {
-      return self.process_chat_stream(sink).await;
+      return self.process_chat_stream(sink, cancel).await;
     }
-    return self.process_chat_non_streaming(sink).await;
+    return self.process_chat_non_streaming(sink, cancel).await;
   }
 
   async fn generate_session_title(&mut self) -> RuntimeResult<()> {
@@ -227,6 +232,7 @@ impl App {
   async fn process_chat_stream(
     &mut self,
     sink: &mut impl EventSink,
+    cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
 
@@ -252,9 +258,18 @@ impl App {
       let mut stream_usage: Option<ChatUsage> = None;
       let mut tool_call_builders: HashMap<usize, ToolCall> = HashMap::new();
 
-      while let Some(chunk_result) = stream.next().await {
-        let delta =
-          chunk_result.map_err(|e| RuntimeError::Provider(e.to_string()))?;
+      loop {
+        let delta = tokio::select! {
+          biased;
+          _ = cancel.cancelled() => {
+            vlog!("Stream cancelled by user.");
+            break;
+          }
+          chunk_result = stream.next() => match chunk_result {
+            Some(result) => result.map_err(|e| RuntimeError::Provider(e.to_string()))?,
+            None => break,
+          },
+        };
 
         if let Some(usage) = delta.usage {
           stream_usage = Some(usage);
@@ -325,7 +340,7 @@ impl App {
 
       let tool_calls: Vec<ToolCall> =
         tool_call_builders.into_values().collect();
-      self.execute_tool_calls(&tool_calls, sink).await?;
+      self.execute_tool_calls(&tool_calls, sink, cancel).await?;
     }
 
     return Ok(assistant_content);
@@ -334,10 +349,14 @@ impl App {
   async fn process_chat_non_streaming(
     &mut self,
     sink: &mut impl EventSink,
+    cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
 
     loop {
+      if cancel.is_cancelled() {
+        break;
+      }
       let session = self
         .session_manager
         .get_current_session()
@@ -396,7 +415,9 @@ impl App {
         break;
       }
 
-      self.execute_tool_calls(&response.tool_calls, sink).await?;
+      self
+        .execute_tool_calls(&response.tool_calls, sink, cancel)
+        .await?;
     }
 
     return Ok(assistant_content);
@@ -406,8 +427,12 @@ impl App {
     &mut self,
     tool_calls: &[ToolCall],
     sink: &mut impl EventSink,
+    cancel: &CancellationToken,
   ) -> RuntimeResult<()> {
     for tool_call in tool_calls {
+      if cancel.is_cancelled() {
+        break;
+      }
       vlog!(
         "Tool call: {} with arguments: {}",
         tool_call.name,

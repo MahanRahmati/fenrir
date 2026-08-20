@@ -6,6 +6,7 @@ use ratatui::crossterm::event::{
   KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
   PushKeyboardEnhancementFlags,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
@@ -146,7 +147,8 @@ impl App {
           .draw(|frame| sink.tui.draw(frame))
           .map_err(|e| RuntimeError::Tui(e.to_string()))?;
 
-        match self.process_chat(&mut sink).await {
+        let cancel = CancellationToken::new();
+        match self.process_chat(&mut sink, &cancel).await {
           Ok(_) => {
             sink.tui.set_processing(false);
             sink.tui.set_usage(self.last_usage());
