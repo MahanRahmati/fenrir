@@ -8,6 +8,7 @@ use crate::app::{App, AppEvent, EventSink};
 use crate::input::confirm_with;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
+use crate::persona_manager::Persona;
 use crate::session_manager::session::Session;
 use crate::utils::datetime::format_timestamp;
 use crate::vlog;
@@ -75,11 +76,8 @@ impl App {
         break;
       }
 
-      let input = match read_from_stdin() {
-        Ok(input) => input,
-        Err(InputError::Eof) => break,
-        Err(InputError::EmptyInput) => continue,
-        Err(e) => return Err(RuntimeError::Input(e.to_string())),
+      let Some(input) = read_input()? else {
+        break;
       };
 
       let command = match AppCommand::parse(&input) {
@@ -101,31 +99,10 @@ impl App {
             }
           }
           AppCommandResult::Sessions { sessions, current } => {
-            if sessions.is_empty() {
-              println!("No sessions found.");
-              continue;
-            }
-            let lines: Vec<String> = sessions
-              .iter()
-              .map(|session| {
-                let marker = match current {
-                  Some(id) if id == session.id => "*",
-                  _ => " ",
-                };
-                let title =
-                  session.title.as_deref().unwrap_or("Untitled Session");
-                format!(
-                  "{marker}{title}  {}",
-                  format_timestamp(session.last_interaction)
-                )
-              })
-              .collect();
-            print_indexed_list(&lines);
-            println!("Enter session index to switch to (or empty to skip): ");
-            let Some(index) = read_index(sessions.len(), "session")? else {
+            let Some(session_id) = handle_sessions(sessions, current).await?
+            else {
               continue;
             };
-            let session_id = sessions[index].id;
             if let AppCommandResult::Session(session) = self
               .handle_command(AppCommand::LoadSession { id: session_id })
               .await?
@@ -138,25 +115,17 @@ impl App {
             }
           }
           AppCommandResult::Personas { personas, current } => {
-            let lines: Vec<String> = personas
-              .iter()
-              .map(|p| {
-                let marker = if p.name() == current { "*" } else { " " };
-                format!("{marker}{} - {}", p.name(), p.description())
-              })
-              .collect();
-            print_indexed_list(&lines);
-            println!("Enter persona index to select (or empty to skip): ");
-            let Some(index) = read_index(personas.len(), "persona")? else {
+            let Some(persona_name) =
+              handle_personas(personas, &current).await?
+            else {
               continue;
             };
-            let persona = &personas[index];
             self
               .handle_command(AppCommand::SelectPersona {
-                name: persona.name().to_string(),
+                name: persona_name.to_string(),
               })
               .await?;
-            println!("Persona set to: {}", persona.name());
+            println!("Persona set to: {}", persona_name);
           }
           AppCommandResult::Persona(_) => {
             println!("Started a new session.");
@@ -193,6 +162,65 @@ fn print_indexed_list(lines: &[String]) {
   for (index, line) in lines.iter().enumerate() {
     println!("[{index}] {line}");
   }
+}
+
+fn read_input() -> RuntimeResult<Option<String>> {
+  match read_from_stdin() {
+    Ok(input) => Ok(Some(input)),
+    Err(InputError::Eof) | Err(InputError::EmptyInput) => Ok(None),
+    Err(e) => Err(RuntimeError::Input(e.to_string())),
+  }
+}
+
+async fn handle_sessions(
+  sessions: Vec<Session>,
+  current: Option<i64>,
+) -> RuntimeResult<Option<i64>> {
+  if sessions.is_empty() {
+    println!("No sessions found.");
+    return Ok(None);
+  }
+  let lines: Vec<String> = sessions
+    .iter()
+    .map(|session| {
+      let marker = match current {
+        Some(id) if id == session.id => "*",
+        _ => " ",
+      };
+      let title = session.title.as_deref().unwrap_or("Untitled Session");
+      format!(
+        "{marker}{title}  {}",
+        format_timestamp(session.last_interaction)
+      )
+    })
+    .collect();
+  print_indexed_list(&lines);
+  println!("Enter session index to switch to (or empty to skip): ");
+  let Some(index) = read_index(sessions.len(), "session")? else {
+    return Ok(None);
+  };
+  let session_id = sessions[index].id;
+  return Ok(Some(session_id));
+}
+
+async fn handle_personas(
+  personas: Vec<Persona>,
+  current: &str,
+) -> RuntimeResult<Option<String>> {
+  let lines: Vec<String> = personas
+    .iter()
+    .map(|p| {
+      let marker = if p.name() == current { "*" } else { " " };
+      format!("{marker}{} - {}", p.name(), p.description())
+    })
+    .collect();
+  print_indexed_list(&lines);
+  println!("Enter persona index to select (or empty to skip): ");
+  let Some(index) = read_index(personas.len(), "persona")? else {
+    return Ok(None);
+  };
+  let persona = &personas[index];
+  return Ok(Some(persona.name().to_string()));
 }
 
 fn read_index(count: usize, name: &str) -> RuntimeResult<Option<usize>> {
