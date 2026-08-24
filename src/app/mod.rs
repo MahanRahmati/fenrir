@@ -1,6 +1,6 @@
 mod cli;
 mod command;
-pub mod errors;
+mod errors;
 mod event;
 mod tui;
 
@@ -322,19 +322,22 @@ impl App {
         assistant_content.push_str(&content_buffer);
       }
 
-      if tool_call_builders.is_empty() {
-        if self.config.general.show_reasoning && !reasoning_buffer.is_empty() {
-          self
-            .session_manager
-            .add_reasoning_message_to_current_session(&reasoning_buffer)
-            .await
-            .map_err(|e| RuntimeError::Session(e.to_string()))?;
-        }
+      if self.config.general.show_reasoning && !reasoning_buffer.is_empty() {
+        self
+          .session_manager
+          .add_reasoning_message_to_current_session(&reasoning_buffer)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+      }
+      if !content_buffer.is_empty() || tool_call_builders.is_empty() {
         self
           .session_manager
           .add_assistant_message_to_current_session(&content_buffer)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
+      }
+
+      if tool_call_builders.is_empty() {
         break;
       }
 
@@ -394,24 +397,25 @@ impl App {
         assistant_content.push_str(content);
       }
 
+      if self.config.general.show_reasoning
+        && let Some(ref reasoning) = response.reasoning
+        && !reasoning.is_empty()
+      {
+        self
+          .session_manager
+          .add_reasoning_message_to_current_session(reasoning)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+      }
+      if let Some(ref content) = response.content {
+        self
+          .session_manager
+          .add_assistant_message_to_current_session(content)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+      }
+
       if response.tool_calls.is_empty() {
-        if self.config.general.show_reasoning
-          && let Some(ref reasoning) = response.reasoning
-          && !reasoning.is_empty()
-        {
-          self
-            .session_manager
-            .add_reasoning_message_to_current_session(reasoning)
-            .await
-            .map_err(|e| RuntimeError::Session(e.to_string()))?;
-        }
-        if let Some(ref content) = response.content {
-          self
-            .session_manager
-            .add_assistant_message_to_current_session(content)
-            .await
-            .map_err(|e| RuntimeError::Session(e.to_string()))?;
-        }
         break;
       }
 
@@ -540,5 +544,102 @@ impl App {
       }
     }
     return Ok(());
+  }
+
+  pub async fn harness_loop(
+    &mut self,
+    sink: &mut impl EventSink,
+    cancel: &CancellationToken,
+  ) -> RuntimeResult<String> {
+    loop {
+      if self.shutdown.is_cancelled() {
+        vlog!("Shutdown signal received, exiting harness loop...");
+        break;
+      }
+
+      let input = sink.read_input().await?;
+      if let Some(input) = input {
+        let command = match AppCommand::parse(&input) {
+          Ok(Some(command)) => Some(command),
+          Ok(None) => None,
+          Err(e) => {
+            sink.on_event(AppEvent::Error {
+              message: e.to_string(),
+            });
+            continue;
+          }
+        };
+
+        if let Some(command) = command {
+          match self.handle_command(command).await? {
+            AppCommandResult::Exit => {
+              sink.on_exit();
+              break;
+            }
+            AppCommandResult::Help(slash_commands) => {
+              sink.on_help(slash_commands);
+            }
+            AppCommandResult::Sessions { sessions, current } => {
+              if let Some(session_id) =
+                sink.on_sessions(sessions, current).await?
+                && let AppCommandResult::Session(session) = self
+                  .handle_command(AppCommand::LoadSession { id: session_id })
+                  .await?
+              {
+                sink.on_session_selection(session).await;
+              }
+            }
+            AppCommandResult::Session(session) => {
+              sink.on_session_selection(session).await;
+            }
+            AppCommandResult::Personas { personas, current } => {
+              if let Some(name) = sink.on_personas(personas, current).await? {
+                self
+                  .handle_command(AppCommand::SelectPersona {
+                    name: name.clone(),
+                  })
+                  .await?;
+                sink.on_persona_selection(name).await;
+              }
+            }
+            AppCommandResult::Persona(name) => {
+              sink.on_persona_selection(name).await;
+            }
+            AppCommandResult::Noop => {}
+          }
+          continue;
+        }
+
+        self.ensure_session_with_system_message().await?;
+
+        self
+          .session_manager
+          .add_user_message_to_current_session(&input)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+
+        sink.on_event(AppEvent::UserMessage { content: input });
+
+        sink.on_event(AppEvent::Processing { processing: true });
+        match self.process_chat(sink, cancel).await {
+          Ok(_) => {
+            sink.on_event(AppEvent::Processing { processing: false });
+            sink.on_event(AppEvent::Usage {
+              usage: self.last_usage(),
+            });
+          }
+          Err(e) => {
+            sink.on_event(AppEvent::Processing { processing: false });
+            sink.on_event(AppEvent::Error {
+              message: e.to_string(),
+            });
+            continue;
+          }
+        }
+      } else {
+        break;
+      }
+    }
+    return Ok(String::new());
   }
 }

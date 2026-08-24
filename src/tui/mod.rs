@@ -314,6 +314,14 @@ impl Tui {
     return self.sessions_popup.get_selected_session();
   }
 
+  pub fn sessions_popup_open(&self) -> bool {
+    return self.sessions_popup.is_open();
+  }
+
+  pub fn handle_sessions_event(&mut self, key: KeyCode) -> bool {
+    return self.sessions_popup.handle_input(key);
+  }
+
   pub fn open_personas_popup(
     &mut self,
     personas: &[Persona],
@@ -326,6 +334,14 @@ impl Tui {
 
   pub fn get_selected_persona(&mut self) -> Option<String> {
     return self.personas_popup.get_selected_persona();
+  }
+
+  pub fn personas_popup_open(&self) -> bool {
+    return self.personas_popup.is_open();
+  }
+
+  pub fn handle_personas_event(&mut self, key: KeyCode) -> bool {
+    return self.personas_popup.handle_input(key);
   }
 
   pub fn open_confirm_popup(&mut self, message: String) {

@@ -2,7 +2,6 @@ use std::io::Write;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
 use crate::input::confirm_with;
@@ -10,8 +9,9 @@ use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::persona_manager::Persona;
 use crate::session_manager::session::Session;
+use crate::slash_commands::SlashCommand;
 use crate::utils::datetime::format_timestamp;
-use crate::vlog;
+use crate::utils::usage::format_usage;
 
 struct CliSink {
   stdout: std::io::Stdout,
@@ -23,6 +23,7 @@ struct CliSink {
 impl EventSink for CliSink {
   fn on_event(&mut self, event: AppEvent) {
     match event {
+      AppEvent::UserMessage { .. } => {}
       AppEvent::Token { text, reasoning } => {
         if reasoning {
           if !self.reasoning_open {
@@ -60,115 +61,95 @@ impl EventSink for CliSink {
         }
         self.stdout.flush().ok();
       }
+      AppEvent::Processing { processing } => {
+        if processing {
+          println!("[Processing...]");
+          self.stdout.flush().ok();
+        } else {
+          println!();
+          self.stdout.flush().ok();
+        }
+      }
+      AppEvent::Usage { usage } => {
+        let usage = usage.and_then(|u| format_usage(u.prompt_tokens));
+        if let Some(usage) = usage {
+          println!("\n[usage] {usage}",);
+        }
+      }
+      AppEvent::Error { message } => {
+        println!("\nError: {message}");
+      }
     }
   }
 
   async fn confirm(&mut self, message: &str) -> bool {
     return confirm_with(&format!("{message} (y/N): "));
   }
+
+  async fn read_input(&mut self) -> RuntimeResult<Option<String>> {
+    return match read_from_stdin() {
+      Ok(input) => Ok(Some(input)),
+      Err(InputError::Eof) | Err(InputError::EmptyInput) => Ok(None),
+      Err(e) => Err(RuntimeError::Input(e.to_string())),
+    };
+  }
+
+  fn on_exit(&mut self) {}
+
+  fn on_help(&mut self, commands: Vec<SlashCommand>) {
+    println!("Available commands:");
+    for cmd in commands {
+      println!("  {}: {}", cmd.name(), cmd.description());
+    }
+  }
+
+  async fn on_sessions(
+    &mut self,
+    sessions: Vec<Session>,
+    current: Option<i64>,
+  ) -> RuntimeResult<Option<i64>> {
+    let session_id = handle_sessions(sessions, current).await?;
+    return Ok(session_id);
+  }
+
+  async fn on_session_selection(&mut self, session: Session) {
+    println!(
+      "--- {} ---",
+      session.title.as_deref().unwrap_or("Untitled Session")
+    );
+    print_session_messages(&session);
+  }
+
+  async fn on_personas(
+    &mut self,
+    personas: Vec<Persona>,
+    current: String,
+  ) -> RuntimeResult<Option<String>> {
+    let persona_name = handle_personas(personas, &current).await?;
+    return Ok(persona_name);
+  }
+
+  async fn on_persona_selection(&mut self, name: String) {
+    println!("Persona set to: {name}");
+  }
 }
 
 impl App {
   pub async fn run(&mut self) -> RuntimeResult<String> {
-    loop {
-      if self.shutdown.is_cancelled() {
-        vlog!("Shutdown signal received, exiting CLI loop...");
-        break;
-      }
+    let mut sink = CliSink {
+      stdout: std::io::stdout(),
+      reasoning_open: false,
+      reasoning_ends_with_newline: false,
+    };
 
-      let Some(input) = read_input()? else {
-        break;
-      };
-
-      let command = match AppCommand::parse(&input) {
-        Ok(Some(command)) => Some(command),
-        Ok(None) => None,
-        Err(e) => {
-          println!("Error: {e}");
-          continue;
-        }
-      };
-
-      if let Some(command) = command {
-        match self.handle_command(command).await? {
-          AppCommandResult::Exit => break,
-          AppCommandResult::Help(commands) => {
-            println!("Available commands:");
-            for cmd in commands {
-              println!("  {}: {}", cmd.name(), cmd.description());
-            }
-          }
-          AppCommandResult::Sessions { sessions, current } => {
-            let Some(session_id) = handle_sessions(sessions, current).await?
-            else {
-              continue;
-            };
-            if let AppCommandResult::Session(session) = self
-              .handle_command(AppCommand::LoadSession { id: session_id })
-              .await?
-            {
-              println!(
-                "--- {} ---",
-                session.title.as_deref().unwrap_or("Untitled Session")
-              );
-              print_session_messages(&session);
-            }
-          }
-          AppCommandResult::Personas { personas, current } => {
-            let Some(persona_name) =
-              handle_personas(personas, &current).await?
-            else {
-              continue;
-            };
-            self
-              .handle_command(AppCommand::SelectPersona {
-                name: persona_name.to_string(),
-              })
-              .await?;
-            println!("Persona set to: {}", persona_name);
-          }
-          AppCommandResult::Persona(_) => {
-            println!("Started a new session.");
-          }
-          _ => {}
-        }
-        continue;
-      }
-
-      self.ensure_session_with_system_message().await?;
-
-      self
-        .session_manager
-        .add_user_message_to_current_session(&input)
-        .await
-        .map_err(|e| RuntimeError::Session(e.to_string()))?;
-
-      let mut sink = CliSink {
-        stdout: std::io::stdout(),
-        reasoning_open: false,
-        reasoning_ends_with_newline: false,
-      };
-
-      let cancel = CancellationToken::new();
-      self.process_chat(&mut sink, &cancel).await?;
-      println!();
-    }
-
-    return Ok(String::new());
+    let cancel = CancellationToken::new();
+    return self.harness_loop(&mut sink, &cancel).await;
   }
 }
 
 fn print_indexed_list(lines: &[String]) {
   for (index, line) in lines.iter().enumerate() {
     println!("[{index}] {line}");
-  }
-}
-
-fn read_input() -> RuntimeResult<Option<String>> {
-  match read_from_stdin() {
-    Ok(input) => Ok(Some(input)),
-    Err(InputError::Eof) | Err(InputError::EmptyInput) => Ok(None),
-    Err(e) => Err(RuntimeError::Input(e.to_string())),
   }
 }
 

@@ -8,9 +8,11 @@ use ratatui::crossterm::event::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
+use crate::persona_manager::Persona;
+use crate::session_manager::session::Session;
+use crate::slash_commands::SlashCommand;
 use crate::tui::Tui;
 
 struct TuiSink {
@@ -18,10 +20,19 @@ struct TuiSink {
   terminal: ratatui::DefaultTerminal,
 }
 
+impl TuiSink {
+  fn redraw(&mut self) {
+    self.terminal.draw(|frame| self.tui.draw(frame)).ok();
+  }
+}
+
 #[async_trait::async_trait]
 impl EventSink for TuiSink {
   fn on_event(&mut self, event: AppEvent) {
     match event {
+      AppEvent::UserMessage { content } => {
+        self.tui.add_message(content);
+      }
       AppEvent::Token { text, reasoning } => {
         if reasoning {
           self.tui.ensure_reasoning_line();
@@ -29,29 +40,104 @@ impl EventSink for TuiSink {
           self.tui.ensure_content_line();
         }
         self.tui.append_to_last_message(&text);
-        self.terminal.draw(|frame| self.tui.draw(frame)).ok();
       }
       AppEvent::ToolCall { name, arguments } => {
         self.tui.add_tool_call(name, arguments);
-        self.terminal.draw(|frame| self.tui.draw(frame)).ok();
       }
       AppEvent::ToolResult { result, error } => {
         self.tui.add_tool_result(result, error);
-        self.terminal.draw(|frame| self.tui.draw(frame)).ok();
+      }
+      AppEvent::Processing { processing } => {
+        self.tui.set_processing(processing);
+      }
+      AppEvent::Usage { usage } => {
+        self.tui.set_usage(usage);
+      }
+      AppEvent::Error { message } => {
+        self.tui.add_message(format!("Error: {message}"));
       }
     }
+    self.redraw();
   }
 
   async fn confirm(&mut self, message: &str) -> bool {
     self.tui.open_confirm_popup(message.to_string());
-    self.terminal.draw(|frame| self.tui.draw(frame)).ok();
+    self.redraw();
     while self.tui.confirm_popup_open() {
       if let Ok(Event::Key(key)) = event::read() {
         self.tui.handle_confirm_event(key.code);
       }
-      self.terminal.draw(|frame| self.tui.draw(frame)).ok();
+      self.redraw();
     }
     return self.tui.get_confirmation();
+  }
+
+  async fn read_input(&mut self) -> RuntimeResult<Option<String>> {
+    loop {
+      let input = self.tui.read_input().await;
+      self.redraw();
+      if let Some(text) = input {
+        return Ok(Some(text));
+      }
+      if !self.tui.is_running() {
+        return Ok(None);
+      }
+    }
+  }
+
+  fn on_exit(&mut self) {
+    self.tui.quit();
+  }
+
+  fn on_help(&mut self, commands: Vec<SlashCommand>) {
+    self.tui.open_help_popup(commands);
+    self.redraw();
+  }
+
+  async fn on_sessions(
+    &mut self,
+    sessions: Vec<Session>,
+    current: Option<i64>,
+  ) -> RuntimeResult<Option<i64>> {
+    self.tui.open_sessions_popup(sessions, current);
+    self.redraw();
+    while self.tui.sessions_popup_open() {
+      if let Ok(Event::Key(key)) = event::read() {
+        self.tui.handle_sessions_event(key.code);
+      }
+      self.redraw();
+    }
+    let session_id = self.tui.get_selected_session();
+    return Ok(session_id);
+  }
+
+  async fn on_session_selection(&mut self, session: Session) {
+    self.tui.update_messages(Some(&session));
+    self.redraw();
+  }
+
+  async fn on_personas(
+    &mut self,
+    personas: Vec<Persona>,
+    current: String,
+  ) -> RuntimeResult<Option<String>> {
+    let current_persona = personas.iter().find(|p| p.name() == current);
+    self.tui.open_personas_popup(&personas, current_persona);
+    self.redraw();
+    while self.tui.personas_popup_open() {
+      if let Ok(Event::Key(key)) = event::read() {
+        self.tui.handle_personas_event(key.code);
+      }
+      self.redraw();
+    }
+    let name = self.tui.get_selected_persona();
+    return Ok(name);
+  }
+
+  async fn on_persona_selection(&mut self, name: String) {
+    self.tui.set_persona(&name);
+    self.tui.update_messages(None);
+    self.redraw();
   }
 }
 
@@ -72,102 +158,19 @@ impl App {
     .map_err(|e| RuntimeError::Tui(e.to_string()))?;
     sink.tui.set_persona(self.persona_manager.current().name());
 
-    while sink.tui.is_running() && !self.shutdown.is_cancelled() {
-      sink
-        .terminal
-        .draw(|frame| sink.tui.draw(frame))
-        .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+    sink
+      .terminal
+      .draw(|frame| sink.tui.draw(frame))
+      .map_err(|e| RuntimeError::Tui(e.to_string()))?;
 
-      let input = sink.tui.read_input().await;
-      if let Some(session_id) = sink.tui.get_selected_session() {
-        if let AppCommandResult::Session(session) = self
-          .handle_command(AppCommand::LoadSession { id: session_id })
-          .await?
-        {
-          sink.tui.update_messages(Some(&session));
-        }
-        continue;
-      }
-      if let Some(name) = sink.tui.get_selected_persona() {
-        self
-          .handle_command(AppCommand::SelectPersona { name: name.clone() })
-          .await?;
-        sink.tui.set_persona(&name);
-        continue;
-      }
-      if let Some(input) = input {
-        let command = match AppCommand::parse(&input) {
-          Ok(Some(command)) => Some(command),
-          Ok(None) => None,
-          Err(e) => {
-            sink.tui.add_message(format!("Error: {e}"));
-            continue;
-          }
-        };
-
-        if let Some(command) = command {
-          match self.handle_command(command).await? {
-            AppCommandResult::Exit => {
-              sink.tui.quit();
-              break;
-            }
-            AppCommandResult::Help(commands) => {
-              sink.tui.open_help_popup(commands);
-            }
-            AppCommandResult::Sessions { sessions, current } => {
-              sink.tui.open_sessions_popup(sessions, current);
-            }
-            AppCommandResult::Personas { personas, current } => {
-              let current_persona =
-                personas.iter().find(|p| p.name() == current);
-              sink.tui.open_personas_popup(&personas, current_persona);
-            }
-            AppCommandResult::Persona(name) => {
-              sink.tui.set_persona(&name);
-              sink.tui.update_messages(None);
-            }
-            _ => {}
-          }
-          continue;
-        }
-
-        self.ensure_session_with_system_message().await?;
-
-        self
-          .session_manager
-          .add_user_message_to_current_session(&input)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
-
-        sink.tui.add_message(input);
-
-        sink.tui.set_processing(true);
-        sink
-          .terminal
-          .draw(|frame| sink.tui.draw(frame))
-          .map_err(|e| RuntimeError::Tui(e.to_string()))?;
-
-        let cancel = CancellationToken::new();
-        match self.process_chat(&mut sink, &cancel).await {
-          Ok(_) => {
-            sink.tui.set_processing(false);
-            sink.tui.set_usage(self.last_usage());
-            sink.terminal.draw(|frame| sink.tui.draw(frame)).ok();
-          }
-          Err(e) => {
-            sink.tui.set_processing(false);
-            sink.tui.add_message(format!("Error: {e}"));
-            continue;
-          }
-        }
-      }
-    }
+    let cancel = CancellationToken::new();
+    let result = self.harness_loop(&mut sink, &cancel).await;
 
     crossterm::execute!(stdout(), DisableMouseCapture)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
     crossterm::execute!(stdout(), PopKeyboardEnhancementFlags)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
     ratatui::restore();
-    return Ok(String::new());
+    return result;
   }
 }
