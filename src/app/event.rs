@@ -19,7 +19,7 @@ pub enum AppEvent {
 #[async_trait]
 pub trait EventSink {
   fn on_event(&mut self, event: AppEvent);
-  async fn confirm(&mut self, message: &str) -> bool;
+  fn confirm(&mut self, message: &str) -> bool;
   async fn read_input(&mut self) -> RuntimeResult<Option<String>>;
   fn on_exit(&mut self);
   fn on_help(&mut self, commands: Vec<SlashCommand>);

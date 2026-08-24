@@ -471,7 +471,7 @@ impl App {
       let rejection = match approval {
         ToolApproval::Allowed => None,
         ToolApproval::NeedsConfirmation { message } => {
-          if sink.confirm(&message).await {
+          if sink.confirm(&message) {
             None
           } else {
             Some(ToolRejection::UserDeclined)

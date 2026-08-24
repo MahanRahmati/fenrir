@@ -60,7 +60,7 @@ impl EventSink for TuiSink {
     self.redraw();
   }
 
-  async fn confirm(&mut self, message: &str) -> bool {
+  fn confirm(&mut self, message: &str) -> bool {
     self.tui.open_confirm_popup(message.to_string());
     self.redraw();
     while self.tui.confirm_popup_open() {

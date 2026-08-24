@@ -82,7 +82,7 @@ impl EventSink for CliSink {
     }
   }
 
-  async fn confirm(&mut self, message: &str) -> bool {
+  fn confirm(&mut self, message: &str) -> bool {
     return confirm_with(&format!("{message} (y/N): "));
   }
 
