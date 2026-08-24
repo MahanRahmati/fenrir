@@ -4,6 +4,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::provider_manager::ChatUsage;
+use crate::utils::usage::format_usage;
 
 pub struct StatusLine {
   cwd: String,
@@ -36,13 +37,6 @@ impl StatusLine {
     return path.to_string();
   }
 
-  fn format_usage(tokens: u64) -> Option<String> {
-    if tokens < 1000 {
-      return Some(tokens.to_string());
-    }
-    return Some(format!("{:.1}K", tokens as f64 / 1000.0));
-  }
-
   fn left_label(&self) -> String {
     let left_label = if self.processing {
       "Processing...".to_string()
@@ -53,8 +47,7 @@ impl StatusLine {
   }
 
   fn right_label(&self) -> String {
-    let usage_display =
-      self.usage.and_then(|u| Self::format_usage(u.prompt_tokens));
+    let usage_display = self.usage.and_then(|u| format_usage(u.prompt_tokens));
     let version_display = format!("v{}", self.version);
     let mut right_label = String::new();
     if let Some(usage) = usage_display {
