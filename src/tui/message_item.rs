@@ -205,6 +205,10 @@ impl MessageItem {
     return self.role == Role::Reasoning;
   }
 
+  pub fn is_assistant(&self) -> bool {
+    return self.role == Role::Assistant;
+  }
+
   pub fn push_string(&mut self, text: &str) {
     self.text.push_str(text);
   }

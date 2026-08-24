@@ -116,7 +116,7 @@ impl MessagesList {
   }
 
   pub fn ensure_content_line(&mut self) {
-    if self.messages.last().is_none_or(|last| last.is_reasoning()) {
+    if self.messages.last().is_none_or(|last| !last.is_assistant()) {
       let message = MessageItem::new(String::new(), Role::Assistant);
       self.messages.push(message);
       self.select_last();
