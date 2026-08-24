@@ -103,16 +103,16 @@ impl EventSink for CliSink {
     }
   }
 
-  async fn on_sessions(
+  fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
     current: Option<i64>,
   ) -> RuntimeResult<Option<i64>> {
-    let session_id = handle_sessions(sessions, current).await?;
+    let session_id = handle_sessions(sessions, current)?;
     return Ok(session_id);
   }
 
-  async fn on_session_selection(&mut self, session: Session) {
+  fn on_session_selection(&mut self, session: Session) {
     println!(
       "--- {} ---",
       session.title.as_deref().unwrap_or("Untitled Session")
@@ -120,16 +120,16 @@ impl EventSink for CliSink {
     print_session_messages(&session);
   }
 
-  async fn on_personas(
+  fn on_personas(
     &mut self,
     personas: Vec<Persona>,
     current: String,
   ) -> RuntimeResult<Option<String>> {
-    let persona_name = handle_personas(personas, &current).await?;
+    let persona_name = handle_personas(personas, &current)?;
     return Ok(persona_name);
   }
 
-  async fn on_persona_selection(&mut self, name: String) {
+  fn on_persona_selection(&mut self, name: String) {
     println!("Persona set to: {name}");
   }
 }
@@ -153,7 +153,7 @@ fn print_indexed_list(lines: &[String]) {
   }
 }
 
-async fn handle_sessions(
+fn handle_sessions(
   sessions: Vec<Session>,
   current: Option<i64>,
 ) -> RuntimeResult<Option<i64>> {
@@ -184,7 +184,7 @@ async fn handle_sessions(
   return Ok(Some(session_id));
 }
 
-async fn handle_personas(
+fn handle_personas(
   personas: Vec<Persona>,
   current: &str,
 ) -> RuntimeResult<Option<String>> {

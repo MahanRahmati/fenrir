@@ -23,16 +23,16 @@ pub trait EventSink {
   async fn read_input(&mut self) -> RuntimeResult<Option<String>>;
   fn on_exit(&mut self);
   fn on_help(&mut self, commands: Vec<SlashCommand>);
-  async fn on_sessions(
+  fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
     current: Option<i64>,
   ) -> RuntimeResult<Option<i64>>;
-  async fn on_session_selection(&mut self, session: Session);
-  async fn on_personas(
+  fn on_session_selection(&mut self, session: Session);
+  fn on_personas(
     &mut self,
     personas: Vec<Persona>,
     current: String,
   ) -> RuntimeResult<Option<String>>;
-  async fn on_persona_selection(&mut self, name: String);
+  fn on_persona_selection(&mut self, name: String);
 }

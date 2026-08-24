@@ -94,7 +94,7 @@ impl EventSink for TuiSink {
     self.redraw();
   }
 
-  async fn on_sessions(
+  fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
     current: Option<i64>,
@@ -111,12 +111,12 @@ impl EventSink for TuiSink {
     return Ok(session_id);
   }
 
-  async fn on_session_selection(&mut self, session: Session) {
+  fn on_session_selection(&mut self, session: Session) {
     self.tui.update_messages(Some(&session));
     self.redraw();
   }
 
-  async fn on_personas(
+  fn on_personas(
     &mut self,
     personas: Vec<Persona>,
     current: String,
@@ -134,7 +134,7 @@ impl EventSink for TuiSink {
     return Ok(name);
   }
 
-  async fn on_persona_selection(&mut self, name: String) {
+  fn on_persona_selection(&mut self, name: String) {
     self.tui.set_persona(&name);
     self.tui.update_messages(None);
     self.redraw();

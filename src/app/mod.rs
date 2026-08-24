@@ -580,30 +580,29 @@ impl App {
               sink.on_help(slash_commands);
             }
             AppCommandResult::Sessions { sessions, current } => {
-              if let Some(session_id) =
-                sink.on_sessions(sessions, current).await?
+              if let Some(session_id) = sink.on_sessions(sessions, current)?
                 && let AppCommandResult::Session(session) = self
                   .handle_command(AppCommand::LoadSession { id: session_id })
                   .await?
               {
-                sink.on_session_selection(session).await;
+                sink.on_session_selection(session);
               }
             }
             AppCommandResult::Session(session) => {
-              sink.on_session_selection(session).await;
+              sink.on_session_selection(session);
             }
             AppCommandResult::Personas { personas, current } => {
-              if let Some(name) = sink.on_personas(personas, current).await? {
+              if let Some(name) = sink.on_personas(personas, current)? {
                 self
                   .handle_command(AppCommand::SelectPersona {
                     name: name.clone(),
                   })
                   .await?;
-                sink.on_persona_selection(name).await;
+                sink.on_persona_selection(name);
               }
             }
             AppCommandResult::Persona(name) => {
-              sink.on_persona_selection(name).await;
+              sink.on_persona_selection(name);
             }
             AppCommandResult::Noop => {}
           }
