@@ -14,6 +14,7 @@ mod statusline;
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
+use uuid::Uuid;
 
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
@@ -303,14 +304,14 @@ impl Tui {
   pub fn open_sessions_popup(
     &mut self,
     sessions: Vec<Session>,
-    current_session: Option<i64>,
+    current_session: Option<Uuid>,
   ) {
     self
       .sessions_popup
       .open_sessions_popup(sessions, current_session);
   }
 
-  pub fn get_selected_session(&mut self) -> Option<i64> {
+  pub fn get_selected_session(&mut self) -> Option<Uuid> {
     return self.sessions_popup.get_selected_session();
   }
 

@@ -5,6 +5,7 @@ mod event;
 mod tui;
 
 pub use event::{AppEvent, EventSink};
+use uuid::Uuid;
 
 use std::collections::HashMap;
 
@@ -186,6 +187,7 @@ impl App {
     let now = chrono::Utc::now().timestamp();
     let messages = vec![
       Message {
+        id: Uuid::now_v7(),
         msg_type: None,
         role: "system".to_string(),
         content: prompt.get_system_prompt().to_string(),
@@ -194,6 +196,7 @@ impl App {
         timestamp: now,
       },
       Message {
+        id: Uuid::now_v7(),
         msg_type: None,
         role: "user".to_string(),
         content: first_message,

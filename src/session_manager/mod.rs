@@ -2,6 +2,8 @@ mod errors;
 mod queries;
 pub mod session;
 
+use uuid::Uuid;
+
 pub use crate::session_manager::session::Message;
 
 use crate::database::DB;
@@ -13,7 +15,7 @@ use crate::session_manager::session::Session;
 
 pub struct SessionManager {
   sessions: Vec<Session>,
-  current_session: Option<i64>,
+  current_session: Option<Uuid>,
   db: DB,
 }
 
@@ -26,14 +28,14 @@ impl SessionManager {
     };
   }
 
-  pub async fn create_session(&mut self) -> SessionManagerResult<i64> {
+  pub async fn create_session(&mut self) -> SessionManagerResult<Uuid> {
     let session = Session::new();
     match self
       .db
       .execute(
         INSERT_SESSION,
         (
-          session.id,
+          session.id.to_string(),
           session.title.clone(),
           session.created_at,
           session.last_interaction,
@@ -155,7 +157,8 @@ impl SessionManager {
           .execute(
             INSERT_MESSAGE,
             (
-              session.id,
+              &*msg.id.to_string(),
+              session.id.to_string(),
               &*msg.role,
               &*msg.content,
               msg.timestamp,
@@ -188,7 +191,7 @@ impl SessionManager {
       session.title = Some(title.to_string());
       match self
         .db
-        .execute(UPDATE_SESSION_TITLE, (title, session_id))
+        .execute(UPDATE_SESSION_TITLE, (title, session_id.to_string()))
         .await
       {
         Ok(_) => {}
@@ -202,14 +205,15 @@ impl SessionManager {
 
   pub async fn load_session_from_db(
     &mut self,
-    id: i64,
+    id: Uuid,
   ) -> SessionManagerResult<()> {
-    let mut session_row = match self.db.query(LOAD_SESSION, (id,)).await {
-      Ok(rows) => rows,
-      Err(e) => {
-        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-      }
-    };
+    let mut session_row =
+      match self.db.query(LOAD_SESSION, (id.to_string(),)).await {
+        Ok(rows) => rows,
+        Err(e) => {
+          return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
+        }
+      };
 
     let row = match session_row.next().await {
       Ok(Some(row)) => row,
@@ -220,7 +224,15 @@ impl SessionManager {
       }
     };
 
-    let session_id: i64 = match row.get(0) {
+    let session_id: String = match row.get(0) {
+      Ok(v) => v,
+      Err(_) => {
+        return Err(SessionManagerError::SessionLoadFailed(
+          "Invalid session data".to_string(),
+        ));
+      }
+    };
+    let session_id = match Uuid::parse_str(&session_id) {
       Ok(v) => v,
       Err(_) => {
         return Err(SessionManagerError::SessionLoadFailed(
@@ -254,16 +266,27 @@ impl SessionManager {
       }
     };
 
-    let mut messages_rows =
-      match self.db.query(LOAD_MESSAGES, (session_id,)).await {
-        Ok(rows) => rows,
-        Err(e) => {
-          return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-        }
-      };
+    let mut messages_rows = match self
+      .db
+      .query(LOAD_MESSAGES, (session_id.to_string(),))
+      .await
+    {
+      Ok(rows) => rows,
+      Err(e) => {
+        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
+      }
+    };
 
     let mut messages = Vec::new();
     while let Ok(Some(msg_row)) = messages_rows.next().await {
+      let id: String = match msg_row.get(0) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let id = match Uuid::parse_str(&id) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
       let role: String = match msg_row.get(2) {
         Ok(v) => v,
         Err(_) => continue,
@@ -291,6 +314,7 @@ impl SessionManager {
       };
 
       let message = Message {
+        id,
         msg_type: None,
         role,
         content,
@@ -325,7 +349,11 @@ impl SessionManager {
 
     let mut result = Vec::new();
     while let Ok(Some(row)) = rows.next().await {
-      let id: i64 = match row.get(0) {
+      let id: String = match row.get(0) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let id = match Uuid::parse_str(&id) {
         Ok(v) => v,
         Err(_) => continue,
       };
@@ -357,7 +385,7 @@ impl SessionManager {
     return Ok(result);
   }
 
-  fn get_session_by_id(&self, id: i64) -> Option<&Session> {
+  fn get_session_by_id(&self, id: Uuid) -> Option<&Session> {
     return self.sessions.iter().find(|session| session.id == id);
   }
 

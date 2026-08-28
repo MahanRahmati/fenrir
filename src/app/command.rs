@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::persona_manager::Persona;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
@@ -8,7 +10,7 @@ pub enum AppCommand {
   Exit,
   Help,
   ListSessions,
-  LoadSession { id: i64 },
+  LoadSession { id: Uuid },
   ListPersonas,
   SelectPersona { name: String },
   New,
@@ -19,7 +21,7 @@ pub enum AppCommandResult {
   Help(Vec<SlashCommand>),
   Sessions {
     sessions: Vec<Session>,
-    current: Option<i64>,
+    current: Option<Uuid>,
   },
   Session(Session),
   Personas {

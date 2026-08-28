@@ -1,8 +1,10 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
+  pub id: Uuid,
   #[serde(rename = "type")]
   #[serde(skip_serializing_if = "Option::is_none")]
   pub msg_type: Option<String>,
@@ -31,7 +33,7 @@ pub struct ToolFunction {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
-  pub id: i64,
+  pub id: Uuid,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub title: Option<String>,
   pub created_at: i64,
@@ -43,7 +45,7 @@ impl Session {
   pub fn new() -> Self {
     let now = Utc::now().timestamp();
     return Self {
-      id: now,
+      id: Uuid::now_v7(),
       title: None,
       created_at: now,
       last_interaction: now,
@@ -102,6 +104,7 @@ impl Session {
   ) {
     let now = Utc::now().timestamp();
     let message = Message {
+      id: Uuid::now_v7(),
       msg_type: None,
       role: role.to_string(),
       content: content.to_string(),

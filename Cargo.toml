@@ -30,6 +30,7 @@ async-trait = "0.1.91"
 ratatui = { version = "0.30.2", features = ["unstable-rendered-line-info"] }
 tui-widget-list = "0.15.3"
 base64 = "0.23.1"
+uuid = { version = "1.26.0", features = ["v7"] }
 
 [lints.clippy]
 needless_return = "allow"

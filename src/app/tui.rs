@@ -7,6 +7,7 @@ use ratatui::crossterm::event::{
   PushKeyboardEnhancementFlags,
 };
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
@@ -97,8 +98,8 @@ impl EventSink for TuiSink {
   fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
-    current: Option<i64>,
-  ) -> RuntimeResult<Option<i64>> {
+    current: Option<Uuid>,
+  ) -> RuntimeResult<Option<Uuid>> {
     self.tui.open_sessions_popup(sessions, current);
     self.redraw();
     while self.tui.sessions_popup_open() {

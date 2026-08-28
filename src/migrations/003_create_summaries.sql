@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS summaries (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id INTEGER NOT NULL REFERENCES sessions(id),
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id),
   content TEXT NOT NULL,
-  covers_message_id INTEGER NOT NULL REFERENCES messages(id),
+  covers_message_id TEXT NOT NULL REFERENCES messages(id),
   created_at INTEGER NOT NULL
 );

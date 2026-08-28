@@ -2,6 +2,7 @@ use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::text::Line;
 use ratatui::widgets::ListItem;
+use uuid::Uuid;
 
 use crate::session_manager::session::Session;
 use crate::tui::popup_list::PopupList;
@@ -10,7 +11,7 @@ use crate::utils::datetime::format_timestamp;
 pub struct SessionsPopup {
   list: PopupList,
   sessions: Vec<Session>,
-  current_session: Option<i64>,
+  current_session: Option<Uuid>,
 }
 
 impl SessionsPopup {
@@ -56,14 +57,14 @@ impl SessionsPopup {
   pub fn open_sessions_popup(
     &mut self,
     sessions: Vec<Session>,
-    current_session: Option<i64>,
+    current_session: Option<Uuid>,
   ) {
     self.sessions = sessions;
     self.current_session = current_session;
     self.list.open(self.sessions.len());
   }
 
-  pub fn get_selected_session(&mut self) -> Option<i64> {
+  pub fn get_selected_session(&mut self) -> Option<Uuid> {
     return self
       .list
       .take_selected()

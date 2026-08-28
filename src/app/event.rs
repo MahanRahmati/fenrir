@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use uuid::Uuid;
 
 use crate::app::errors::RuntimeResult;
 use crate::persona_manager::Persona;
@@ -26,8 +27,8 @@ pub trait EventSink {
   fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
-    current: Option<i64>,
-  ) -> RuntimeResult<Option<i64>>;
+    current: Option<Uuid>,
+  ) -> RuntimeResult<Option<Uuid>>;
   fn on_session_selection(&mut self, session: Session);
   fn on_personas(
     &mut self,

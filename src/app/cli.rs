@@ -1,6 +1,7 @@
 use std::io::Write;
 
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
@@ -106,8 +107,8 @@ impl EventSink for CliSink {
   fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
-    current: Option<i64>,
-  ) -> RuntimeResult<Option<i64>> {
+    current: Option<Uuid>,
+  ) -> RuntimeResult<Option<Uuid>> {
     let session_id = handle_sessions(sessions, current)?;
     return Ok(session_id);
   }
@@ -155,8 +156,8 @@ fn print_indexed_list(lines: &[String]) {
 
 fn handle_sessions(
   sessions: Vec<Session>,
-  current: Option<i64>,
-) -> RuntimeResult<Option<i64>> {
+  current: Option<Uuid>,
+) -> RuntimeResult<Option<Uuid>> {
   if sessions.is_empty() {
     println!("No sessions found.");
     return Ok(None);
