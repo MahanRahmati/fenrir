@@ -1,6 +1,7 @@
 mod errors;
 mod queries;
 pub mod session;
+mod summary;
 
 use uuid::Uuid;
 
@@ -12,6 +13,7 @@ use crate::session_manager::errors::{
 };
 use crate::session_manager::queries::*;
 use crate::session_manager::session::Session;
+use crate::session_manager::summary::Summary;
 
 pub struct SessionManager {
   sessions: Vec<Session>,
@@ -326,12 +328,62 @@ impl SessionManager {
       messages.push(message);
     }
 
+    let mut summaries_rows = match self
+      .db
+      .query(LOAD_SUMMARIES, (session_id.to_string(),))
+      .await
+    {
+      Ok(rows) => rows,
+      Err(e) => {
+        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
+      }
+    };
+
+    let mut summaries = Vec::new();
+    while let Ok(Some(summary_row)) = summaries_rows.next().await {
+      let id: String = match summary_row.get(0) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let id = match Uuid::parse_str(&id) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let content: String = match summary_row.get(2) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let covers_message_id: String = match summary_row.get(3) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let covers_message_id = match Uuid::parse_str(&covers_message_id) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+
+      let summary_created_at: i64 = match summary_row.get(4) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+
+      let summary = Summary {
+        id,
+        session_id,
+        content,
+        covers_message_id,
+        created_at: summary_created_at,
+      };
+      summaries.push(summary);
+    }
+
     let session = Session {
       id: session_id,
       created_at,
       last_interaction,
       title,
       messages,
+      summaries,
     };
 
     self.sessions.push(session);
@@ -377,6 +429,7 @@ impl SessionManager {
         last_interaction,
         title,
         messages: Vec::new(),
+        summaries: Vec::new(),
       };
 
       result.push(session);

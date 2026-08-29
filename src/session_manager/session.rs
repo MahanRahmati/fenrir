@@ -2,6 +2,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::session_manager::summary::Summary;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
   pub id: Uuid,
@@ -39,6 +41,7 @@ pub struct Session {
   pub created_at: i64,
   pub last_interaction: i64,
   pub messages: Vec<Message>,
+  pub summaries: Vec<Summary>,
 }
 
 impl Session {
@@ -50,6 +53,7 @@ impl Session {
       created_at: now,
       last_interaction: now,
       messages: Vec::new(),
+      summaries: Vec::new(),
     };
   }
 
