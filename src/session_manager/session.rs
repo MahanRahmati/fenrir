@@ -119,4 +119,41 @@ impl Session {
     self.last_interaction = now;
     self.messages.push(message);
   }
+
+  pub fn build_chat_context(&self) -> Vec<Message> {
+    if let Some(latest) = self.summaries.last() {
+      let mut chat_context = Vec::new();
+
+      let system_message = self.messages.iter().find(|m| m.role == "system");
+      if let Some(system_message) = system_message {
+        chat_context.push(system_message.clone());
+      }
+
+      let first_user_message = self.messages.iter().find(|m| m.role == "user");
+      if let Some(first_user_message) = first_user_message {
+        chat_context.push(first_user_message.clone());
+      }
+
+      let summary = Message {
+        id: Uuid::now_v7(),
+        msg_type: None,
+        role: "system".to_string(),
+        content: latest.content.clone(),
+        tool_call_id: None,
+        tool_calls: None,
+        timestamp: latest.created_at,
+      };
+      chat_context.push(summary);
+
+      for msg in &self.messages {
+        if msg.id > latest.covers_message_id {
+          chat_context.push(msg.clone());
+        }
+      }
+
+      return chat_context;
+    } else {
+      return self.messages.clone();
+    }
+  }
 }

@@ -245,7 +245,7 @@ impl App {
         .get_current_session()
         .ok_or(RuntimeError::Session("No active session".into()))?;
 
-      let messages = &session.messages;
+      let messages = &session.build_chat_context();
       let tools = self
         .tool_manager
         .get_tools_specs(self.persona_manager.current().allowed_tools());
@@ -368,7 +368,7 @@ impl App {
         .get_current_session()
         .ok_or_else(|| RuntimeError::Session("No active session".into()))?;
 
-      let messages = &session.messages;
+      let messages = &session.build_chat_context();
       let tools = self
         .tool_manager
         .get_tools_specs(self.persona_manager.current().allowed_tools());
