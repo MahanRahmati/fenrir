@@ -1,9 +1,11 @@
+mod compaction;
 mod default;
 mod persona;
 mod researcher;
 mod reviewer;
 mod titles;
 
+use crate::persona_manager::compaction::COMPACTION_PERSONA;
 use crate::persona_manager::default::DEFAULT_PERSONA;
 pub use crate::persona_manager::persona::{Persona, ToolAccess};
 use crate::persona_manager::researcher::RESEARCHER_PERSONA;
@@ -31,6 +33,7 @@ impl PersonaManager {
       RESEARCHER_PERSONA,
       REVIEWER_PERSONA,
       TITLES_PERSONA,
+      COMPACTION_PERSONA,
     ]
     .into_iter()
     .filter(|p| p.is_selectable())
