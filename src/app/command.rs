@@ -13,6 +13,7 @@ pub enum AppCommand {
   LoadSession { id: Uuid },
   ListPersonas,
   SelectPersona { name: String },
+  Compact,
   New,
 }
 
@@ -29,6 +30,9 @@ pub enum AppCommandResult {
     current: String,
   },
   Persona(String),
+  Compacted {
+    summary: String,
+  },
   Noop,
 }
 
@@ -40,6 +44,7 @@ impl AppCommand {
         SlashCommand::Help => Self::Help,
         SlashCommand::Sessions => Self::ListSessions,
         SlashCommand::Personas => Self::ListPersonas,
+        SlashCommand::Compact => Self::Compact,
         SlashCommand::New => Self::New,
       })
     });

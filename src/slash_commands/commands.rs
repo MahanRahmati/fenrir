@@ -3,6 +3,7 @@ pub enum SlashCommand {
   New,
   Sessions,
   Personas,
+  Compact,
   Help,
   Exit,
 }
@@ -13,6 +14,7 @@ impl SlashCommand {
       SlashCommand::New => "/new",
       SlashCommand::Sessions => "/sessions",
       SlashCommand::Personas => "/personas",
+      SlashCommand::Compact => "/compact",
       SlashCommand::Help => "/help",
       SlashCommand::Exit => "/exit",
     };
@@ -23,6 +25,7 @@ impl SlashCommand {
       SlashCommand::New => "Create a new session",
       SlashCommand::Sessions => "List all sessions",
       SlashCommand::Personas => "List all personas",
+      SlashCommand::Compact => "Compact the current session",
       SlashCommand::Help => "Show this help message",
       SlashCommand::Exit => "Exit the application",
     };
@@ -33,6 +36,7 @@ impl SlashCommand {
       SlashCommand::New,
       SlashCommand::Sessions,
       SlashCommand::Personas,
+      SlashCommand::Compact,
       SlashCommand::Help,
       SlashCommand::Exit,
     ];

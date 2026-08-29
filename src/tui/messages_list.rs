@@ -107,6 +107,12 @@ impl MessagesList {
     self.select_last();
   }
 
+  pub fn add_summary(&mut self, summary: String) {
+    let message = MessageItem::new(summary, Role::Compaction);
+    self.messages.push(message);
+    self.select_last();
+  }
+
   pub fn ensure_reasoning_line(&mut self) {
     if self.messages.last().is_none_or(|last| !last.is_reasoning()) {
       let message = MessageItem::new(String::new(), Role::Reasoning);

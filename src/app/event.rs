@@ -14,6 +14,7 @@ pub enum AppEvent {
   ToolResult { result: String, error: bool },
   Processing { processing: bool },
   Usage { usage: Option<ChatUsage> },
+  Compacted { summary: String },
   Error { message: String },
 }
 

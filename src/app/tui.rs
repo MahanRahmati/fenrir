@@ -54,6 +54,9 @@ impl EventSink for TuiSink {
       AppEvent::Usage { usage } => {
         self.tui.set_usage(usage);
       }
+      AppEvent::Compacted { summary } => {
+        self.tui.add_summary(summary);
+      }
       AppEvent::Error { message } => {
         self.tui.add_message(format!("Error: {message}"));
       }

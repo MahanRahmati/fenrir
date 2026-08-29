@@ -15,6 +15,7 @@ pub struct Config {
   pub general: GeneralConfig,
   pub providers: ProvidersConfig,
   pub permissions: PermissionsConfig,
+  pub compaction: CompactionConfig,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -103,6 +104,20 @@ impl Default for PermissionsConfig {
       control_keyboard: true,
       music: true,
       browser: true,
+    };
+  }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct CompactionConfig {
+  pub tool_result_max_chars: usize,
+}
+
+impl Default for CompactionConfig {
+  fn default() -> Self {
+    return Self {
+      tool_result_max_chars: 2000,
     };
   }
 }

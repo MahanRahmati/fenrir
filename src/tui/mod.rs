@@ -281,6 +281,10 @@ impl Tui {
     self.messages_list.add_tool_result(result, error);
   }
 
+  pub fn add_summary(&mut self, summary: String) {
+    self.messages_list.add_summary(summary);
+  }
+
   pub fn ensure_reasoning_line(&mut self) {
     self.messages_list.ensure_reasoning_line();
   }

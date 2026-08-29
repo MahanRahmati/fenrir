@@ -77,6 +77,10 @@ impl EventSink for CliSink {
           println!("\n[usage] {usage}",);
         }
       }
+      AppEvent::Compacted { summary } => {
+        println!("\n[Compaction Summary]\n");
+        println!("{summary}\n");
+      }
       AppEvent::Error { message } => {
         println!("\nError: {message}");
       }

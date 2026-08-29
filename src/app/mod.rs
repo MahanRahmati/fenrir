@@ -141,6 +141,10 @@ impl App {
           .map_err(RuntimeError::Persona)?;
         return Ok(AppCommandResult::Noop);
       }
+      AppCommand::Compact => {
+        let summary = self.compact().await?;
+        return Ok(AppCommandResult::Compacted { summary });
+      }
       AppCommand::New => {
         self.session_manager.clear_current_session();
         self.tool_manager.reset_cache();
@@ -607,6 +611,9 @@ impl App {
             AppCommandResult::Persona(name) => {
               sink.on_persona_selection(name);
             }
+            AppCommandResult::Compacted { summary } => {
+              sink.on_event(AppEvent::Compacted { summary });
+            }
             AppCommandResult::Noop => {}
           }
           continue;
@@ -642,6 +649,11 @@ impl App {
         break;
       }
     }
+    return Ok(String::new());
+  }
+
+  pub async fn compact(&mut self) -> RuntimeResult<String> {
+    // TODO: Implement compaction logic
     return Ok(String::new());
   }
 }

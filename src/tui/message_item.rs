@@ -15,12 +15,15 @@ pub enum Role {
   Reasoning,
   ToolCall,
   ToolResult,
+  Compaction,
 }
 
 impl Role {
   fn horizontal_padding(&self) -> u16 {
     return match self {
-      Role::User | Role::ToolCall | Role::ToolResult => HORIZONTAL_PADDING,
+      Role::User | Role::ToolCall | Role::ToolResult | Role::Compaction => {
+        HORIZONTAL_PADDING
+      }
       Role::Assistant | Role::Reasoning => {
         HORIZONTAL_PADDING + TEXT_EXTRA_PADDING
       }
@@ -100,6 +103,7 @@ impl MessageItem {
       Role::Assistant => self.llm_list_item(width),
       Role::Reasoning => self.reasoning_list_item(width),
       Role::ToolCall | Role::ToolResult => self.tool_list_item(width),
+      Role::Compaction => self.compaction_list_item(width),
     };
     return (
       ListMessage {
@@ -197,6 +201,28 @@ impl MessageItem {
         Style::default().dim()
       });
     }
+    let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
+    return (item, height);
+  }
+
+  fn compaction_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
+    let block = Block::default()
+      .borders(Borders::ALL)
+      .border_type(BorderType::Rounded)
+      .border_style(Style::default().fg(Color::Magenta));
+    let mut content: Vec<Line<'static>> = Vec::new();
+    let title = " Compaction".to_string();
+    content.push(Line::from(title));
+    let separator = "─".repeat(width.saturating_sub(2) as usize);
+    content.push(Line::from(Span::styled(
+      separator,
+      Style::default().fg(Color::Magenta),
+    )));
+    content.extend(self.text.lines().map(|l| Line::from(l.to_string())));
+
+    let item = Paragraph::new(content)
+      .wrap(Wrap { trim: true })
+      .block(block);
     let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
     return (item, height);
   }
