@@ -24,7 +24,7 @@ use crate::app::App;
 use crate::cli::{Cli, Commands};
 use crate::config::Config;
 use crate::database::DB;
-use crate::logging::setup_logging;
+use crate::logging::{set_print_enabled, setup_logging};
 
 #[tokio::main]
 async fn main() {
@@ -70,7 +70,10 @@ async fn main() {
       }
     }
     Some(Commands::Tui) => app.run_tui().await,
-    None => app.run().await,
+    None => {
+      set_print_enabled(true);
+      app.run().await
+    }
   };
 
   return match result {

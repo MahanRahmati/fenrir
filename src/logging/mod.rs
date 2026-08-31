@@ -29,6 +29,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::utils::xdg::place_state_file;
 
 static VERBOSE: AtomicBool = AtomicBool::new(false);
+static PRINT_ENABLED: AtomicBool = AtomicBool::new(false);
 static LOG_FILE: Mutex<Option<File>> = Mutex::new(None);
 
 /// Sets the global verbose flag.
@@ -50,6 +51,27 @@ pub(crate) fn set_verbose(value: bool) {
 /// `true` if verbose output is enabled, `false` otherwise.
 pub(crate) fn is_verbose() -> bool {
   return VERBOSE.load(Ordering::Relaxed);
+}
+
+/// Sets whether printing to stdout is enabled.
+///
+/// When disabled, the [`vlog!`] macro will skip `println!` but
+/// will still write to the log file.
+///
+/// # Arguments
+///
+/// * `value` - Whether to enable stdout printing
+pub(crate) fn set_print_enabled(value: bool) {
+  PRINT_ENABLED.store(value, Ordering::Relaxed);
+}
+
+/// Checks if stdout printing is enabled.
+///
+/// # Returns
+///
+/// `true` if printing to stdout is enabled, `false` otherwise.
+pub(crate) fn is_print_enabled() -> bool {
+  return PRINT_ENABLED.load(Ordering::Relaxed);
 }
 
 /// Sets the global log file handle.
@@ -148,12 +170,14 @@ pub(crate) fn write_to_log_file(msg: String) {
 #[macro_export]
 macro_rules! vlog {
     ($($arg:tt)*) => {
+        let now = chrono::Local::now();
+        let timestamp = now.format("%H:%M:%S");
+        let msg = format!("[{timestamp}] {}", format!($($arg)*));
         if $crate::logging::is_verbose() {
-            let now = chrono::Local::now();
-            let timestamp = now.format("%H:%M:%S");
-            let msg = format!("[{timestamp}] {}", format!($($arg)*));
-            println!("{msg}");
-            $crate::logging::write_to_log_file(msg);
+            if $crate::logging::is_print_enabled() {
+                println!("{msg}");
+            }
         }
+        $crate::logging::write_to_log_file(msg);
     };
 }
