@@ -111,12 +111,14 @@ impl Default for PermissionsConfig {
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct CompactionConfig {
+  pub threshold: Option<u64>,
   pub tool_result_max_chars: usize,
 }
 
 impl Default for CompactionConfig {
   fn default() -> Self {
     return Self {
+      threshold: None,
       tool_result_max_chars: 2000,
     };
   }

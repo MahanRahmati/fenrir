@@ -630,6 +630,18 @@ impl App {
             sink.on_event(AppEvent::Usage {
               usage: self.last_usage(),
             });
+            match self.maybe_compact().await {
+              Ok(summary) => {
+                if !summary.is_empty() {
+                  sink.on_event(AppEvent::Compacted { summary });
+                }
+              }
+              Err(e) => {
+                sink.on_event(AppEvent::Error {
+                  message: e.to_string(),
+                });
+              }
+            }
           }
           Err(e) => {
             sink.on_event(AppEvent::Processing { processing: false });
@@ -641,6 +653,20 @@ impl App {
         }
       } else {
         break;
+      }
+    }
+    return Ok(String::new());
+  }
+
+  pub async fn maybe_compact(&mut self) -> RuntimeResult<String> {
+    if let Some(threshold) = self.config.compaction.threshold {
+      if let Some(last_usage) = self.last_usage() {
+        if last_usage.prompt_tokens as usize
+          >= (threshold as f64 * 0.8) as usize
+        {
+          let summary = self.compact().await?;
+          return Ok(summary);
+        }
       }
     }
     return Ok(String::new());
