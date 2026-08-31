@@ -24,13 +24,19 @@ use crate::app::App;
 use crate::cli::{Cli, Commands};
 use crate::config::Config;
 use crate::database::DB;
-use crate::logging::set_verbose;
+use crate::logging::setup_logging;
 
 #[tokio::main]
 async fn main() {
   let cli = Cli::parse();
 
-  set_verbose(cli.verbose);
+  match setup_logging(cli.verbose) {
+    Ok(()) => (),
+    Err(e) => {
+      eprintln!("Log Error: {e}");
+      std::process::exit(1);
+    }
+  };
 
   let config = match Config::load().await {
     Ok(config) => config,

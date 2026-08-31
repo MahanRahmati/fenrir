@@ -29,3 +29,10 @@ pub fn place_data_file(name: &str) -> Result<PathBuf, String> {
     .place_data_file(name)
     .map_err(|e| format!("cannot place data file '{name}': {e}"));
 }
+
+pub fn place_state_file(name: &str) -> Result<PathBuf, String> {
+  let xdg_dirs = BaseDirectories::with_prefix(DEFAULT_DIRECTORY);
+  return xdg_dirs
+    .place_state_file(name)
+    .map_err(|e| format!("cannot place state file '{name}': {e}"));
+}

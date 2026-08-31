@@ -21,9 +21,15 @@
 //! vlog!("Hello {}", world);
 //! ```
 
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::utils::xdg::place_state_file;
+
 static VERBOSE: AtomicBool = AtomicBool::new(false);
+static LOG_FILE: Mutex<Option<File>> = Mutex::new(None);
 
 /// Sets the global verbose flag.
 ///
@@ -33,7 +39,7 @@ static VERBOSE: AtomicBool = AtomicBool::new(false);
 /// # Arguments
 ///
 /// * `value` - Whether to enable verbose output
-pub fn set_verbose(value: bool) {
+pub(crate) fn set_verbose(value: bool) {
   VERBOSE.store(value, Ordering::Relaxed);
 }
 
@@ -42,8 +48,90 @@ pub fn set_verbose(value: bool) {
 /// # Returns
 ///
 /// `true` if verbose output is enabled, `false` otherwise.
-pub fn is_verbose() -> bool {
+pub(crate) fn is_verbose() -> bool {
   return VERBOSE.load(Ordering::Relaxed);
+}
+
+/// Sets the global log file handle.
+///
+/// Stores the provided `File` in the `LOG_FILE` static so that
+/// [`write_to_log_file`] can write to it later.
+///
+/// # Arguments
+///
+/// * `file` - The file for the log messages.
+///
+/// # Errors
+///
+/// Returns an error if the mutex is not locked.
+pub(crate) fn set_log_file(file: File) -> Result<(), String> {
+  let mut guard = LOG_FILE
+    .lock()
+    .map_err(|e| format!("Failed to lock log file mutex: {e}"))?;
+  *guard = Some(file);
+  return Ok(());
+}
+
+/// Initializes the log file for the application.
+///
+/// Creates a timestamped log file in the XDG state directory and stores
+/// it in the global `LOG_FILE` static. Called during application startup.
+///
+/// # Errors
+///
+/// Returns an error if the log file cannot be created or opened.
+pub(crate) fn init_file_logging() -> Result<(), String> {
+  let now = chrono::Local::now();
+  let timestamp = now.format("%Y%m%d_%H%M%S");
+  let filename = format!("fenrir_{timestamp}.log");
+  let path = place_state_file(&filename)
+    .map_err(|e| format!("Failed to create log file: {e}"))?;
+  let file = OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(&path)
+    .map_err(|e| {
+      format!("Failed to open log file '{}': {e}", path.display())
+    })?;
+  set_log_file(file)?;
+  return Ok(());
+}
+
+/// Sets up the logging system.
+///
+/// Configures the verbose flag and initializes the log file.
+/// This should be called once at application startup.
+///
+/// # Arguments
+///
+/// * `value` - Whether to enable verbose output
+///
+/// # Errors
+///
+/// Returns an error if the log file cannot be initialized.
+pub fn setup_logging(value: bool) -> Result<(), String> {
+  set_verbose(value);
+  init_file_logging()?;
+  return Ok(());
+}
+
+/// Writes a message to the log file.
+///
+/// Acquires the `LOG_FILE` mutex and writes the message as a line.
+/// Silently ignores write errors and poisoned mutexes.
+///
+/// # Arguments
+///
+/// * `msg` - The message to be written.
+pub(crate) fn write_to_log_file(msg: String) {
+  match LOG_FILE.lock() {
+    Ok(mut guard) => {
+      if let Some(file) = &mut *guard {
+        let _ = writeln!(file, "{msg}");
+      }
+    }
+    Err(_) => {}
+  };
 }
 
 /// Prints a verbose message with timestamp if verbose mode is enabled.
@@ -62,7 +150,10 @@ macro_rules! vlog {
     ($($arg:tt)*) => {
         if $crate::logging::is_verbose() {
             let now = chrono::Local::now();
-            println!("[{}] {}", now.format("%H:%M:%S"), format!($($arg)*));
+            let timestamp = now.format("%H:%M:%S");
+            let msg = format!("[{timestamp}] {}", format!($($arg)*));
+            println!("{msg}");
+            $crate::logging::write_to_log_file(msg);
         }
     };
 }
