@@ -1,3 +1,10 @@
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CommandVisibility {
+  Always,
+  OnlyWithSession,
+  OnlyWithoutSession,
+}
+
 #[derive(Debug, Clone)]
 pub enum SlashCommand {
   New,
@@ -40,5 +47,29 @@ impl SlashCommand {
       SlashCommand::Help,
       SlashCommand::Exit,
     ];
+  }
+
+  pub fn available_commands(has_session: bool) -> Vec<SlashCommand> {
+    return Self::all()
+      .iter()
+      .filter(|c| c.is_active(has_session))
+      .cloned()
+      .collect();
+  }
+
+  fn visibility(&self) -> CommandVisibility {
+    match self {
+      SlashCommand::Personas => CommandVisibility::OnlyWithoutSession,
+      SlashCommand::Compact => CommandVisibility::OnlyWithSession,
+      _ => CommandVisibility::Always,
+    }
+  }
+
+  fn is_active(&self, has_session: bool) -> bool {
+    match self.visibility() {
+      CommandVisibility::Always => true,
+      CommandVisibility::OnlyWithSession => has_session,
+      CommandVisibility::OnlyWithoutSession => !has_session,
+    }
   }
 }

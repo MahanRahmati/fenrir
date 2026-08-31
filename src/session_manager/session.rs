@@ -120,6 +120,19 @@ impl Session {
     self.messages.push(message);
   }
 
+  pub fn add_summary(&mut self, content: &str, covers_message_id: Uuid) {
+    let now = Utc::now().timestamp();
+    let summary = Summary {
+      id: Uuid::now_v7(),
+      session_id: self.id,
+      content: content.to_string(),
+      covers_message_id,
+      created_at: now,
+    };
+    self.last_interaction = now;
+    self.summaries.push(summary);
+  }
+
   pub fn build_chat_context(&self) -> Vec<Message> {
     if let Some(latest) = self.summaries.last() {
       let mut chat_context = Vec::new();
@@ -156,4 +169,47 @@ impl Session {
       return self.messages.clone();
     }
   }
+}
+
+impl Message {
+  pub fn serialize_for_compaction(&self, max_chars: usize) -> String {
+    return match self.role.as_str() {
+      "system" => format!("[System]: {}", self.content),
+      "user" => format!("[User]: {}", self.content),
+      "assistant" => {
+        if let Some(tool_calls) = &self.tool_calls {
+          let calls: Vec<String> = tool_calls
+            .iter()
+            .map(|tc| {
+              format!(
+                "[Assistant tool call]: {}({})",
+                tc.function.name, tc.function.arguments
+              )
+            })
+            .collect();
+          if !self.content.is_empty() {
+            format!("[Assistant]: {}\n{}", self.content, calls.join("\n"))
+          } else {
+            calls.join("\n")
+          }
+        } else if !self.content.is_empty() {
+          format!("[Assistant]: {}", self.content)
+        } else {
+          String::new()
+        }
+      }
+      "tool" => {
+        format!("[Tool result]: {}", truncate(&self.content, max_chars))
+      }
+      "reasoning" => format!("[Assistant reasoning]: {}", self.content),
+      _ => format!("[{}]: {}", self.role, self.content),
+    };
+  }
+}
+
+fn truncate(content: &str, max_chars: usize) -> String {
+  if content.len() <= max_chars {
+    return content.to_string();
+  }
+  return format!("{}[truncated]", &content[..max_chars]);
 }

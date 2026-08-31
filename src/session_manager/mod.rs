@@ -180,6 +180,44 @@ impl SessionManager {
     return Ok(());
   }
 
+  pub async fn add_summary_to_current_session(
+    &mut self,
+    content: &str,
+    covers_message_id: Uuid,
+  ) -> SessionManagerResult<()> {
+    let session_id = match self.current_session {
+      Some(id) => id,
+      None => return Err(SessionManagerError::NoCurrentSession),
+    };
+    if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
+    {
+      session.add_summary(content, covers_message_id);
+      let new_summary = session.summaries.last();
+      if let Some(summary) = new_summary {
+        match self
+          .db
+          .execute(
+            INSERT_SUMMARY,
+            (
+              &*summary.id.to_string(),
+              session.id.to_string(),
+              &*summary.content,
+              &*summary.covers_message_id.to_string(),
+              summary.created_at,
+            ),
+          )
+          .await
+        {
+          Ok(_) => {}
+          Err(e) => {
+            return Err(SessionManagerError::DatabaseError(e.to_string()));
+          }
+        }
+      }
+    }
+    return Ok(());
+  }
+
   pub async fn update_current_session_title(
     &mut self,
     title: &str,

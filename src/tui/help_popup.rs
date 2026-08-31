@@ -21,7 +21,7 @@ impl HelpPopup {
   pub fn new() -> Self {
     return Self {
       popup: Popup::new(),
-      commands: SlashCommand::all().to_vec(),
+      commands: Vec::new(),
       scroll_offset: 0,
     };
   }

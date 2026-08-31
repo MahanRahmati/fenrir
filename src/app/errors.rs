@@ -16,6 +16,9 @@ pub enum RuntimeError {
 
   #[error("TUI error: {0}")]
   Tui(String),
+
+  #[error("Compaction error: {0}")]
+  Compaction(String),
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
