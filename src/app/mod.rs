@@ -659,15 +659,12 @@ impl App {
   }
 
   pub async fn maybe_compact(&mut self) -> RuntimeResult<String> {
-    if let Some(threshold) = self.config.compaction.threshold {
-      if let Some(last_usage) = self.last_usage() {
-        if last_usage.prompt_tokens as usize
-          >= (threshold as f64 * 0.8) as usize
-        {
-          let summary = self.compact().await?;
-          return Ok(summary);
-        }
-      }
+    if let Some(threshold) = self.config.compaction.threshold
+      && let Some(last_usage) = self.last_usage()
+      && last_usage.prompt_tokens as usize >= (threshold as f64 * 0.8) as usize
+    {
+      let summary = self.compact().await?;
+      return Ok(summary);
     }
     return Ok(String::new());
   }

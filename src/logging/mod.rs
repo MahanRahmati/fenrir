@@ -146,13 +146,10 @@ pub fn setup_logging(value: bool) -> Result<(), String> {
 ///
 /// * `msg` - The message to be written.
 pub(crate) fn write_to_log_file(msg: String) {
-  match LOG_FILE.lock() {
-    Ok(mut guard) => {
-      if let Some(file) = &mut *guard {
-        let _ = writeln!(file, "{msg}");
-      }
-    }
-    Err(_) => {}
+  if let Ok(mut guard) = LOG_FILE.lock()
+    && let Some(file) = &mut *guard
+  {
+    let _ = writeln!(file, "{msg}");
   };
 }
 
