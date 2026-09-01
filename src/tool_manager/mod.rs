@@ -2,6 +2,7 @@ mod browser;
 mod cache;
 mod control_keyboard;
 mod datetime;
+mod ddg;
 mod edit_file;
 mod errors;
 mod find_file;
@@ -29,6 +30,7 @@ use crate::persona_manager::ToolAccess;
 use crate::tool_manager::browser::BrowserTool;
 use crate::tool_manager::control_keyboard::ControlKeyboardTool;
 use crate::tool_manager::datetime::DateTimeTool;
+use crate::tool_manager::ddg::DdgTool;
 use crate::tool_manager::edit_file::EditFileTool;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::find_file::FindFileTool;
@@ -121,6 +123,9 @@ impl ToolManager {
     }
     if config.permissions.browser {
       tools.push(Box::new(BrowserTool));
+    }
+    if config.permissions.ddg {
+      tools.push(Box::new(DdgTool));
     }
     return Self {
       tools,

@@ -82,6 +82,7 @@ pub struct PermissionsConfig {
   pub control_keyboard: bool,
   pub music: bool,
   pub browser: bool,
+  pub ddg: bool,
 }
 
 impl Default for PermissionsConfig {
@@ -104,6 +105,7 @@ impl Default for PermissionsConfig {
       control_keyboard: true,
       music: true,
       browser: true,
+      ddg: true,
     };
   }
 }
