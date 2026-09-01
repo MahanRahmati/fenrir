@@ -125,7 +125,7 @@ impl ToolManager {
       tools.push(Box::new(BrowserTool));
     }
     if config.permissions.ddg {
-      tools.push(Box::new(DdgTool));
+      tools.push(Box::new(DdgTool::new()));
     }
     return Self {
       tools,

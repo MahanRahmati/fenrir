@@ -1,9 +1,20 @@
+use crate::tool_manager::cache::ToolCache;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::process;
 
-pub struct DdgTool;
+pub struct DdgTool {
+  cache: ToolCache<String, String>,
+}
+
+impl DdgTool {
+  pub fn new() -> Self {
+    return Self {
+      cache: ToolCache::new(),
+    };
+  }
+}
 
 #[async_trait::async_trait]
 impl Tool for DdgTool {
@@ -29,8 +40,16 @@ impl Tool for DdgTool {
     return true;
   }
 
+  fn reset_cache(&self) {
+    self.cache.clear();
+  }
+
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
     let keyword = get_param::<String>(&params, "ddg", "keyword")?;
+
+    if let Some(cached) = self.cache.get(&keyword) {
+      return Ok(cached);
+    }
 
     let output = process::run("ddgr", &["-x", "--json", keyword.as_str()])
       .await
@@ -42,11 +61,11 @@ impl Tool for DdgTool {
     let results: Vec<serde_json::Value> = serde_json::from_str(&output.stdout)
       .map_err(|e| ToolManagerError::ExecutionFailed {
         name: "ddg".to_string(),
-        reason: format!("Failed to parse ddgr JSON output: {}", e),
+        reason: format!("Failed to parse ddgr JSON output: {e}"),
       })?;
 
     if results.is_empty() {
-      return Ok(format!("No results found for '{}' .", keyword));
+      return Ok(format!("No results found for '{keyword}' ."));
     }
 
     let mut formatted = String::new();
@@ -63,15 +82,12 @@ impl Tool for DdgTool {
         .get("abstract")
         .and_then(|v| v.as_str())
         .unwrap_or("(no abstract)");
-      formatted.push_str(&format!(
-        "{}. {} ({})\n{}\n\n",
-        i + 1,
-        title,
-        url,
-        abstract_text
-      ));
+      formatted
+        .push_str(&format!("{}. {title} ({url})\n{abstract_text}\n\n", i + 1,));
     }
 
-    return Ok(formatted.trim_end_matches('\n').to_string());
+    let result = formatted.trim_end_matches('\n').to_string();
+    self.cache.insert(keyword, result.clone());
+    return Ok(result);
   }
 }
