@@ -188,7 +188,10 @@ impl Tui {
         return None;
       }
     };
+    return self.handle_event(event).await;
+  }
 
+  pub async fn handle_event(&mut self, event: Event) -> Option<String> {
     if let Event::Mouse(mouse) = &event {
       self.messages_list.handle_mouse(mouse);
     }

@@ -5,11 +5,13 @@ mod event;
 mod tui;
 
 pub use event::{AppEvent, EventSink};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 
-use std::collections::HashMap;
-
 use futures::StreamExt;
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use crate::app::command::{AppCommand, AppCommandResult};
@@ -152,7 +154,7 @@ impl App {
 
   pub async fn process_chat(
     &mut self,
-    sink: &mut impl EventSink,
+    tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     if cancel.is_cancelled() {
@@ -160,9 +162,9 @@ impl App {
     }
     self.generate_session_title().await?;
     if self.config.general.stream {
-      return self.process_chat_stream(sink, cancel).await;
+      return self.process_chat_stream(tx, cancel).await;
     }
-    return self.process_chat_non_streaming(sink, cancel).await;
+    return self.process_chat_non_streaming(tx, cancel).await;
   }
 
   async fn generate_session_title(&mut self) -> RuntimeResult<()> {
@@ -232,7 +234,7 @@ impl App {
 
   async fn process_chat_stream(
     &mut self,
-    sink: &mut impl EventSink,
+    tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
@@ -278,18 +280,22 @@ impl App {
 
         if let Some(text) = delta.content {
           content_buffer.push_str(&text);
-          sink.on_event(AppEvent::Token {
+          tx.send(AppEvent::Token {
             text,
             reasoning: false,
-          });
+          })
+          .await
+          .ok();
         }
 
         if let Some(text) = delta.reasoning {
           if self.config.general.show_reasoning {
-            sink.on_event(AppEvent::Token {
+            tx.send(AppEvent::Token {
               text: text.clone(),
               reasoning: true,
-            });
+            })
+            .await
+            .ok();
           }
           reasoning_buffer.push_str(&text);
         }
@@ -344,7 +350,7 @@ impl App {
 
       let tool_calls: Vec<ToolCall> =
         tool_call_builders.into_values().collect();
-      self.execute_tool_calls(&tool_calls, sink, cancel).await?;
+      self.execute_tool_calls(&tool_calls, tx, cancel).await?;
     }
 
     return Ok(assistant_content);
@@ -352,7 +358,7 @@ impl App {
 
   async fn process_chat_non_streaming(
     &mut self,
-    sink: &mut impl EventSink,
+    tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
@@ -384,17 +390,21 @@ impl App {
       if self.config.general.show_reasoning
         && let Some(ref reasoning) = response.reasoning
       {
-        sink.on_event(AppEvent::Token {
+        tx.send(AppEvent::Token {
           text: reasoning.clone(),
           reasoning: true,
-        });
+        })
+        .await
+        .ok();
       }
 
       if let Some(ref content) = response.content {
-        sink.on_event(AppEvent::Token {
+        tx.send(AppEvent::Token {
           text: content.clone(),
           reasoning: false,
-        });
+        })
+        .await
+        .ok();
         assistant_content.push_str(content);
       }
 
@@ -421,7 +431,7 @@ impl App {
       }
 
       self
-        .execute_tool_calls(&response.tool_calls, sink, cancel)
+        .execute_tool_calls(&response.tool_calls, tx, cancel)
         .await?;
     }
 
@@ -431,7 +441,7 @@ impl App {
   async fn execute_tool_calls(
     &mut self,
     tool_calls: &[ToolCall],
-    sink: &mut impl EventSink,
+    tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<()> {
     for tool_call in tool_calls {
@@ -455,10 +465,12 @@ impl App {
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
       if self.config.general.show_tools {
-        sink.on_event(AppEvent::ToolCall {
+        tx.send(AppEvent::ToolCall {
           name: tool_call.name.clone(),
           arguments: tool_call.arguments.clone(),
-        });
+        })
+        .await
+        .ok();
       }
 
       let params = parse_tool_params(&tool_call.arguments);
@@ -472,10 +484,16 @@ impl App {
       let rejection = match approval {
         ToolApproval::Allowed => None,
         ToolApproval::NeedsConfirmation { message } => {
-          if sink.confirm(&message) {
-            None
-          } else {
-            Some(ToolRejection::UserDeclined)
+          let (reply_tx, reply_rx) = oneshot::channel();
+          tx.send(AppEvent::ToolConfirmation {
+            message,
+            reply: reply_tx,
+          })
+          .await
+          .ok();
+          match reply_rx.await {
+            Ok(true) => None,
+            _ => Some(ToolRejection::UserDeclined),
           }
         }
         ToolApproval::Rejected(rejection) => Some(rejection),
@@ -510,7 +528,7 @@ impl App {
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
         if self.config.general.show_tools {
-          sink.on_event(AppEvent::ToolResult { result, error });
+          tx.send(AppEvent::ToolResult { result, error }).await.ok();
         }
         continue;
       }
@@ -538,24 +556,29 @@ impl App {
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
       if self.config.general.show_tools {
-        sink.on_event(AppEvent::ToolResult {
+        tx.send(AppEvent::ToolResult {
           result: result_str,
           error,
-        });
+        })
+        .await
+        .ok();
       }
     }
     return Ok(());
   }
 
   pub async fn harness_loop(
-    &mut self,
+    app: &Arc<Mutex<App>>,
     sink: &mut impl EventSink,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     loop {
-      if self.shutdown.is_cancelled() {
-        vlog!("Shutdown signal received, exiting harness loop...");
-        break;
+      {
+        let app_locked = app.lock().await;
+        if app_locked.shutdown.is_cancelled() {
+          vlog!("Shutdown signal received, exiting harness loop...");
+          break;
+        }
       }
 
       let input = sink.read_input().await?;
@@ -572,7 +595,11 @@ impl App {
         };
 
         if let Some(command) = command {
-          match self.handle_command(command).await? {
+          let result = {
+            let mut app_locked = app.lock().await;
+            app_locked.handle_command(command).await
+          };
+          match result? {
             AppCommandResult::Exit => {
               sink.on_exit();
               break;
@@ -581,12 +608,16 @@ impl App {
               sink.on_help(slash_commands);
             }
             AppCommandResult::Sessions { sessions, current } => {
-              if let Some(session_id) = sink.on_sessions(sessions, current)?
-                && let AppCommandResult::Session(session) = self
-                  .handle_command(AppCommand::LoadSession { id: session_id })
-                  .await?
-              {
-                sink.on_session_selection(session);
+              if let Some(session_id) = sink.on_sessions(sessions, current)? {
+                let result = {
+                  let mut app_locked = app.lock().await;
+                  app_locked
+                    .handle_command(AppCommand::LoadSession { id: session_id })
+                    .await
+                };
+                if let AppCommandResult::Session(session) = result? {
+                  sink.on_session_selection(session);
+                }
               }
             }
             AppCommandResult::Session(session) => {
@@ -594,11 +625,14 @@ impl App {
             }
             AppCommandResult::Personas { personas, current } => {
               if let Some(name) = sink.on_personas(personas, current)? {
-                self
-                  .handle_command(AppCommand::SelectPersona {
-                    name: name.clone(),
-                  })
-                  .await?;
+                {
+                  let mut app_locked = app.lock().await;
+                  app_locked
+                    .handle_command(AppCommand::SelectPersona {
+                      name: name.clone(),
+                    })
+                    .await?;
+                }
                 sink.on_persona_selection(name);
               }
             }
@@ -613,42 +647,102 @@ impl App {
           continue;
         }
 
-        self.ensure_session_with_system_message().await?;
+        {
+          let mut app_locked = app.lock().await;
+          app_locked.ensure_session_with_system_message().await?;
 
-        self
-          .session_manager
-          .add_user_message_to_current_session(&input)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+          app_locked
+            .session_manager
+            .add_user_message_to_current_session(&input)
+            .await
+            .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        }
 
-        sink.on_event(AppEvent::UserMessage { content: input });
-
+        sink.on_event(AppEvent::UserMessage {
+          content: input.clone(),
+        });
         sink.on_event(AppEvent::Processing { processing: true });
-        match self.process_chat(sink, cancel).await {
-          Ok(_) => {
-            sink.on_event(AppEvent::Processing { processing: false });
-            sink.on_event(AppEvent::Usage {
-              usage: self.last_usage(),
-            });
-            match self.maybe_compact().await {
-              Ok(summary) => {
-                if !summary.is_empty() {
-                  sink.on_event(AppEvent::Compacted { summary });
+
+        let (tx, mut rx) = mpsc::channel::<AppEvent>(256);
+        let app_clone = Arc::clone(app);
+        let cancel_clone = cancel.clone();
+
+        let mut chat_handle = tokio::task::spawn(async move {
+          let mut app_locked = app_clone.lock().await;
+          let result = app_locked.process_chat(&tx, &cancel_clone).await;
+          drop(app_locked);
+          tx.send(AppEvent::Processing { processing: false })
+            .await
+            .ok();
+          result
+        });
+
+        let mut chat_done = false;
+        let mut chat_result = None;
+
+        while !chat_done {
+          tokio::select! {
+            biased;
+            event = rx.recv() => match event {
+              Some(AppEvent::ToolConfirmation { message, reply }) => {
+                let confirmed = sink.confirm(&message);
+                reply.send(confirmed).ok();
+              }
+              Some(e) => {
+                sink.on_event(e);
+              }
+              None => {
+                chat_done = true;
+              }
+            },
+            result = &mut chat_handle => {
+              chat_result = Some(result);
+              chat_done = true;
+            }
+            _ = sink.poll_events() => {}
+            _ = cancel.cancelled() => {
+              sink.on_event(AppEvent::Processing { processing: false });
+              while let Some(event) = rx.recv().await {
+                if let AppEvent::ToolConfirmation { reply, .. } = event {
+                  reply.send(false).ok();
                 }
               }
-              Err(e) => {
-                sink.on_event(AppEvent::Error {
-                  message: e.to_string(),
-                });
-              }
+              continue;
             }
           }
-          Err(e) => {
-            sink.on_event(AppEvent::Processing { processing: false });
-            sink.on_event(AppEvent::Error {
-              message: e.to_string(),
-            });
-            continue;
+        }
+
+        if let Some(result) = chat_result {
+          match result {
+            Ok(Ok(_)) => {
+              let last_usage = {
+                let app_locked = app.lock().await;
+                app_locked.last_usage()
+              };
+              sink.on_event(AppEvent::Usage { usage: last_usage });
+              match Self::maybe_compact_arc(app.clone()).await {
+                Ok(summary) => {
+                  if !summary.is_empty() {
+                    sink.on_event(AppEvent::Compacted { summary });
+                  }
+                }
+                Err(e) => {
+                  sink.on_event(AppEvent::Error {
+                    message: e.to_string(),
+                  });
+                }
+              }
+            }
+            Ok(Err(e)) => {
+              sink.on_event(AppEvent::Error {
+                message: e.to_string(),
+              });
+            }
+            Err(e) => {
+              sink.on_event(AppEvent::Error {
+                message: e.to_string(),
+              });
+            }
           }
         }
       } else {
@@ -656,6 +750,11 @@ impl App {
       }
     }
     return Ok(String::new());
+  }
+
+  async fn maybe_compact_arc(app: Arc<Mutex<App>>) -> RuntimeResult<String> {
+    let mut app_locked = app.lock().await;
+    return app_locked.maybe_compact().await;
   }
 
   pub async fn maybe_compact(&mut self) -> RuntimeResult<String> {

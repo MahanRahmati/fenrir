@@ -1,4 +1,6 @@
 use std::io::stdout;
+use std::sync::Arc;
+use std::time::Duration;
 
 use ratatui::crossterm;
 use ratatui::crossterm::event::{
@@ -6,6 +8,7 @@ use ratatui::crossterm::event::{
   KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
   PushKeyboardEnhancementFlags,
 };
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -60,6 +63,10 @@ impl EventSink for TuiSink {
       AppEvent::Error { message } => {
         self.tui.add_message(format!("Error: {message}"));
       }
+      AppEvent::ToolConfirmation { message, reply } => {
+        let confirmed = self.confirm(&message);
+        reply.send(confirmed).ok();
+      }
     }
     self.redraw();
   }
@@ -87,6 +94,15 @@ impl EventSink for TuiSink {
         return Ok(None);
       }
     }
+  }
+
+  async fn poll_events(&mut self) {
+    if event::poll(Duration::from_millis(10)).unwrap_or(false)
+      && let Ok(e) = event::read()
+    {
+      self.tui.handle_event(e).await;
+    }
+    self.redraw();
   }
 
   fn on_exit(&mut self) {
@@ -146,7 +162,7 @@ impl EventSink for TuiSink {
 }
 
 impl App {
-  pub async fn run_tui(&mut self) -> RuntimeResult<String> {
+  pub async fn run_tui(app: &Arc<Mutex<App>>) -> RuntimeResult<String> {
     let mut sink = TuiSink {
       tui: Tui::new(),
       terminal: ratatui::init(),
@@ -160,7 +176,12 @@ impl App {
       )
     )
     .map_err(|e| RuntimeError::Tui(e.to_string()))?;
-    sink.tui.set_persona(self.persona_manager.current().name());
+
+    let persona_name = {
+      let app_locked = app.lock().await;
+      app_locked.persona_manager.current().name().to_string()
+    };
+    sink.tui.set_persona(&persona_name);
 
     sink
       .terminal
@@ -168,7 +189,7 @@ impl App {
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
 
     let cancel = CancellationToken::new();
-    let result = self.harness_loop(&mut sink, &cancel).await;
+    let result = App::harness_loop(app, &mut sink, &cancel).await;
 
     crossterm::execute!(stdout(), DisableMouseCapture)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;

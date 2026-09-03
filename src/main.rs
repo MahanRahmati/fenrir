@@ -18,7 +18,10 @@ mod tool_manager;
 mod tui;
 mod utils;
 
+use std::sync::Arc;
+
 use clap::Parser;
+use tokio::sync::Mutex;
 
 use crate::app::App;
 use crate::cli::{Cli, Commands};
@@ -54,7 +57,7 @@ async fn main() {
     }
   };
 
-  let mut app = App::new(config, db);
+  let app = Arc::new(Mutex::new(App::new(config, db)));
 
   let result = match cli.command {
     Some(Commands::ResetConfig { yes }) => {
@@ -69,10 +72,10 @@ async fn main() {
         }
       }
     }
-    Some(Commands::Tui) => app.run_tui().await,
+    Some(Commands::Tui) => App::run_tui(&app).await,
     None => {
       set_print_enabled(true);
-      app.run().await
+      App::run(&app).await
     }
   };
 

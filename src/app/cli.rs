@@ -1,5 +1,7 @@
 use std::io::Write;
+use std::sync::Arc;
 
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -84,6 +86,10 @@ impl EventSink for CliSink {
       AppEvent::Error { message } => {
         println!("\nError: {message}");
       }
+      AppEvent::ToolConfirmation { message, reply } => {
+        let confirmed = confirm_with(&format!("{message} (y/N): "));
+        reply.send(confirmed).ok();
+      }
     }
   }
 
@@ -98,6 +104,8 @@ impl EventSink for CliSink {
       Err(e) => Err(RuntimeError::Input(e.to_string())),
     };
   }
+
+  async fn poll_events(&mut self) {}
 
   fn on_exit(&mut self) {}
 
@@ -140,7 +148,7 @@ impl EventSink for CliSink {
 }
 
 impl App {
-  pub async fn run(&mut self) -> RuntimeResult<String> {
+  pub async fn run(app: &Arc<Mutex<App>>) -> RuntimeResult<String> {
     let mut sink = CliSink {
       stdout: std::io::stdout(),
       reasoning_open: false,
@@ -148,7 +156,7 @@ impl App {
     };
 
     let cancel = CancellationToken::new();
-    return self.harness_loop(&mut sink, &cancel).await;
+    return App::harness_loop(app, &mut sink, &cancel).await;
   }
 }
 
