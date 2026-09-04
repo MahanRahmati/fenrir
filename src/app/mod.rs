@@ -90,6 +90,7 @@ impl App {
   pub async fn handle_command(
     &mut self,
     command: AppCommand,
+    cancel: &CancellationToken,
   ) -> RuntimeResult<AppCommandResult> {
     let has_session = self.session_manager.get_current_session().is_some();
     return match command {
@@ -135,7 +136,7 @@ impl App {
         return Ok(AppCommandResult::Noop);
       }
       AppCommand::Compact => {
-        let summary = self.compact().await?;
+        let summary = self.compact(cancel).await?;
         return Ok(AppCommandResult::Compacted { summary });
       }
       AppCommand::New => {

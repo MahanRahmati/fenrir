@@ -14,7 +14,6 @@ impl App {
   pub async fn harness_loop(
     app: &Arc<Mutex<App>>,
     sink: &mut impl EventSink,
-    cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     loop {
       {
@@ -39,9 +38,60 @@ impl App {
         };
 
         if let Some(command) = command {
+          let cancel = CancellationToken::new();
+          sink.set_cancel_token(cancel.clone());
+
+          if matches!(&command, AppCommand::Compact) {
+            let (result_tx, mut result_rx) = mpsc::channel(1);
+            let app_clone = Arc::clone(app);
+            let cancel_clone = cancel.clone();
+            tokio::task::spawn(async move {
+              let result = {
+                let mut app_locked = app_clone.lock().await;
+                app_locked.handle_command(command, &cancel_clone).await
+              };
+              result_tx.send(result).await.ok();
+            });
+
+            let mut command_done = false;
+            let mut command_result = None;
+            while !command_done {
+              tokio::select! {
+                biased;
+                result = result_rx.recv() => {
+                  command_result = result;
+                  command_done = true;
+                }
+                _ = sink.poll_events() => {},
+                _ = cancel.cancelled() => {
+                  command_done = true;
+                }
+              }
+            }
+
+            if command_done && cancel.is_cancelled() {
+              sink.on_event(AppEvent::Processing { processing: false });
+              continue;
+            }
+
+            match command_result {
+              Some(Ok(AppCommandResult::Compacted { summary })) => {
+                sink.on_event(AppEvent::Compacted { summary });
+              }
+              Some(Ok(_)) => {}
+              Some(Err(e)) => {
+                sink.on_event(AppEvent::Error {
+                  message: e.to_string(),
+                });
+              }
+              None => {}
+            }
+            continue;
+          }
+
           let result = {
             let mut app_locked = app.lock().await;
-            app_locked.handle_command(command).await
+            app_locked.handle_command(command, &cancel).await
           };
           match result? {
             AppCommandResult::Exit => {
@@ -56,7 +106,10 @@ impl App {
                 let result = {
                   let mut app_locked = app.lock().await;
                   app_locked
-                    .handle_command(AppCommand::LoadSession { id: session_id })
+                    .handle_command(
+                      AppCommand::LoadSession { id: session_id },
+                      &cancel,
+                    )
                     .await
                 };
                 if let AppCommandResult::Session(session) = result? {
@@ -72,9 +125,10 @@ impl App {
                 {
                   let mut app_locked = app.lock().await;
                   app_locked
-                    .handle_command(AppCommand::SelectPersona {
-                      name: name.clone(),
-                    })
+                    .handle_command(
+                      AppCommand::SelectPersona { name: name.clone() },
+                      &cancel,
+                    )
                     .await?;
                 }
                 sink.on_persona_selection(name);
@@ -106,6 +160,9 @@ impl App {
           content: input.clone(),
         });
         sink.on_event(AppEvent::Processing { processing: true });
+
+        let cancel = CancellationToken::new();
+        sink.set_cancel_token(cancel.clone());
 
         let (tx, mut rx) = mpsc::channel::<AppEvent>(256);
         let app_clone = Arc::clone(app);
@@ -164,16 +221,40 @@ impl App {
                 app_locked.last_usage()
               };
               sink.on_event(AppEvent::Usage { usage: last_usage });
-              match Self::maybe_compact_arc(app.clone()).await {
-                Ok(summary) => {
-                  if !summary.is_empty() {
-                    sink.on_event(AppEvent::Compacted { summary });
+              let (compact_tx, mut compact_rx) = mpsc::channel(1);
+              let app_compact_clone = app.clone();
+              let cancel_clone = cancel.clone();
+              tokio::task::spawn(async move {
+                let result =
+                  Self::maybe_compact_arc(app_compact_clone, &cancel_clone)
+                    .await;
+                compact_tx.send(result).await.ok();
+              });
+
+              let mut compact_done = false;
+              while !compact_done {
+                tokio::select! {
+                  biased;
+                  result = compact_rx.recv() => {
+                    compact_done = true;
+                    match result {
+                      Some(Ok(summary)) if !summary.is_empty() => {
+                        sink.on_event(AppEvent::Compacted { summary });
+                      }
+                      Some(Err(e)) => {
+                        if !cancel.is_cancelled() {
+                          sink.on_event(AppEvent::Error {
+                            message: e.to_string(),
+                          });
+                        }
+                      }
+                      _ => {}
+                    }
                   }
-                }
-                Err(e) => {
-                  sink.on_event(AppEvent::Error {
-                    message: e.to_string(),
-                  });
+                  _ = sink.poll_events() => {},
+                  _ = cancel.cancelled() => {
+                    compact_done = true;
+                  }
                 }
               }
             }

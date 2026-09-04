@@ -11,9 +11,12 @@ mod popup_list;
 mod sessions_popup;
 mod statusline;
 
+use std::time::{Duration, Instant};
+
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::persona_manager::Persona;
@@ -43,6 +46,8 @@ pub struct Tui {
   completion_popup: CompletionPopup,
   usage: Option<ChatUsage>,
   processing: bool,
+  cancel_token: Option<CancellationToken>,
+  last_escape_time: Option<Instant>,
 }
 
 impl Tui {
@@ -58,6 +63,8 @@ impl Tui {
       completion_popup: CompletionPopup::new(),
       usage: None,
       processing: false,
+      cancel_token: None,
+      last_escape_time: None,
     };
   }
 
@@ -67,6 +74,10 @@ impl Tui {
 
   pub fn set_processing(&mut self, processing: bool) {
     self.processing = processing;
+  }
+
+  pub fn set_cancel_token(&mut self, token: CancellationToken) {
+    self.cancel_token = Some(token);
   }
 
   pub fn set_persona(&mut self, name: &str) {
@@ -199,6 +210,21 @@ impl Tui {
     if let Some(key) = event.as_key_press_event() {
       let is_shift_enter = key.code == KeyCode::Enter
         && key.modifiers.contains(KeyModifiers::SHIFT);
+
+      if key.code == KeyCode::Esc {
+        if let Some(cancel_token) = &self.cancel_token {
+          let now = Instant::now();
+          if let Some(last) = self.last_escape_time
+            && now.duration_since(last) < Duration::from_secs(1)
+          {
+            cancel_token.cancel();
+            self.last_escape_time = None;
+            return None;
+          }
+          self.last_escape_time = Some(now);
+        }
+        return None;
+      }
 
       if self.confirm_popup.handle_input(key.code) {
         return None;

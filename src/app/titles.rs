@@ -1,5 +1,7 @@
 use uuid::Uuid;
 
+use tokio_util::sync::CancellationToken;
+
 use crate::app::App;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::mentions::strip_mentions;
@@ -9,7 +11,10 @@ use crate::session_manager::Message;
 use crate::vlog;
 
 impl App {
-  pub async fn generate_session_title(&mut self) -> RuntimeResult<()> {
+  pub async fn generate_session_title(
+    &mut self,
+    cancel: &CancellationToken,
+  ) -> RuntimeResult<()> {
     let session = match self.session_manager.get_current_session() {
       Some(session) if session.title.is_none() => session.clone(),
       _ => return Ok(()),
@@ -48,7 +53,14 @@ impl App {
       },
     ];
 
-    let response = match self.provider_manager.chat(&messages, &[]).await {
+    let response = match tokio::select! {
+      biased;
+      _ = cancel.cancelled() => {
+        vlog!("Session title generation cancelled.");
+        return Ok(());
+      }
+      result = self.provider_manager.chat(&messages, &[]) => result,
+    } {
       Ok(response) => response,
       Err(e) => {
         vlog!("Failed to generate session title: {e}");

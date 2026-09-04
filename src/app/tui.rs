@@ -159,6 +159,10 @@ impl EventSink for TuiSink {
     self.tui.update_messages(None);
     self.redraw();
   }
+
+  fn set_cancel_token(&mut self, token: CancellationToken) {
+    self.tui.set_cancel_token(token);
+  }
 }
 
 impl App {
@@ -188,8 +192,7 @@ impl App {
       .draw(|frame| sink.tui.draw(frame))
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
 
-    let cancel = CancellationToken::new();
-    let result = App::harness_loop(app, &mut sink, &cancel).await;
+    let result = App::harness_loop(app, &mut sink).await;
 
     crossterm::execute!(stdout(), DisableMouseCapture)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::app::App;
@@ -13,23 +14,30 @@ use crate::vlog;
 impl App {
   pub async fn maybe_compact_arc(
     app: Arc<Mutex<App>>,
+    cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     let mut app_locked = app.lock().await;
-    return app_locked.maybe_compact().await;
+    return app_locked.maybe_compact(cancel).await;
   }
 
-  pub async fn maybe_compact(&mut self) -> RuntimeResult<String> {
+  pub async fn maybe_compact(
+    &mut self,
+    cancel: &CancellationToken,
+  ) -> RuntimeResult<String> {
     if let Some(threshold) = self.config.compaction.threshold
       && let Some(last_usage) = self.last_usage()
       && last_usage.prompt_tokens as usize >= (threshold as f64 * 0.8) as usize
     {
-      let summary = self.compact().await?;
+      let summary = self.compact(cancel).await?;
       return Ok(summary);
     }
     return Ok(String::new());
   }
 
-  pub async fn compact(&mut self) -> RuntimeResult<String> {
+  pub async fn compact(
+    &mut self,
+    cancel: &CancellationToken,
+  ) -> RuntimeResult<String> {
     let session = match self.session_manager.get_current_session() {
       Some(session) => session,
       None => {
@@ -127,7 +135,14 @@ impl App {
       }
     }
 
-    let response = match self.provider_manager.chat(&messages, &[]).await {
+    let response = match tokio::select! {
+      biased;
+      _ = cancel.cancelled() => {
+        vlog!("Session compaction cancelled.");
+        return Err(RuntimeError::Compaction("Cancelled".into()));
+      }
+      result = self.provider_manager.chat(&messages, &[]) => result,
+    } {
       Ok(response) => response,
       Err(e) => {
         vlog!("Failed to compact session: {e}");

@@ -19,7 +19,7 @@ impl App {
     if cancel.is_cancelled() {
       return Ok(String::new());
     }
-    self.generate_session_title().await?;
+    self.generate_session_title(cancel).await?;
     if self.config.general.stream {
       return self.process_chat_stream(tx, cancel).await;
     }

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::app::errors::RuntimeResult;
@@ -62,4 +63,5 @@ pub trait EventSink {
     current: String,
   ) -> RuntimeResult<Option<String>>;
   fn on_persona_selection(&mut self, name: String);
+  fn set_cancel_token(&mut self, token: CancellationToken);
 }

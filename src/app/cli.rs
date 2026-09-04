@@ -145,6 +145,8 @@ impl EventSink for CliSink {
   fn on_persona_selection(&mut self, name: String) {
     println!("Persona set to: {name}");
   }
+
+  fn set_cancel_token(&mut self, _token: CancellationToken) {}
 }
 
 impl App {
@@ -155,8 +157,7 @@ impl App {
       reasoning_ends_with_newline: false,
     };
 
-    let cancel = CancellationToken::new();
-    return App::harness_loop(app, &mut sink, &cancel).await;
+    return App::harness_loop(app, &mut sink).await;
   }
 }
 
