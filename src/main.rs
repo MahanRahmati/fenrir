@@ -17,6 +17,7 @@ mod slash_commands;
 mod tool_manager;
 mod tui;
 mod utils;
+mod workflow_manager;
 
 use std::sync::Arc;
 

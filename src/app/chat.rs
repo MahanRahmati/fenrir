@@ -7,8 +7,10 @@ use tokio_util::sync::CancellationToken;
 use crate::app::App;
 use crate::app::AppEvent;
 use crate::app::errors::{RuntimeError, RuntimeResult};
+use crate::mentions::strip_mentions;
 use crate::provider_manager::{ChatUsage, ToolCall};
 use crate::vlog;
+use crate::workflow_manager::workflow::WorkflowParams;
 
 impl App {
   pub async fn process_chat(
@@ -19,11 +21,61 @@ impl App {
     if cancel.is_cancelled() {
       return Ok(String::new());
     }
-    self.generate_session_title(cancel).await?;
+    self.generate_title_from_workflow(cancel).await?;
     if self.config.general.stream {
       return self.process_chat_stream(tx, cancel).await;
     }
     return self.process_chat_non_streaming(tx, cancel).await;
+  }
+
+  async fn generate_title_from_workflow(
+    &mut self,
+    cancel: &CancellationToken,
+  ) -> RuntimeResult<()> {
+    let session = match self.session_manager.get_current_session() {
+      Some(session) if session.title.is_none() => session.clone(),
+      _ => return Ok(()),
+    };
+
+    let first_message = session
+      .messages
+      .iter()
+      .find(|m| m.role == "user")
+      .map(|m| m.content.clone())
+      .map(|content| strip_mentions(&content))
+      .unwrap_or_default();
+    if first_message.is_empty() {
+      return Ok(());
+    }
+
+    let mut params = WorkflowParams::new();
+    params.insert("message".to_string(), first_message);
+
+    let title = match tokio::select! {
+      biased;
+      _ = cancel.cancelled() => {
+        vlog!("Session title generation cancelled.");
+        return Ok(());
+      }
+      result = self.workflow_manager.execute_workflow("title_generator", params) => result,
+    } {
+      Ok(title) => title,
+      Err(e) => {
+        vlog!("Failed to generate session title: {e}");
+        return Ok(());
+      }
+    };
+
+    if title.is_empty() {
+      return Ok(());
+    }
+
+    self
+      .session_manager
+      .update_current_session_title(&title)
+      .await
+      .map_err(|e| RuntimeError::Session(e.to_string()))?;
+    return Ok(());
   }
 
   async fn process_chat_stream(

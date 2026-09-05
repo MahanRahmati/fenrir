@@ -5,10 +5,10 @@ mod compaction;
 mod errors;
 mod event;
 mod harness;
-mod titles;
 mod tui;
 
 pub use event::{AppEvent, EventSink};
+use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 use tokio::sync::oneshot;
@@ -31,12 +31,14 @@ use crate::tool_manager::ToolManager;
 use crate::tool_manager::ToolRejection;
 use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
+use crate::workflow_manager::WorkflowManager;
 
 pub struct App {
   session_manager: SessionManager,
-  provider_manager: ProviderManager,
+  provider_manager: Arc<ProviderManager>,
   tool_manager: ToolManager,
   persona_manager: PersonaManager,
+  workflow_manager: WorkflowManager,
   shutdown: Shutdown,
   config: Config,
   last_usage: Option<ChatUsage>,
@@ -46,14 +48,17 @@ impl App {
   pub fn new(config: Config, db: DB) -> Self {
     let session_manager = SessionManager::new(db);
     let tool_manager = ToolManager::new(&config);
-    let provider_manager = ProviderManager::new(config.clone());
+    let provider_manager = Arc::new(ProviderManager::new(config.clone()));
     let persona_manager = PersonaManager::new();
+    let workflow_manager =
+      WorkflowManager::new(config.clone(), provider_manager.clone());
     let shutdown = Shutdown::new();
     return App {
       session_manager,
       provider_manager,
       tool_manager,
       persona_manager,
+      workflow_manager,
       shutdown,
       config,
       last_usage: None,
