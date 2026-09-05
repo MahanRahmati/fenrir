@@ -1,48 +1,48 @@
-mod errors;
-mod title;
-pub mod workflow;
+pub mod compaction;
+pub mod errors;
+pub mod title;
 
 use std::sync::Arc;
 
 use crate::config::Config;
 use crate::provider_manager::ProviderManager;
-use crate::workflow_manager::errors::{
-  WorkflowManagerError, WorkflowManagerResult,
+use crate::workflow_manager::compaction::{
+  CompactionParams, CompactionWorkflow,
 };
-use crate::workflow_manager::title::TitleWorkflow;
-use crate::workflow_manager::workflow::{Workflow, WorkflowParams};
+use crate::workflow_manager::errors::WorkflowManagerResult;
+use crate::workflow_manager::title::{TitleParams, TitleWorkflow};
 
 pub struct WorkflowManager {
-  workflows: Vec<Box<dyn Workflow>>,
   provider: Arc<ProviderManager>,
   config: Config,
 }
 
 impl WorkflowManager {
   pub fn new(config: Config, provider: Arc<ProviderManager>) -> Self {
-    let mut workflows: Vec<Box<dyn Workflow>> = Vec::new();
-    workflows.push(Box::new(TitleWorkflow));
-    return Self {
-      workflows,
-      provider,
-      config,
-    };
+    return Self { provider, config };
   }
 
-  pub async fn execute_workflow(
+  pub async fn generate_title(
     &self,
-    name: &str,
-    params: WorkflowParams,
+    params: TitleParams,
   ) -> WorkflowManagerResult<String> {
-    for workflow in &self.workflows {
-      if workflow.name() == name {
-        return workflow
-          .execute(self.provider.clone(), self.config.clone(), params)
-          .await;
-      }
-    }
-    return Err(WorkflowManagerError::NotFound {
-      name: name.to_string(),
-    });
+    return TitleWorkflow::execute(
+      self.provider.clone(),
+      self.config.clone(),
+      params,
+    )
+    .await;
+  }
+
+  pub async fn compact(
+    &self,
+    params: CompactionParams,
+  ) -> WorkflowManagerResult<String> {
+    return CompactionWorkflow::execute(
+      self.provider.clone(),
+      self.config.clone(),
+      params,
+    )
+    .await;
   }
 }

@@ -6,6 +6,7 @@ mod summary;
 use uuid::Uuid;
 
 pub use crate::session_manager::session::Message;
+pub use crate::session_manager::summary::Summary;
 
 use crate::database::DB;
 use crate::session_manager::errors::{
@@ -13,7 +14,6 @@ use crate::session_manager::errors::{
 };
 use crate::session_manager::queries::*;
 use crate::session_manager::session::Session;
-use crate::session_manager::summary::Summary;
 
 pub struct SessionManager {
   sessions: Vec<Session>,

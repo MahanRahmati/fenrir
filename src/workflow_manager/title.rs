@@ -11,26 +11,22 @@ use crate::vlog;
 use crate::workflow_manager::errors::{
   WorkflowManagerError, WorkflowManagerResult,
 };
-use crate::workflow_manager::workflow::{Workflow, WorkflowParams};
+
+pub struct TitleParams {
+  pub message: String,
+}
 
 pub struct TitleWorkflow;
 
-#[async_trait::async_trait]
-impl Workflow for TitleWorkflow {
-  fn name(&self) -> &str {
-    return "title_generator";
-  }
-
-  async fn execute(
-    &self,
+impl TitleWorkflow {
+  pub async fn execute(
     provider: Arc<ProviderManager>,
     config: Config,
-    params: WorkflowParams,
+    params: TitleParams,
   ) -> WorkflowManagerResult<String> {
-    let message = match params.get("message") {
-      Some(m) if !m.is_empty() => m.clone(),
-      _ => return Ok(String::new()),
-    };
+    if params.message.is_empty() {
+      return Ok(String::new());
+    }
 
     let prompt = Prompt::new(&config, &TITLES_PERSONA);
     let now = chrono::Utc::now().timestamp();
@@ -48,7 +44,7 @@ impl Workflow for TitleWorkflow {
         id: Uuid::now_v7(),
         msg_type: None,
         role: "user".to_string(),
-        content: message,
+        content: params.message,
         tool_call_id: None,
         tool_calls: None,
         timestamp: now,

@@ -241,12 +241,11 @@ impl App {
                       Some(Ok(summary)) if !summary.is_empty() => {
                         sink.on_event(AppEvent::Compacted { summary });
                       }
-                      Some(Err(e)) => {
-                        if !cancel.is_cancelled() {
+                      Some(Err(e))
+                        if !cancel.is_cancelled() => {
                           sink.on_event(AppEvent::Error {
                             message: e.to_string(),
                           });
-                        }
                       }
                       _ => {}
                     }

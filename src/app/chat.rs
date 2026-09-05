@@ -10,7 +10,7 @@ use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::mentions::strip_mentions;
 use crate::provider_manager::{ChatUsage, ToolCall};
 use crate::vlog;
-use crate::workflow_manager::workflow::WorkflowParams;
+use crate::workflow_manager::title::TitleParams;
 
 impl App {
   pub async fn process_chat(
@@ -48,8 +48,9 @@ impl App {
       return Ok(());
     }
 
-    let mut params = WorkflowParams::new();
-    params.insert("message".to_string(), first_message);
+    let params = TitleParams {
+      message: first_message,
+    };
 
     let title = match tokio::select! {
       biased;
@@ -57,7 +58,7 @@ impl App {
         vlog!("Session title generation cancelled.");
         return Ok(());
       }
-      result = self.workflow_manager.execute_workflow("title_generator", params) => result,
+      result = self.workflow_manager.generate_title(params) => result,
     } {
       Ok(title) => title,
       Err(e) => {
