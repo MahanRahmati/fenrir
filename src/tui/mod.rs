@@ -8,6 +8,7 @@ mod messages_list;
 mod personas_popup;
 mod popup;
 mod popup_list;
+mod queued_messages_list;
 mod sessions_popup;
 mod statusline;
 
@@ -29,6 +30,7 @@ use crate::tui::help_popup::HelpPopup;
 use crate::tui::input::Input;
 use crate::tui::messages_list::MessagesList;
 use crate::tui::personas_popup::PersonasPopup;
+use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
 
@@ -38,6 +40,7 @@ const HORIZONTAL_PADDING: u16 = 2;
 pub struct Tui {
   input: Input,
   messages_list: MessagesList,
+  queued_messages_list: QueueMessagesList,
   running: bool,
   help_popup: HelpPopup,
   sessions_popup: SessionsPopup,
@@ -55,6 +58,7 @@ impl Tui {
     return Self {
       input: Input::new(),
       messages_list: MessagesList::new(),
+      queued_messages_list: QueueMessagesList::new(),
       running: true,
       help_popup: HelpPopup::new(),
       sessions_popup: SessionsPopup::new(),
@@ -90,11 +94,16 @@ impl Tui {
 
   pub fn draw(&mut self, frame: &mut Frame) {
     let has_messages = !self.messages_list.is_empty();
-    let (messages_area, input_area, status_bar_area) =
-      self.compute_areas(frame, has_messages);
+    let has_queued_messages = !self.queued_messages_list.is_empty();
+    let (messages_area, queued_messages_area, input_area, status_bar_area) =
+      self.compute_areas(frame, has_messages, has_queued_messages);
 
     if has_messages {
       self.messages_list.draw(frame, messages_area);
+    }
+
+    if has_queued_messages {
+      self.queued_messages_list.draw(frame, queued_messages_area);
     }
 
     self.completion_popup.draw(frame, input_area);
@@ -124,7 +133,8 @@ impl Tui {
     &mut self,
     frame: &Frame,
     has_messages: bool,
-  ) -> (Rect, Rect, Rect) {
+    has_queued_messages: bool,
+  ) -> (Rect, Rect, Rect, Rect) {
     let screen_width = frame.area().width;
     let screen_height = frame.area().height;
 
@@ -147,24 +157,52 @@ impl Tui {
       box_height
     };
 
-    let (messages_area, input_area, status_bar_area) = if has_messages {
-      let [messages_area, input_area, status_bar_area] =
-        frame.area().layout(&Layout::vertical([
-          Constraint::Min(1),
-          Constraint::Length(slot_height),
-          Constraint::Length(1),
-        ]));
-      (messages_area, input_area, status_bar_area)
+    let queued_height = if has_queued_messages {
+      self.queued_messages_list.desired_height(box_width)
     } else {
-      let [messages_area, input_area, _spacer, status_bar_area] =
-        frame.area().layout(&Layout::vertical([
+      0
+    };
+
+    let (messages_area, queued_messages_area, input_area, status_bar_area) =
+      if has_messages {
+        let [
+          messages_area,
+          queued_messages_area,
+          input_area,
+          status_bar_area,
+        ] = frame.area().layout(&Layout::vertical([
           Constraint::Min(1),
+          Constraint::Length(queued_height),
+          Constraint::Length(slot_height),
+          Constraint::Length(1),
+        ]));
+        (
+          messages_area,
+          queued_messages_area,
+          input_area,
+          status_bar_area,
+        )
+      } else {
+        let [
+          messages_area,
+          queued_messages_area,
+          input_area,
+          _spacer,
+          status_bar_area,
+        ] = frame.area().layout(&Layout::vertical([
+          Constraint::Min(1),
+          Constraint::Length(0),
           Constraint::Length(slot_height),
           Constraint::Min(1),
           Constraint::Length(1),
         ]));
-      (messages_area, input_area, status_bar_area)
-    };
+        (
+          messages_area,
+          queued_messages_area,
+          input_area,
+          status_bar_area,
+        )
+      };
 
     let input_area = if has_messages {
       input_area.inner(Margin {
@@ -180,7 +218,22 @@ impl Tui {
         input_area.height,
       )
     };
-    return (messages_area, input_area, status_bar_area);
+
+    let queued_messages_area = if has_queued_messages {
+      queued_messages_area.inner(Margin {
+        horizontal: HORIZONTAL_PADDING,
+        vertical: 0,
+      })
+    } else {
+      queued_messages_area
+    };
+
+    return (
+      messages_area,
+      queued_messages_area,
+      input_area,
+      status_bar_area,
+    );
   }
 
   fn any_popup_open(&self) -> bool {
@@ -328,6 +381,10 @@ impl Tui {
 
   pub fn update_messages(&mut self, session: Option<&Session>) {
     self.messages_list.update_messages(session);
+  }
+
+  pub fn update_queued_messages(&mut self, queued_messages: Vec<String>) {
+    self.queued_messages_list.update_messages(queued_messages);
   }
 
   pub fn open_help_popup(&mut self, commands: Vec<SlashCommand>) {

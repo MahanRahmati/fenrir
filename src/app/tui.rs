@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::io::stdout;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,11 +23,27 @@ use crate::tui::Tui;
 struct TuiSink {
   tui: Tui,
   terminal: ratatui::DefaultTerminal,
+  message_queue: VecDeque<String>,
 }
 
 impl TuiSink {
   fn redraw(&mut self) {
     self.terminal.draw(|frame| self.tui.draw(frame)).ok();
+  }
+
+  fn add_to_message_queue(&mut self, text: String) {
+    self.message_queue.push_back(text);
+    self
+      .tui
+      .update_queued_messages(self.message_queue.make_contiguous().to_vec());
+  }
+
+  fn get_message_from_queue(&mut self) -> Option<String> {
+    let message = self.message_queue.pop_front();
+    self
+      .tui
+      .update_queued_messages(self.message_queue.make_contiguous().to_vec());
+    return message;
   }
 }
 
@@ -85,10 +102,13 @@ impl EventSink for TuiSink {
 
   async fn read_input(&mut self) -> RuntimeResult<Option<String>> {
     loop {
+      if let Some(text) = self.get_message_from_queue() {
+        return Ok(Some(text));
+      }
       let input = self.tui.read_input().await;
       self.redraw();
       if let Some(text) = input {
-        return Ok(Some(text));
+        self.add_to_message_queue(text);
       }
       if !self.tui.is_running() {
         return Ok(None);
@@ -99,8 +119,9 @@ impl EventSink for TuiSink {
   async fn poll_events(&mut self) {
     if event::poll(Duration::from_millis(10)).unwrap_or(false)
       && let Ok(e) = event::read()
+      && let Some(input) = self.tui.handle_event(e).await
     {
-      self.tui.handle_event(e).await;
+      self.add_to_message_queue(input);
     }
     self.redraw();
   }
@@ -170,6 +191,7 @@ impl App {
     let mut sink = TuiSink {
       tui: Tui::new(),
       terminal: ratatui::init(),
+      message_queue: VecDeque::new(),
     };
     crossterm::execute!(stdout(), EnableMouseCapture)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
