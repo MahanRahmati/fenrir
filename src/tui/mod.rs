@@ -1,6 +1,7 @@
 mod button;
 mod completion_popup;
 mod confirm_popup;
+mod container;
 mod help_popup;
 mod input;
 mod message_item;
