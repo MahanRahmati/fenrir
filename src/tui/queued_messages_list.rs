@@ -41,11 +41,11 @@ impl QueueMessagesList {
     let inner_width = area.width.saturating_sub(2).max(1);
     let height = self.desired_height(area.width).min(area.height);
     let content = self.content(inner_width);
-    let item = Container::new(
-      Some("Queued Messages".to_string()),
-      content,
-      Some(Color::Cyan),
-    );
+    let item = Container::new(content)
+      .title(" Queued Messages")
+      .color(Color::Cyan)
+      .trim(false)
+      .build();
     let box_area = Rect::new(
       area.x,
       area.y + area.height.saturating_sub(height),

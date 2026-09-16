@@ -1,6 +1,7 @@
 use ratatui::style::{Color, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Paragraph};
+use ratatui::text::Line;
+
+use crate::tui::container::{Container, Footer};
 
 pub const MAX_INPUT_HEIGHT: u16 = 8;
 
@@ -193,23 +194,20 @@ impl Input {
     self.update_scroll(area_height.saturating_sub(4) as usize);
   }
 
-  pub fn widget(&self, area_height: u16) -> Paragraph<'static> {
+  pub fn widget(&self, area_height: u16) -> Container<'static> {
     let visible = area_height.saturating_sub(4) as usize;
     let wrapped = self.wrapped_lines();
     let start = self.scroll_offset;
     let end = (start + visible).min(wrapped.len());
-    let mut lines: Vec<Line> = wrapped[start..end]
+    let lines: Vec<Line> = wrapped[start..end]
       .iter()
       .map(|line| Line::from(format!(" {line}")))
       .collect();
-    lines.push(Line::from("─".repeat(self.width + 2)));
-    lines.push(Line::from(Span::styled(
+    let footer = Footer::new(
       format!(" {}", self.persona_name),
-      Style::default().fg(Color::Yellow).bold(),
-    )));
-    return Paragraph::new(lines)
-      .style(Style::default())
-      .block(Block::bordered().border_type(BorderType::Rounded));
+      Some(Style::default().fg(Color::Yellow).bold()),
+    );
+    return Container::new(lines).footer(footer).trim(false).build();
   }
 
   const fn reset_cursor(&mut self) {
