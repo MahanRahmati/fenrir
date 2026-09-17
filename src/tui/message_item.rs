@@ -1,9 +1,10 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Widget, Wrap};
+use ratatui::text::Line;
+use ratatui::widgets::Widget;
 
+use crate::tui::container::Container;
 use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
 
 const TEXT_EXTRA_PADDING: u16 = 1;
@@ -32,7 +33,7 @@ impl Role {
 }
 
 pub struct ListMessage {
-  paragraph: Paragraph<'static>,
+  container: Container<'static>,
   horizontal_padding: u16,
 }
 
@@ -45,7 +46,7 @@ impl Widget for ListMessage {
       area.height.saturating_sub(TOP_PADDING),
     );
     if inner.width > 0 && inner.height > 0 {
-      self.paragraph.render(inner, buf);
+      self.container.render(inner, buf);
     }
   }
 }
@@ -98,7 +99,7 @@ impl MessageItem {
   pub fn to_list_item(&self, width: u16) -> (ListMessage, u16) {
     let horizontal_padding = self.role.horizontal_padding();
     let width = width.saturating_sub(horizontal_padding * 2);
-    let (paragraph, height) = match self.role {
+    let (container, height) = match self.role {
       Role::User => self.user_list_item(width),
       Role::Assistant => self.llm_list_item(width),
       Role::Reasoning => self.reasoning_list_item(width),
@@ -107,65 +108,57 @@ impl MessageItem {
     };
     return (
       ListMessage {
-        paragraph,
+        container,
         horizontal_padding,
       },
       height,
     );
   }
 
-  fn wrapped_paragraph(text: String) -> Paragraph<'static> {
-    return Paragraph::new(text).wrap(Wrap { trim: true });
+  fn container_height(container: &Container, width: u16) -> u16 {
+    return container.line_count(width).max(1) as u16 + TOP_PADDING;
   }
 
-  fn item_height(item: &Paragraph, width: u16) -> u16 {
-    return item.line_count(width).max(1) as u16 + TOP_PADDING;
+  fn user_list_item(&self, width: u16) -> (Container<'static>, u16) {
+    let container = Container::new(self.text.clone())
+      .color(Color::Yellow)
+      .build();
+    let height = Self::container_height(&container, width);
+    return (container, height);
   }
 
-  fn user_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
-    let block = Block::default()
-      .borders(Borders::ALL)
-      .border_type(BorderType::Rounded)
-      .border_style(Style::default().fg(Color::Yellow));
-    let item = Self::wrapped_paragraph(self.text.clone()).block(block);
-    let height = Self::item_height(&item, width);
-    return (item, height);
+  fn llm_list_item(&self, width: u16) -> (Container<'static>, u16) {
+    let container = Container::new(self.text.clone()).borderless().build();
+    let height = Self::container_height(&container, width);
+    return (container, height);
   }
 
-  fn llm_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
-    let item = Self::wrapped_paragraph(self.text.clone());
-    let height = Self::item_height(&item, width);
-    return (item, height);
+  fn reasoning_list_item(&self, width: u16) -> (Container<'static>, u16) {
+    let container = Container::new(self.text.clone())
+      .borderless()
+      .style(Style::default().dim())
+      .build();
+    let height = Self::container_height(&container, width);
+    return (container, height);
   }
 
-  fn reasoning_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
-    let item =
-      Self::wrapped_paragraph(self.text.clone()).style(Style::default().dim());
-    let height = Self::item_height(&item, width);
-    return (item, height);
-  }
-
-  fn tool_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
+  fn tool_list_item(&self, width: u16) -> (Container<'static>, u16) {
     if self.role == Role::ToolResult {
-      let mut item =
-        Paragraph::new(self.text.clone()).wrap(Wrap { trim: true });
-      item = item.style(if self.error {
-        Style::default().fg(Color::Red)
-      } else {
-        Style::default().dim()
-      });
-      let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
-      return (item, height);
+      let container = Container::new(self.text.clone())
+        .borderless()
+        .style(if self.error {
+          Style::default().fg(Color::Red)
+        } else {
+          Style::default().dim()
+        })
+        .build();
+      let height = Self::container_height(&container, width);
+      return (container, height);
     }
 
-    let block = Block::default()
-      .borders(Borders::ALL)
-      .border_type(BorderType::Rounded)
-      .border_style(Style::default().fg(Color::Blue));
-    let mut content: Vec<Line<'static>> = Vec::new();
+    let mut title = String::new();
     if let Some(name) = &self.tool_name {
       let trimmed = name.trim();
-      let mut title = String::new();
       if !trimmed.is_empty() {
         title.push(' ');
         title.push_str(trimmed);
@@ -179,52 +172,42 @@ impl MessageItem {
           title.push_str(args);
         }
       }
-      if !title.is_empty() {
-        let separator = "─".repeat(width.saturating_sub(2) as usize);
-        content.push(Line::from(title));
-        content.push(Line::from(Span::styled(
-          separator,
-          Style::default().fg(Color::Blue),
-        )));
-      }
     }
-    if let Some((result, _)) = &self.tool_result {
-      content.extend(result.lines().map(|l| Line::from(l.to_string())));
+    let body: Vec<Line<'static>> = self
+      .tool_result
+      .as_ref()
+      .map(|(result, _)| {
+        result.lines().map(|l| Line::from(l.to_string())).collect()
+      })
+      .unwrap_or_default();
+    let mut builder = Container::new(body).color(Color::Blue);
+    if !title.is_empty() {
+      builder = builder.title(title);
     }
-    let mut item = Paragraph::new(content)
-      .wrap(Wrap { trim: true })
-      .block(block);
     if let Some((_, error)) = &self.tool_result {
-      item = item.style(if *error {
+      builder = builder.style(if *error {
         Style::default().fg(Color::Red)
       } else {
         Style::default().dim()
       });
     }
-    let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
-    return (item, height);
+    let container = builder.build();
+    let height = Self::container_height(&container, width);
+    return (container, height);
   }
 
-  fn compaction_list_item(&self, width: u16) -> (Paragraph<'static>, u16) {
-    let block = Block::default()
-      .borders(Borders::ALL)
-      .border_type(BorderType::Rounded)
-      .border_style(Style::default().fg(Color::Magenta));
-    let mut content: Vec<Line<'static>> = Vec::new();
-    let title = " Compaction".to_string();
-    content.push(Line::from(title));
-    let separator = "─".repeat(width.saturating_sub(2) as usize);
-    content.push(Line::from(Span::styled(
-      separator,
-      Style::default().fg(Color::Magenta),
-    )));
-    content.extend(self.text.lines().map(|l| Line::from(l.to_string())));
-
-    let item = Paragraph::new(content)
-      .wrap(Wrap { trim: true })
-      .block(block);
-    let height = item.line_count(width).max(1) as u16 + TOP_PADDING;
-    return (item, height);
+  fn compaction_list_item(&self, width: u16) -> (Container<'static>, u16) {
+    let body: Vec<Line<'static>> = self
+      .text
+      .lines()
+      .map(|l| Line::from(l.to_string()))
+      .collect();
+    let container = Container::new(body)
+      .title(" Compaction")
+      .color(Color::Magenta)
+      .build();
+    let height = Self::container_height(&container, width);
+    return (container, height);
   }
 
   pub fn is_reasoning(&self) -> bool {

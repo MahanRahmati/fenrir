@@ -44,7 +44,6 @@ impl QueueMessagesList {
     let item = Container::new(content)
       .title(" Queued Messages")
       .color(Color::Cyan)
-      .trim(false)
       .build();
     let box_area = Rect::new(
       area.x,
