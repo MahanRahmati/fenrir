@@ -41,7 +41,7 @@ impl QueueMessagesList {
     let inner_width = area.width.saturating_sub(2).max(1);
     let height = self.desired_height(area.width).min(area.height);
     let content = self.content(inner_width);
-    let item = Container::new(content)
+    let item = Container::builder(content)
       .title(" Queued Messages")
       .color(Color::Cyan)
       .build();

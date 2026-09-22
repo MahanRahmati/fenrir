@@ -80,7 +80,7 @@ impl<'a> ContainerBuilder<'a> {
 }
 
 impl<'a> Container<'a> {
-  pub fn new<T>(text: T) -> ContainerBuilder<'a>
+  pub fn builder<T>(text: T) -> ContainerBuilder<'a>
   where
     T: Into<Text<'a>>,
   {

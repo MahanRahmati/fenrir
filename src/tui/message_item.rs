@@ -120,7 +120,7 @@ impl MessageItem {
   }
 
   fn user_list_item(&self, width: u16) -> (Container<'static>, u16) {
-    let container = Container::new(self.text.clone())
+    let container = Container::builder(self.text.clone())
       .color(Color::Yellow)
       .build();
     let height = Self::container_height(&container, width);
@@ -128,13 +128,13 @@ impl MessageItem {
   }
 
   fn llm_list_item(&self, width: u16) -> (Container<'static>, u16) {
-    let container = Container::new(self.text.clone()).borderless().build();
+    let container = Container::builder(self.text.clone()).borderless().build();
     let height = Self::container_height(&container, width);
     return (container, height);
   }
 
   fn reasoning_list_item(&self, width: u16) -> (Container<'static>, u16) {
-    let container = Container::new(self.text.clone())
+    let container = Container::builder(self.text.clone())
       .borderless()
       .style(Style::default().dim())
       .build();
@@ -144,7 +144,7 @@ impl MessageItem {
 
   fn tool_list_item(&self, width: u16) -> (Container<'static>, u16) {
     if self.role == Role::ToolResult {
-      let container = Container::new(self.text.clone())
+      let container = Container::builder(self.text.clone())
         .borderless()
         .style(if self.error {
           Style::default().fg(Color::Red)
@@ -180,7 +180,7 @@ impl MessageItem {
         result.lines().map(|l| Line::from(l.to_string())).collect()
       })
       .unwrap_or_default();
-    let mut builder = Container::new(body).color(Color::Blue);
+    let mut builder = Container::builder(body).color(Color::Blue);
     if !title.is_empty() {
       builder = builder.title(title);
     }
@@ -202,7 +202,7 @@ impl MessageItem {
       .lines()
       .map(|l| Line::from(l.to_string()))
       .collect();
-    let container = Container::new(body)
+    let container = Container::builder(body)
       .title(" Compaction")
       .color(Color::Magenta)
       .build();

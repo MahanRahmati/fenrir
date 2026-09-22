@@ -207,7 +207,7 @@ impl Input {
       format!(" {}", self.persona_name),
       Some(Style::default().fg(Color::Yellow).bold()),
     );
-    return Container::new(lines).footer(footer).trim(false).build();
+    return Container::builder(lines).footer(footer).trim(false).build();
   }
 
   const fn reset_cursor(&mut self) {
