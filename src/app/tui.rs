@@ -31,6 +31,11 @@ impl TuiSink {
     self.terminal.draw(|frame| self.tui.draw(frame)).ok();
   }
 
+  fn clear_message_queue(&mut self) {
+    self.message_queue.clear();
+    self.tui.update_queued_messages(Vec::new());
+  }
+
   fn add_to_message_queue(&mut self, text: String) {
     self.message_queue.push_back(text);
     self
@@ -153,6 +158,7 @@ impl EventSink for TuiSink {
   }
 
   fn on_session_selection(&mut self, session: Session) {
+    self.clear_message_queue();
     self.tui.update_messages(Some(&session));
     self.redraw();
   }
@@ -176,6 +182,7 @@ impl EventSink for TuiSink {
   }
 
   fn on_persona_selection(&mut self, name: String) {
+    self.clear_message_queue();
     self.tui.set_persona(&name);
     self.tui.update_messages(None);
     self.redraw();
