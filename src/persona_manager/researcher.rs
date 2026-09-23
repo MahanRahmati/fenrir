@@ -14,7 +14,7 @@ pub const RESEARCHER_PERSONA: Persona = Persona::new(
     "Finish with a concise summary of findings. Cite the sources you used and clearly separate established facts from uncertain or contested claims.",
   ],
   ToolAccess::Only(&[
-    "datetime",
+    "date_time",
     "read_file",
     "read_pdf",
     "find_file",
