@@ -11,6 +11,7 @@ mod popup;
 mod popup_list;
 mod queued_messages_list;
 mod sessions_popup;
+mod spinner;
 mod statusline;
 
 use std::time::{Duration, Instant};
@@ -48,8 +49,7 @@ pub struct Tui {
   personas_popup: PersonasPopup,
   confirm_popup: ConfirmPopup,
   completion_popup: CompletionPopup,
-  usage: Option<ChatUsage>,
-  processing: bool,
+  statusline: StatusLine,
   cancel_token: Option<CancellationToken>,
   last_escape_time: Option<Instant>,
 }
@@ -66,19 +66,18 @@ impl Tui {
       personas_popup: PersonasPopup::new(),
       confirm_popup: ConfirmPopup::new(),
       completion_popup: CompletionPopup::new(),
-      usage: None,
-      processing: false,
+      statusline: StatusLine::new(),
       cancel_token: None,
       last_escape_time: None,
     };
   }
 
   pub fn set_usage(&mut self, usage: Option<ChatUsage>) {
-    self.usage = usage;
+    self.statusline.set_usage(usage);
   }
 
   pub fn set_processing(&mut self, processing: bool) {
-    self.processing = processing;
+    self.statusline.set_processing(processing);
   }
 
   pub fn set_cancel_token(&mut self, token: CancellationToken) {
@@ -112,9 +111,10 @@ impl Tui {
     self.input.update_scroll_for_height(input_area.height);
     frame.render_widget(self.input.widget(input_area.height), input_area);
 
-    let statusline = StatusLine::new(self.usage, self.processing);
-    frame
-      .render_widget(statusline.draw(status_bar_area.width), status_bar_area);
+    frame.render_widget(
+      self.statusline.draw(status_bar_area.width),
+      status_bar_area,
+    );
 
     if !self.any_popup_open() {
       let (cursor_row, cursor_col) = self.input.cursor_position();
