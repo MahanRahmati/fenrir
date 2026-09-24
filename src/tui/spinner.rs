@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-const STATES: [&'static str; 4] = ["●∙∙∙", "∙●∙∙", "∙∙●∙", "∙∙∙●"];
+const STATES: [&str; 4] = ["●∙∙∙", "∙●∙∙", "∙∙●∙", "∙∙∙●"];
 const DURATION: Duration = Duration::from_millis(200);
 
 pub struct Spinner {
