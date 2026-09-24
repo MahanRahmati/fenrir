@@ -133,6 +133,10 @@ impl App {
         let current = self.persona_manager.current().name().to_string();
         return Ok(AppCommandResult::Personas { personas, current });
       }
+      AppCommand::ListModels => {
+        let models = self.provider_manager.list_models();
+        return Ok(AppCommandResult::Models { models });
+      }
       AppCommand::SelectPersona { name } => {
         self
           .persona_manager

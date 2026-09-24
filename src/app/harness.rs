@@ -137,6 +137,9 @@ impl App {
             AppCommandResult::Persona(name) => {
               sink.on_persona_selection(name);
             }
+            AppCommandResult::Models { models } => {
+              sink.on_models(models);
+            }
             AppCommandResult::Compacted { summary } => {
               sink.on_event(AppEvent::Compacted { summary });
             }

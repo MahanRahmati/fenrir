@@ -6,6 +6,7 @@ mod help_popup;
 mod input;
 mod message_item;
 mod messages_list;
+mod models_popup;
 mod personas_popup;
 mod popup;
 mod popup_list;
@@ -24,6 +25,7 @@ use uuid::Uuid;
 
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
+use crate::provider_manager::ModelInfo;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 use crate::tui::completion_popup::CompletionPopup;
@@ -31,6 +33,7 @@ use crate::tui::confirm_popup::ConfirmPopup;
 use crate::tui::help_popup::HelpPopup;
 use crate::tui::input::Input;
 use crate::tui::messages_list::MessagesList;
+use crate::tui::models_popup::ModelsPopup;
 use crate::tui::personas_popup::PersonasPopup;
 use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
@@ -47,6 +50,7 @@ pub struct Tui {
   help_popup: HelpPopup,
   sessions_popup: SessionsPopup,
   personas_popup: PersonasPopup,
+  models_popup: ModelsPopup,
   confirm_popup: ConfirmPopup,
   completion_popup: CompletionPopup,
   statusline: StatusLine,
@@ -64,6 +68,7 @@ impl Tui {
       help_popup: HelpPopup::new(),
       sessions_popup: SessionsPopup::new(),
       personas_popup: PersonasPopup::new(),
+      models_popup: ModelsPopup::new(),
       confirm_popup: ConfirmPopup::new(),
       completion_popup: CompletionPopup::new(),
       statusline: StatusLine::new(),
@@ -126,6 +131,7 @@ impl Tui {
 
     self.sessions_popup.draw(frame);
     self.personas_popup.draw(frame);
+    self.models_popup.draw(frame);
     self.help_popup.draw(frame);
     self.confirm_popup.draw(frame);
   }
@@ -240,6 +246,7 @@ impl Tui {
   fn any_popup_open(&self) -> bool {
     return self.sessions_popup.is_open()
       || self.personas_popup.is_open()
+      || self.models_popup.is_open()
       || self.help_popup.is_open()
       || self.confirm_popup.is_open()
       || self.completion_popup.is_open();
@@ -290,6 +297,9 @@ impl Tui {
         return None;
       }
       if self.personas_popup.handle_input(key.code) {
+        return None;
+      }
+      if self.models_popup.handle_input(key.code) {
         return None;
       }
 
@@ -434,6 +444,18 @@ impl Tui {
 
   pub fn handle_personas_event(&mut self, key: KeyCode) -> bool {
     return self.personas_popup.handle_input(key);
+  }
+
+  pub fn open_models_popup(&mut self, models: Vec<ModelInfo>) {
+    self.models_popup.open_models_popup(models);
+  }
+
+  pub fn models_popup_open(&self) -> bool {
+    return self.models_popup.is_open();
+  }
+
+  pub fn handle_models_event(&mut self, key: KeyCode) -> bool {
+    return self.models_popup.handle_input(key);
   }
 
   pub fn open_confirm_popup(&mut self, message: String) {

@@ -11,6 +11,7 @@ use crate::input::confirm_with;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::persona_manager::Persona;
+use crate::provider_manager::ModelInfo;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 use crate::utils::datetime::format_timestamp;
@@ -144,6 +145,20 @@ impl EventSink for CliSink {
 
   fn on_persona_selection(&mut self, name: String) {
     println!("Persona set to: {name}");
+  }
+
+  fn on_models(&mut self, models: Vec<ModelInfo>) {
+    println!("Available models:");
+    for model in &models {
+      let marker = if model.active { "*" } else { " " };
+      let line = match &model.model.alias {
+        Some(alias) => {
+          format!("{marker} {alias} ({})", model.provider)
+        }
+        None => format!("{marker} {} ({})", model.provider, model.model.name),
+      };
+      println!("  {line}");
+    }
   }
 
   fn set_cancel_token(&mut self, _token: CancellationToken) {}
