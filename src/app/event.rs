@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::app::errors::RuntimeResult;
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
-use crate::provider_manager::ModelInfo;
+use crate::provider_manager::Model;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 
@@ -64,6 +64,11 @@ pub trait EventSink {
     current: String,
   ) -> RuntimeResult<Option<String>>;
   fn on_persona_selection(&mut self, name: String);
-  fn on_models(&mut self, models: Vec<ModelInfo>);
+  fn on_models(
+    &mut self,
+    models: Vec<Model>,
+    current: Option<Model>,
+  ) -> RuntimeResult<Option<Model>>;
+  fn on_model_selection(&mut self, model: Model);
   fn set_cancel_token(&mut self, token: CancellationToken);
 }

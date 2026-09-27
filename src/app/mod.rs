@@ -135,7 +135,12 @@ impl App {
       }
       AppCommand::ListModels => {
         let models = self.provider_manager.list_models();
-        return Ok(AppCommandResult::Models { models });
+        let current = self.provider_manager.active_model();
+        return Ok(AppCommandResult::Models { models, current });
+      }
+      AppCommand::SelectModel { model } => {
+        self.provider_manager.set_active_model(&model);
+        return Ok(AppCommandResult::Model(model));
       }
       AppCommand::SelectPersona { name } => {
         self

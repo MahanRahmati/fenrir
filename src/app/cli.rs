@@ -11,7 +11,7 @@ use crate::input::confirm_with;
 use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::persona_manager::Persona;
-use crate::provider_manager::ModelInfo;
+use crate::provider_manager::Model;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 use crate::utils::datetime::format_timestamp;
@@ -147,18 +147,17 @@ impl EventSink for CliSink {
     println!("Persona set to: {name}");
   }
 
-  fn on_models(&mut self, models: Vec<ModelInfo>) {
-    println!("Available models:");
-    for model in &models {
-      let marker = if model.active { "*" } else { " " };
-      let line = match &model.model.alias {
-        Some(alias) => {
-          format!("{marker} {alias} ({})", model.provider)
-        }
-        None => format!("{marker} {} ({})", model.provider, model.model.name),
-      };
-      println!("  {line}");
-    }
+  fn on_models(
+    &mut self,
+    models: Vec<Model>,
+    current: Option<Model>,
+  ) -> RuntimeResult<Option<Model>> {
+    let model = handle_models(models, current)?;
+    return Ok(model);
+  }
+
+  fn on_model_selection(&mut self, model: Model) {
+    println!("Model set to: {}", model.label());
   }
 
   fn set_cancel_token(&mut self, _token: CancellationToken) {}
@@ -231,6 +230,32 @@ fn handle_personas(
   };
   let persona = &personas[index];
   return Ok(Some(persona.name().to_string()));
+}
+
+fn handle_models(
+  models: Vec<Model>,
+  current: Option<Model>,
+) -> RuntimeResult<Option<Model>> {
+  if models.is_empty() {
+    println!("No models found.");
+    return Ok(None);
+  }
+  let lines: Vec<String> = models
+    .iter()
+    .map(|m| {
+      let marker = match &current {
+        Some(c) if c == m => "*",
+        _ => " ",
+      };
+      format!("{marker}{} ({})", m.label(), m.provider)
+    })
+    .collect();
+  print_indexed_list(&lines);
+  println!("Enter model index to switch to (or empty to skip): ");
+  let Some(index) = read_index(models.len(), "model")? else {
+    return Ok(None);
+  };
+  return Ok(Some(models[index].clone()));
 }
 
 fn read_index(count: usize, name: &str) -> RuntimeResult<Option<usize>> {

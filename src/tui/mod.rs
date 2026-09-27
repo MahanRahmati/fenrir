@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
-use crate::provider_manager::ModelInfo;
+use crate::provider_manager::Model;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 use crate::tui::completion_popup::CompletionPopup;
@@ -91,6 +91,10 @@ impl Tui {
 
   pub fn set_persona(&mut self, name: &str) {
     self.input.set_persona(name);
+  }
+
+  pub fn set_model(&mut self, name: &str) {
+    self.input.set_model(name);
   }
 
   pub fn is_running(&self) -> bool {
@@ -446,12 +450,20 @@ impl Tui {
     return self.personas_popup.handle_input(key);
   }
 
-  pub fn open_models_popup(&mut self, models: Vec<ModelInfo>) {
-    self.models_popup.open_models_popup(models);
+  pub fn open_models_popup(
+    &mut self,
+    models: Vec<Model>,
+    current: Option<Model>,
+  ) {
+    self.models_popup.open_models_popup(models, current);
   }
 
   pub fn models_popup_open(&self) -> bool {
     return self.models_popup.is_open();
+  }
+
+  pub fn get_selected_model(&mut self) -> Option<Model> {
+    return self.models_popup.get_selected_model();
   }
 
   pub fn handle_models_event(&mut self, key: KeyCode) -> bool {

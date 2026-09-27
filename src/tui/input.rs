@@ -11,6 +11,7 @@ pub struct Input {
   pub width: usize,
   pub scroll_offset: usize,
   persona_name: String,
+  model_name: String,
 }
 
 impl Input {
@@ -21,11 +22,16 @@ impl Input {
       width: 1,
       scroll_offset: 0,
       persona_name: String::new(),
+      model_name: String::new(),
     };
   }
 
   pub fn set_persona(&mut self, name: &str) {
     self.persona_name = name.to_string();
+  }
+
+  pub fn set_model(&mut self, name: &str) {
+    self.model_name = name.to_string();
   }
 
   pub fn move_cursor_left(&mut self) {
@@ -203,10 +209,13 @@ impl Input {
       .iter()
       .map(|line| Line::from(format!(" {line}")))
       .collect();
-    let footer = Footer::new(
-      format!(" {}", self.persona_name),
-      Some(Style::default().fg(Color::Yellow).bold()),
-    );
+    let text = if self.model_name.is_empty() {
+      format!(" {}", self.persona_name)
+    } else {
+      format!(" {} · {}", self.persona_name, self.model_name)
+    };
+    let style = Style::default().fg(Color::Yellow).bold();
+    let footer = Footer::new(text, Some(style));
     return Container::builder(lines).footer(footer).trim(false).build();
   }
 

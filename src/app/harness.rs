@@ -137,8 +137,21 @@ impl App {
             AppCommandResult::Persona(name) => {
               sink.on_persona_selection(name);
             }
-            AppCommandResult::Models { models } => {
-              sink.on_models(models);
+            AppCommandResult::Models { models, current } => {
+              if let Some(model) = sink.on_models(models, current)? {
+                let result = {
+                  let mut app_locked = app.lock().await;
+                  app_locked
+                    .handle_command(AppCommand::SelectModel { model }, &cancel)
+                    .await
+                };
+                if let AppCommandResult::Model(model) = result? {
+                  sink.on_model_selection(model);
+                }
+              }
+            }
+            AppCommandResult::Model(model) => {
+              sink.on_model_selection(model);
             }
             AppCommandResult::Compacted { summary } => {
               sink.on_event(AppEvent::Compacted { summary });

@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
 use crate::persona_manager::Persona;
-use crate::provider_manager::ModelInfo;
+use crate::provider_manager::Model;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 use crate::tui::Tui;
@@ -189,8 +189,12 @@ impl EventSink for TuiSink {
     self.redraw();
   }
 
-  fn on_models(&mut self, models: Vec<ModelInfo>) {
-    self.tui.open_models_popup(models);
+  fn on_models(
+    &mut self,
+    models: Vec<Model>,
+    current: Option<Model>,
+  ) -> RuntimeResult<Option<Model>> {
+    self.tui.open_models_popup(models, current);
     self.redraw();
     while self.tui.models_popup_open() {
       if let Ok(Event::Key(key)) = event::read() {
@@ -198,6 +202,13 @@ impl EventSink for TuiSink {
       }
       self.redraw();
     }
+    let model = self.tui.get_selected_model();
+    return Ok(model);
+  }
+
+  fn on_model_selection(&mut self, model: Model) {
+    self.tui.set_model(&model.label());
+    self.redraw();
   }
 
   fn set_cancel_token(&mut self, token: CancellationToken) {
@@ -227,6 +238,14 @@ impl App {
       app_locked.persona_manager.current().name().to_string()
     };
     sink.tui.set_persona(&persona_name);
+
+    let model = {
+      let app_locked = app.lock().await;
+      app_locked.provider_manager.active_model()
+    };
+    if let Some(model) = model {
+      sink.tui.set_model(&model.label());
+    }
 
     sink
       .terminal

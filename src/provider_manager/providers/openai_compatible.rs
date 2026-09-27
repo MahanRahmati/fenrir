@@ -167,7 +167,6 @@ pub struct OpenAICompatibleProvider {
   name: String,
   api_key: Option<String>,
   models: Vec<Model>,
-  active_model: Option<Model>,
   client: HttpClient,
 }
 
@@ -181,6 +180,7 @@ impl OpenAICompatibleProvider {
     let models: Vec<Model> = models
       .into_iter()
       .map(|m| Model {
+        provider: name.clone(),
         name: m.name,
         alias: m.alias,
       })
@@ -190,7 +190,6 @@ impl OpenAICompatibleProvider {
       name,
       api_key,
       models,
-      active_model: None,
       client,
     };
   }
@@ -427,32 +426,18 @@ impl Provider for OpenAICompatibleProvider {
   }
 
   fn list_models(&self) -> Vec<Model> {
-    return self
-      .models
-      .iter()
-      .map(|m| Model {
-        name: m.name.clone(),
-        alias: m.alias.clone(),
-      })
-      .collect();
-  }
-
-  fn set_active_model(&mut self, model: Model) {
-    self.active_model = Some(model);
+    return self.models.clone();
   }
 
   async fn chat(
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
+    model: &str,
   ) -> ProviderManagerResult<ChatResponse> {
-    let model = self
-      .active_model
-      .as_ref()
-      .ok_or_else(|| ProviderManagerError::NoActiveModel)?
-      .name
-      .clone();
-    let request = self.build_request(model, messages, tools, false).await?;
+    let request = self
+      .build_request(model.to_string(), messages, tools, false)
+      .await?;
     let headers = self.build_headers();
 
     vlog!("Sending chat request to open ai compatible server");
@@ -506,14 +491,11 @@ impl Provider for OpenAICompatibleProvider {
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
+    model: &str,
   ) -> ProviderManagerResult<ChatStream> {
-    let model = self
-      .active_model
-      .as_ref()
-      .ok_or_else(|| ProviderManagerError::NoActiveModel)?
-      .name
-      .clone();
-    let request = self.build_request(model, messages, tools, true).await?;
+    let request = self
+      .build_request(model.to_string(), messages, tools, true)
+      .await?;
     let headers = self.build_headers();
 
     vlog!("Sending streaming chat request to open ai compatible server");

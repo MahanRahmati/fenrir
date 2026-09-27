@@ -7,10 +7,20 @@ use crate::provider_manager::errors::ProviderManagerResult;
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Model {
+  pub provider: String,
   pub name: String,
   pub alias: Option<String>,
+}
+
+impl Model {
+  pub fn label(&self) -> String {
+    return match self.alias.clone() {
+      Some(a) => a,
+      _ => self.name.clone(),
+    };
+  }
 }
 
 pub struct ToolCall {
@@ -52,15 +62,16 @@ pub type ChatStream =
 pub trait Provider: Send + Sync {
   fn name(&self) -> &str;
   fn list_models(&self) -> Vec<Model>;
-  fn set_active_model(&mut self, model: Model);
   async fn chat(
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
+    model: &str,
   ) -> ProviderManagerResult<ChatResponse>;
   async fn chat_stream(
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
+    model: &str,
   ) -> ProviderManagerResult<ChatStream>;
 }

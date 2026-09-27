@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::persona_manager::Persona;
-use crate::provider_manager::ModelInfo;
+use crate::provider_manager::Model;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 use crate::slash_commands::SlashCommandResult;
@@ -15,6 +15,7 @@ pub enum AppCommand {
   ListPersonas,
   SelectPersona { name: String },
   ListModels,
+  SelectModel { model: Model },
   Compact,
   New,
 }
@@ -32,8 +33,10 @@ pub enum AppCommandResult {
     current: String,
   },
   Persona(String),
+  Model(Model),
   Models {
-    models: Vec<ModelInfo>,
+    models: Vec<Model>,
+    current: Option<Model>,
   },
   Compacted {
     summary: String,

@@ -2,6 +2,8 @@ mod errors;
 mod provider;
 mod providers;
 
+use std::sync::Mutex;
+
 use crate::config::Config;
 use crate::provider_manager::errors::{
   ProviderManagerError, ProviderManagerResult,
@@ -15,16 +17,9 @@ use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
 use crate::vlog;
 
-pub struct ModelInfo {
-  pub provider: String,
-  pub model: Model,
-  pub active: bool,
-}
-
 pub struct ProviderManager {
   providers: Vec<Box<dyn Provider>>,
-  active_provider: Option<usize>,
-  active_model: Option<String>,
+  active_model: Mutex<Option<Model>>,
 }
 
 impl ProviderManager {
@@ -34,46 +29,45 @@ impl ProviderManager {
       providers.push(Box::new(provider));
     }
 
-    let active_provider = setup_active_provider(config.clone(), &providers);
-    let mut active_model = None;
-    if let Some(idx) = active_provider {
-      let provider = &mut providers[idx];
-      let model_str = config.general.model.unwrap_or_default();
-      let (_, model_name) = model_str
-        .split_once('/')
-        .unwrap_or(("", model_str.as_str()));
-      let found_model = provider
-        .list_models()
-        .into_iter()
-        .find(|m| m.name == model_name);
-      if let Some(model) = found_model {
-        active_model = Some(model.name.clone());
-        provider.set_active_model(model);
-      }
-    }
-
+    let active_model = resolve_active_model(&config, &providers);
     return Self {
       providers,
-      active_provider,
-      active_model,
+      active_model: Mutex::new(active_model),
     };
   }
 
-  pub fn list_models(&self) -> Vec<ModelInfo> {
+  pub fn list_models(&self) -> Vec<Model> {
     let mut models = Vec::new();
-    for (index, provider) in self.providers.iter().enumerate() {
-      let is_active_provider = self.active_provider == Some(index);
-      for model in provider.list_models() {
-        let active = is_active_provider
-          && self.active_model.as_deref() == Some(model.name.as_str());
-        models.push(ModelInfo {
-          provider: provider.name().to_string(),
-          model,
-          active,
-        });
-      }
+    for provider in self.providers.iter() {
+      models.extend(provider.list_models());
     }
     return models;
+  }
+
+  pub fn active_model(&self) -> Option<Model> {
+    return self.active_model.lock().unwrap().clone();
+  }
+
+  pub fn set_active_model(&self, model: &Model) {
+    *self.active_model.lock().unwrap() = Some(model.clone());
+    vlog!(
+      "Switched active model to '{}/{}'",
+      model.provider,
+      model.name
+    );
+  }
+
+  fn resolve(&self) -> ProviderManagerResult<(Model, &dyn Provider)> {
+    let model = self
+      .active_model()
+      .ok_or(ProviderManagerError::NoActiveModel)?;
+    let provider = self
+      .providers
+      .iter()
+      .find(|p| p.name() == model.provider)
+      .map(|p| p.as_ref())
+      .ok_or(ProviderManagerError::NoActiveProvider)?;
+    return Ok((model, provider));
   }
 
   pub async fn chat(
@@ -81,11 +75,8 @@ impl ProviderManager {
     messages: &[Message],
     tools: &[ToolSpec],
   ) -> ProviderManagerResult<ChatResponse> {
-    let provider = self
-      .active_provider
-      .and_then(|i| self.providers.get(i))
-      .ok_or(ProviderManagerError::NoActiveProvider)?;
-    return provider.chat(messages, tools).await;
+    let (model, provider) = self.resolve()?;
+    return provider.chat(messages, tools, &model.name).await;
   }
 
   pub async fn chat_stream(
@@ -93,36 +84,29 @@ impl ProviderManager {
     messages: &[Message],
     tools: &[ToolSpec],
   ) -> ProviderManagerResult<ChatStream> {
-    let provider = self
-      .active_provider
-      .and_then(|i| self.providers.get(i))
-      .ok_or(ProviderManagerError::NoActiveProvider)?;
-    return provider.chat_stream(messages, tools).await;
+    let (model, provider) = self.resolve()?;
+    return provider.chat_stream(messages, tools, &model.name).await;
   }
 }
 
-fn setup_active_provider(
-  config: Config,
-  providers: &Vec<Box<dyn Provider>>,
-) -> Option<usize> {
-  let model_str = config.general.model?;
+fn resolve_active_model(
+  config: &Config,
+  providers: &[Box<dyn Provider>],
+) -> Option<Model> {
+  let model_str = config.general.model.as_ref()?;
   let (provider_name, model_name) = model_str.split_once('/')?;
 
-  for (i, p) in providers.iter().enumerate() {
-    if p.name() != provider_name {
-      continue;
-    }
+  let model = providers
+    .iter()
+    .find(|p| p.name() == provider_name)
+    .and_then(|p| p.list_models().into_iter().find(|m| m.name == model_name));
 
-    let has_model = p.list_models().iter().any(|m| m.name == model_name);
-
-    if has_model {
-      vlog!("Selected provider '{provider_name}' model '{model_name}'");
-      return Some(i);
-    }
+  if model.is_some() {
+    vlog!("Selected provider '{provider_name}' model '{model_name}'");
+  } else {
+    vlog!("Failed to select provider '{provider_name}' model '{model_name}'");
   }
-
-  vlog!("Failed to select provider '{provider_name}' model '{model_name}'");
-  return None;
+  return model;
 }
 
 fn setup_openai_compatible(config: Config) -> Option<OpenAICompatibleProvider> {
