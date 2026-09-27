@@ -184,7 +184,7 @@ impl App {
         let app_clone = Arc::clone(app);
         let cancel_clone = cancel.clone();
 
-        let mut chat_handle = tokio::task::spawn(async move {
+        let chat_handle = tokio::task::spawn(async move {
           let mut app_locked = app_clone.lock().await;
           let result = app_locked.process_chat(&tx, &cancel_clone).await;
           drop(app_locked);
@@ -212,10 +212,6 @@ impl App {
                 chat_done = true;
               }
             },
-            result = &mut chat_handle => {
-              chat_result = Some(result);
-              chat_done = true;
-            }
             _ = sink.poll_events() => {}
             _ = cancel.cancelled() => {
               sink.on_event(AppEvent::Processing { processing: false });
@@ -227,6 +223,10 @@ impl App {
               continue;
             }
           }
+        }
+
+        if !cancel.is_cancelled() {
+          chat_result = Some(chat_handle.await);
         }
 
         if let Some(result) = chat_result {
