@@ -37,6 +37,8 @@ pub struct ToolFunction {
 pub struct Session {
   pub id: Uuid,
   #[serde(skip_serializing_if = "Option::is_none")]
+  pub parent_id: Option<Uuid>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub title: Option<String>,
   pub created_at: i64,
   pub last_interaction: i64,
@@ -49,6 +51,7 @@ impl Session {
     let now = Utc::now().timestamp();
     return Self {
       id: Uuid::now_v7(),
+      parent_id: None,
       title: None,
       created_at: now,
       last_interaction: now,

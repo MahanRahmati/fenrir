@@ -38,6 +38,7 @@ impl SessionManager {
         INSERT_SESSION,
         (
           session.id.to_string(),
+          session.parent_id.map(|id| id.to_string()),
           session.title.clone(),
           session.created_at,
           session.last_interaction,
@@ -280,16 +281,22 @@ impl SessionManager {
         ));
       }
     };
-    let title: String = match row.get(1) {
-      Ok(v) => v,
-      Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
+    let parent_id: String = row.get(1).unwrap_or_default();
+    let parent_id = if parent_id.is_empty() {
+      None
+    } else {
+      match Uuid::parse_str(&parent_id) {
+        Ok(v) => Some(v),
+        Err(_) => {
+          return Err(SessionManagerError::SessionLoadFailed(
+            "Invalid session data".to_string(),
+          ));
+        }
       }
     };
+    let title: String = row.get(2).unwrap_or_default();
     let title = if title.is_empty() { None } else { Some(title) };
-    let created_at: i64 = match row.get(2) {
+    let created_at: i64 = match row.get(3) {
       Ok(v) => v,
       Err(_) => {
         return Err(SessionManagerError::SessionLoadFailed(
@@ -297,7 +304,7 @@ impl SessionManager {
         ));
       }
     };
-    let last_interaction: i64 = match row.get(3) {
+    let last_interaction: i64 = match row.get(4) {
       Ok(v) => v,
       Err(_) => {
         return Err(SessionManagerError::SessionLoadFailed(
@@ -417,9 +424,10 @@ impl SessionManager {
 
     let session = Session {
       id: session_id,
+      parent_id,
+      title,
       created_at,
       last_interaction,
-      title,
       messages,
       summaries,
     };
@@ -447,25 +455,32 @@ impl SessionManager {
         Ok(v) => v,
         Err(_) => continue,
       };
-      let title: String = match row.get(1) {
-        Ok(v) => v,
-        Err(_) => continue,
+      let parent_id: String = row.get(1).unwrap_or_default();
+      let parent_id = if parent_id.is_empty() {
+        None
+      } else {
+        match Uuid::parse_str(&parent_id) {
+          Ok(v) => Some(v),
+          Err(_) => continue,
+        }
       };
+      let title: String = row.get(2).unwrap_or_default();
       let title = if title.is_empty() { None } else { Some(title) };
-      let created_at: i64 = match row.get(2) {
+      let created_at: i64 = match row.get(3) {
         Ok(v) => v,
         Err(_) => continue,
       };
-      let last_interaction: i64 = match row.get(3) {
+      let last_interaction: i64 = match row.get(4) {
         Ok(v) => v,
         Err(_) => continue,
       };
 
       let session = Session {
         id,
+        parent_id,
+        title,
         created_at,
         last_interaction,
-        title,
         messages: Vec::new(),
         summaries: Vec::new(),
       };
