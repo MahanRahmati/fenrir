@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
 
+use crate::agent_manager::AgentManager;
 use crate::app::App;
 use crate::app::AppEvent;
 use crate::app::EventSink;
@@ -10,7 +11,7 @@ use crate::app::command::{AppCommand, AppCommandResult};
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::vlog;
 
-impl App {
+impl AgentManager {
   pub async fn harness_loop(
     app: &Arc<Mutex<App>>,
     sink: &mut impl EventSink,
@@ -48,7 +49,10 @@ impl App {
             tokio::task::spawn(async move {
               let result = {
                 let mut app_locked = app_clone.lock().await;
-                app_locked.handle_command(command, &cancel_clone).await
+                app_locked
+                  .agent_manager
+                  .handle_command(command, &cancel_clone)
+                  .await
               };
               result_tx.send(result).await.ok();
             });
@@ -91,7 +95,10 @@ impl App {
 
           let result = {
             let mut app_locked = app.lock().await;
-            app_locked.handle_command(command, &cancel).await
+            app_locked
+              .agent_manager
+              .handle_command(command, &cancel)
+              .await
           };
           match result? {
             AppCommandResult::Exit => {
@@ -106,6 +113,7 @@ impl App {
                 let result = {
                   let mut app_locked = app.lock().await;
                   app_locked
+                    .agent_manager
                     .handle_command(
                       AppCommand::LoadSession { id: session_id },
                       &cancel,
@@ -125,6 +133,7 @@ impl App {
                 {
                   let mut app_locked = app.lock().await;
                   app_locked
+                    .agent_manager
                     .handle_command(
                       AppCommand::SelectPersona { name: name.clone() },
                       &cancel,
@@ -142,6 +151,7 @@ impl App {
                 let result = {
                   let mut app_locked = app.lock().await;
                   app_locked
+                    .agent_manager
                     .handle_command(AppCommand::SelectModel { model }, &cancel)
                     .await
                 };
@@ -163,9 +173,13 @@ impl App {
 
         {
           let mut app_locked = app.lock().await;
-          app_locked.ensure_session_with_system_message().await?;
+          app_locked
+            .agent_manager
+            .ensure_session_with_system_message()
+            .await?;
 
           app_locked
+            .agent_manager
             .session_manager
             .add_user_message_to_current_session(&input)
             .await
@@ -186,7 +200,10 @@ impl App {
 
         let chat_handle = tokio::task::spawn(async move {
           let mut app_locked = app_clone.lock().await;
-          let result = app_locked.process_chat(&tx, &cancel_clone).await;
+          let result = app_locked
+            .agent_manager
+            .process_chat(&tx, &cancel_clone)
+            .await;
           drop(app_locked);
           tx.send(AppEvent::Processing { processing: false })
             .await
@@ -234,7 +251,7 @@ impl App {
             Ok(Ok(_)) => {
               let last_usage = {
                 let app_locked = app.lock().await;
-                app_locked.last_usage()
+                app_locked.agent_manager.last_usage()
               };
               sink.on_event(AppEvent::Usage { usage: last_usage });
               let (compact_tx, mut compact_rx) = mpsc::channel(1);
@@ -262,7 +279,7 @@ impl App {
                           sink.on_event(AppEvent::Error {
                             message: e.to_string(),
                           });
-                      }
+                        }
                       _ => {}
                     }
                   }

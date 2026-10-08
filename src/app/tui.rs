@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::agent_manager::AgentManager;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
 use crate::persona_manager::Persona;
@@ -235,13 +236,19 @@ impl App {
 
     let persona_name = {
       let app_locked = app.lock().await;
-      app_locked.persona_manager.current().name().to_string()
+      app_locked
+        .agent_manager
+        .current
+        .persona_manager
+        .current()
+        .name()
+        .to_string()
     };
     sink.tui.set_persona(&persona_name);
 
     let model = {
       let app_locked = app.lock().await;
-      app_locked.provider_manager.active_model()
+      app_locked.agent_manager.provider_manager.active_model()
     };
     if let Some(model) = model {
       sink.tui.set_model(&model.label());
@@ -252,7 +259,7 @@ impl App {
       .draw(|frame| sink.tui.draw(frame))
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;
 
-    let result = App::harness_loop(app, &mut sink).await;
+    let result = AgentManager::harness_loop(app, &mut sink).await;
 
     crossterm::execute!(stdout(), DisableMouseCapture)
       .map_err(|e| RuntimeError::Tui(e.to_string()))?;

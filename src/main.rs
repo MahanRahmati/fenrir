@@ -1,3 +1,4 @@
+mod agent_manager;
 mod app;
 mod capability;
 mod cli;

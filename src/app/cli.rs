@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::agent_manager::AgentManager;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
 use crate::input::confirm_with;
@@ -170,8 +171,7 @@ impl App {
       reasoning_open: false,
       reasoning_ends_with_newline: false,
     };
-
-    return App::harness_loop(app, &mut sink).await;
+    return AgentManager::harness_loop(app, &mut sink).await;
   }
 }
 

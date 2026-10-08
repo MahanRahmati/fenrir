@@ -3,18 +3,19 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
+use crate::agent_manager::AgentManager;
 use crate::app::App;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::vlog;
 use crate::workflow_manager::compaction::CompactionParams;
 
-impl App {
+impl AgentManager {
   pub async fn maybe_compact_arc(
     app: Arc<Mutex<App>>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     let mut app_locked = app.lock().await;
-    return app_locked.maybe_compact(cancel).await;
+    return app_locked.agent_manager.maybe_compact(cancel).await;
   }
 
   pub async fn maybe_compact(

@@ -1,38 +1,75 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
-use crate::app::App;
 use crate::app::AppEvent;
 use crate::app::errors::{RuntimeError, RuntimeResult};
+use crate::config::Config;
 use crate::mentions::strip_mentions;
-use crate::provider_manager::{ChatUsage, ToolCall};
+use crate::persona_manager::PersonaManager;
+use crate::provider_manager::{ChatUsage, ProviderManager, ToolCall};
+use crate::session_manager::SessionManager;
+use crate::tool_manager::ToolApproval;
+use crate::tool_manager::ToolManager;
+use crate::tool_manager::ToolRejection;
+use crate::tool_manager::tool::parse_tool_params;
 use crate::vlog;
+use crate::workflow_manager::WorkflowManager;
 use crate::workflow_manager::title::TitleParams;
 
-impl App {
+pub struct Agent {
+  pub config: Config,
+  pub tool_manager: ToolManager,
+  pub persona_manager: PersonaManager,
+  pub provider_manager: Arc<ProviderManager>,
+  pub last_usage: Option<ChatUsage>,
+}
+
+impl Agent {
+  pub fn new(config: Config, provider_manager: Arc<ProviderManager>) -> Self {
+    let tool_manager = ToolManager::new(&config);
+    let persona_manager = PersonaManager::new();
+    return Agent {
+      config,
+      tool_manager,
+      persona_manager,
+      provider_manager,
+      last_usage: None,
+    };
+  }
+
   pub async fn process_chat(
     &mut self,
+    session_manager: &mut SessionManager,
+    workflow_manager: &WorkflowManager,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     if cancel.is_cancelled() {
       return Ok(String::new());
     }
-    self.generate_title_from_workflow(cancel).await?;
+    self
+      .generate_title_from_workflow(session_manager, workflow_manager, cancel)
+      .await?;
     if self.config.general.stream {
-      return self.process_chat_stream(tx, cancel).await;
+      return self.process_chat_stream(session_manager, tx, cancel).await;
     }
-    return self.process_chat_non_streaming(tx, cancel).await;
+    return self
+      .process_chat_non_streaming(session_manager, tx, cancel)
+      .await;
   }
 
   async fn generate_title_from_workflow(
     &mut self,
+    session_manager: &mut SessionManager,
+    workflow_manager: &WorkflowManager,
     cancel: &CancellationToken,
   ) -> RuntimeResult<()> {
-    let session = match self.session_manager.get_current_session() {
+    let session = match session_manager.get_current_session() {
       Some(session) if session.title.is_none() => session.clone(),
       _ => return Ok(()),
     };
@@ -58,7 +95,7 @@ impl App {
         vlog!("Session title generation cancelled.");
         return Ok(());
       }
-      result = self.workflow_manager.generate_title(params) => result,
+      result = workflow_manager.generate_title(params) => result,
     } {
       Ok(title) => title,
       Err(e) => {
@@ -71,8 +108,7 @@ impl App {
       return Ok(());
     }
 
-    self
-      .session_manager
+    session_manager
       .update_current_session_title(&title)
       .await
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
@@ -81,14 +117,14 @@ impl App {
 
   async fn process_chat_stream(
     &mut self,
+    session_manager: &mut SessionManager,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
 
     loop {
-      let session = self
-        .session_manager
+      let session = session_manager
         .get_current_session()
         .ok_or(RuntimeError::Session("No active session".into()))?;
 
@@ -177,15 +213,13 @@ impl App {
       }
 
       if self.config.general.show_reasoning && !reasoning_buffer.is_empty() {
-        self
-          .session_manager
+        session_manager
           .add_reasoning_message_to_current_session(&reasoning_buffer)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
       }
       if !content_buffer.is_empty() || tool_call_builders.is_empty() {
-        self
-          .session_manager
+        session_manager
           .add_assistant_message_to_current_session(&content_buffer)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
@@ -197,7 +231,9 @@ impl App {
 
       let tool_calls: Vec<ToolCall> =
         tool_call_builders.into_values().collect();
-      self.execute_tool_calls(&tool_calls, tx, cancel).await?;
+      self
+        .execute_tool_calls(session_manager, &tool_calls, tx, cancel)
+        .await?;
     }
 
     return Ok(assistant_content);
@@ -205,6 +241,7 @@ impl App {
 
   async fn process_chat_non_streaming(
     &mut self,
+    session_manager: &mut SessionManager,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
@@ -214,8 +251,7 @@ impl App {
       if cancel.is_cancelled() {
         break;
       }
-      let session = self
-        .session_manager
+      let session = session_manager
         .get_current_session()
         .ok_or_else(|| RuntimeError::Session("No active session".into()))?;
 
@@ -259,15 +295,13 @@ impl App {
         && let Some(ref reasoning) = response.reasoning
         && !reasoning.is_empty()
       {
-        self
-          .session_manager
+        session_manager
           .add_reasoning_message_to_current_session(reasoning)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
       }
       if let Some(ref content) = response.content {
-        self
-          .session_manager
+        session_manager
           .add_assistant_message_to_current_session(content)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
@@ -278,10 +312,137 @@ impl App {
       }
 
       self
-        .execute_tool_calls(&response.tool_calls, tx, cancel)
+        .execute_tool_calls(session_manager, &response.tool_calls, tx, cancel)
         .await?;
     }
 
     return Ok(assistant_content);
+  }
+
+  async fn execute_tool_calls(
+    &mut self,
+    session_manager: &mut SessionManager,
+    tool_calls: &[ToolCall],
+    tx: &Sender<AppEvent>,
+    cancel: &CancellationToken,
+  ) -> RuntimeResult<()> {
+    for tool_call in tool_calls {
+      if cancel.is_cancelled() {
+        break;
+      }
+      vlog!(
+        "Tool call: {} with arguments: {}",
+        tool_call.name,
+        tool_call.arguments
+      );
+
+      session_manager
+        .add_tool_call_to_current_session(
+          &tool_call.id,
+          &tool_call.name,
+          &tool_call.arguments,
+        )
+        .await
+        .map_err(|e| RuntimeError::Session(e.to_string()))?;
+
+      if self.config.general.show_tools {
+        tx.send(AppEvent::ToolCall {
+          name: tool_call.name.clone(),
+          arguments: tool_call.arguments.clone(),
+        })
+        .await
+        .ok();
+      }
+
+      let params = parse_tool_params(&tool_call.arguments);
+
+      let tool_access = self.persona_manager.current().allowed_tools();
+      let approval = self.tool_manager.approve_tool_call(
+        &tool_call.name,
+        &params,
+        tool_access,
+      );
+      let rejection = match approval {
+        ToolApproval::Allowed => None,
+        ToolApproval::NeedsConfirmation { message } => {
+          let (reply_tx, reply_rx) = oneshot::channel();
+          tx.send(AppEvent::ToolConfirmation {
+            message,
+            reply: reply_tx,
+          })
+          .await
+          .ok();
+          match reply_rx.await {
+            Ok(true) => None,
+            _ => Some(ToolRejection::UserDeclined),
+          }
+        }
+        ToolApproval::Rejected(rejection) => Some(rejection),
+      };
+      if let Some(rejection) = rejection {
+        let (result, error) = match rejection {
+          ToolRejection::NotAllowedForPersona => (
+            format!(
+              "Tool '{}' is not available for the current persona. Use only the tools available to this persona.",
+              tool_call.name
+            ),
+            true,
+          ),
+          ToolRejection::CwdRestriction { path } => (
+            format!(
+              "Tool '{}' was blocked: the target path '{}' is outside the current working directory. Tools are restricted to the current working directory; retry with a path inside it.",
+              tool_call.name, path
+            ),
+            true,
+          ),
+          ToolRejection::UserDeclined => (
+            format!(
+              "Tool '{}' was cancelled by the user. Respect the user's decision; do not retry the same action unless the user asks.",
+              tool_call.name
+            ),
+            false,
+          ),
+        };
+        session_manager
+          .add_tool_result_to_current_session(&tool_call.id, &result)
+          .await
+          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        if self.config.general.show_tools {
+          tx.send(AppEvent::ToolResult { result, error }).await.ok();
+        }
+        continue;
+      }
+
+      let result = self
+        .tool_manager
+        .execute_tool(&tool_call.name, params)
+        .await;
+
+      let (result_str, error) = match result {
+        Ok(r) => {
+          vlog!("Tool '{}' result: {}", tool_call.name, r);
+          (r, false)
+        }
+        Err(e) => {
+          vlog!("Tool '{}' error: {}", tool_call.name, e);
+          (format!("Tool error: {e}"), true)
+        }
+      };
+
+      session_manager
+        .add_tool_result_to_current_session(&tool_call.id, &result_str)
+        .await
+        .map_err(|e| RuntimeError::Session(e.to_string()))?;
+
+      if self.config.general.show_tools {
+        tx.send(AppEvent::ToolResult {
+          result: result_str,
+          error,
+        })
+        .await
+        .ok();
+      }
+    }
+    return Ok(());
   }
 }
