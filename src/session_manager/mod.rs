@@ -1,5 +1,6 @@
 mod errors;
 mod queries;
+mod repository;
 pub mod session;
 mod summary;
 
@@ -12,13 +13,13 @@ use crate::database::DB;
 use crate::session_manager::errors::{
   SessionManagerError, SessionManagerResult,
 };
-use crate::session_manager::queries::*;
+use crate::session_manager::repository::SessionRepository;
 use crate::session_manager::session::Session;
 
 pub struct SessionManager {
   sessions: Vec<Session>,
   current_session: Option<Uuid>,
-  db: DB,
+  repository: SessionRepository,
 }
 
 impl SessionManager {
@@ -26,32 +27,13 @@ impl SessionManager {
     return Self {
       sessions: Vec::new(),
       current_session: None,
-      db,
+      repository: SessionRepository::new(db),
     };
   }
 
   pub async fn create_session(&mut self) -> SessionManagerResult<Uuid> {
     let session = Session::new();
-    match self
-      .db
-      .execute(
-        INSERT_SESSION,
-        (
-          session.id.to_string(),
-          session.parent_id.map(|id| id.to_string()),
-          session.title.clone(),
-          session.created_at,
-          session.last_interaction,
-        ),
-      )
-      .await
-    {
-      Ok(_) => {}
-      Err(e) => {
-        return Err(SessionManagerError::DatabaseError(e.to_string()));
-      }
-    };
-
+    self.repository.insert_session(&session).await?;
     let id = session.id;
     self.sessions.push(session);
     self.current_session = Some(id);
@@ -150,32 +132,7 @@ impl SessionManager {
       f(session);
       let new_msg = session.messages.last();
       if let Some(msg) = new_msg {
-        let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
-        let tool_calls = match &msg.tool_calls {
-          Some(calls) => serde_json::to_string(calls).unwrap_or_default(),
-          None => String::new(),
-        };
-        match self
-          .db
-          .execute(
-            INSERT_MESSAGE,
-            (
-              &*msg.id.to_string(),
-              session.id.to_string(),
-              &*msg.role,
-              &*msg.content,
-              msg.timestamp,
-              tool_call_id,
-              tool_calls,
-            ),
-          )
-          .await
-        {
-          Ok(_) => {}
-          Err(e) => {
-            return Err(SessionManagerError::DatabaseError(e.to_string()));
-          }
-        }
+        self.repository.insert_message(session.id, msg).await?;
       }
     }
     return Ok(());
@@ -195,25 +152,7 @@ impl SessionManager {
       session.add_summary(content, covers_message_id);
       let new_summary = session.summaries.last();
       if let Some(summary) = new_summary {
-        match self
-          .db
-          .execute(
-            INSERT_SUMMARY,
-            (
-              &*summary.id.to_string(),
-              session.id.to_string(),
-              &*summary.content,
-              &*summary.covers_message_id.to_string(),
-              summary.created_at,
-            ),
-          )
-          .await
-        {
-          Ok(_) => {}
-          Err(e) => {
-            return Err(SessionManagerError::DatabaseError(e.to_string()));
-          }
-        }
+        self.repository.insert_summary(session.id, summary).await?;
       }
     }
     return Ok(());
@@ -230,16 +169,7 @@ impl SessionManager {
     if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
     {
       session.title = Some(title.to_string());
-      match self
-        .db
-        .execute(UPDATE_SESSION_TITLE, (title, session_id.to_string()))
-        .await
-      {
-        Ok(_) => {}
-        Err(e) => {
-          return Err(SessionManagerError::DatabaseError(e.to_string()));
-        }
-      }
+      self.repository.update_title(session_id, title).await?;
     }
     return Ok(());
   }
@@ -248,189 +178,7 @@ impl SessionManager {
     &mut self,
     id: Uuid,
   ) -> SessionManagerResult<()> {
-    let mut session_row =
-      match self.db.query(LOAD_SESSION, (id.to_string(),)).await {
-        Ok(rows) => rows,
-        Err(e) => {
-          return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-        }
-      };
-
-    let row = match session_row.next().await {
-      Ok(Some(row)) => row,
-      _ => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Session not found".to_string(),
-        ));
-      }
-    };
-
-    let session_id: String = match row.get(0) {
-      Ok(v) => v,
-      Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
-      }
-    };
-    let session_id = match Uuid::parse_str(&session_id) {
-      Ok(v) => v,
-      Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
-      }
-    };
-    let parent_id: String = row.get(1).unwrap_or_default();
-    let parent_id = if parent_id.is_empty() {
-      None
-    } else {
-      match Uuid::parse_str(&parent_id) {
-        Ok(v) => Some(v),
-        Err(_) => {
-          return Err(SessionManagerError::SessionLoadFailed(
-            "Invalid session data".to_string(),
-          ));
-        }
-      }
-    };
-    let title: String = row.get(2).unwrap_or_default();
-    let title = if title.is_empty() { None } else { Some(title) };
-    let created_at: i64 = match row.get(3) {
-      Ok(v) => v,
-      Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
-      }
-    };
-    let last_interaction: i64 = match row.get(4) {
-      Ok(v) => v,
-      Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
-      }
-    };
-
-    let mut messages_rows = match self
-      .db
-      .query(LOAD_MESSAGES, (session_id.to_string(),))
-      .await
-    {
-      Ok(rows) => rows,
-      Err(e) => {
-        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-      }
-    };
-
-    let mut messages = Vec::new();
-    while let Ok(Some(msg_row)) = messages_rows.next().await {
-      let id: String = match msg_row.get(0) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let id = match Uuid::parse_str(&id) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let role: String = match msg_row.get(2) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let content: String = match msg_row.get(3) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let timestamp: i64 = match msg_row.get(4) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let tool_call_id: String = msg_row.get(5).unwrap_or_default();
-      let tool_calls: String = msg_row.get(6).unwrap_or_default();
-
-      let tool_call_id = if tool_call_id.is_empty() {
-        None
-      } else {
-        Some(tool_call_id)
-      };
-      let tool_calls = if tool_calls.is_empty() {
-        None
-      } else {
-        serde_json::from_str(&tool_calls).ok()
-      };
-
-      let message = Message {
-        id,
-        msg_type: None,
-        role,
-        content,
-        tool_call_id,
-        tool_calls,
-        timestamp,
-      };
-
-      messages.push(message);
-    }
-
-    let mut summaries_rows = match self
-      .db
-      .query(LOAD_SUMMARIES, (session_id.to_string(),))
-      .await
-    {
-      Ok(rows) => rows,
-      Err(e) => {
-        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-      }
-    };
-
-    let mut summaries = Vec::new();
-    while let Ok(Some(summary_row)) = summaries_rows.next().await {
-      let id: String = match summary_row.get(0) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let id = match Uuid::parse_str(&id) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let content: String = match summary_row.get(2) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let covers_message_id: String = match summary_row.get(3) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let covers_message_id = match Uuid::parse_str(&covers_message_id) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-
-      let summary_created_at: i64 = match summary_row.get(4) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-
-      let summary = Summary {
-        id,
-        session_id,
-        content,
-        covers_message_id,
-        created_at: summary_created_at,
-      };
-      summaries.push(summary);
-    }
-
-    let session = Session {
-      id: session_id,
-      parent_id,
-      title,
-      created_at,
-      last_interaction,
-      messages,
-      summaries,
-    };
+    let session = self.repository.load(id).await?;
 
     self.sessions.push(session);
     self.current_session = Some(id);
@@ -438,57 +186,7 @@ impl SessionManager {
   }
 
   pub async fn list_sessions(&self) -> SessionManagerResult<Vec<Session>> {
-    let mut rows = match self.db.query(LIST_SESSIONS, ()).await {
-      Ok(rows) => rows,
-      Err(e) => {
-        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-      }
-    };
-
-    let mut result = Vec::new();
-    while let Ok(Some(row)) = rows.next().await {
-      let id: String = match row.get(0) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let id = match Uuid::parse_str(&id) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let parent_id: String = row.get(1).unwrap_or_default();
-      let parent_id = if parent_id.is_empty() {
-        None
-      } else {
-        match Uuid::parse_str(&parent_id) {
-          Ok(v) => Some(v),
-          Err(_) => continue,
-        }
-      };
-      let title: String = row.get(2).unwrap_or_default();
-      let title = if title.is_empty() { None } else { Some(title) };
-      let created_at: i64 = match row.get(3) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let last_interaction: i64 = match row.get(4) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-
-      let session = Session {
-        id,
-        parent_id,
-        title,
-        created_at,
-        last_interaction,
-        messages: Vec::new(),
-        summaries: Vec::new(),
-      };
-
-      result.push(session);
-    }
-
-    return Ok(result);
+    return self.repository.list().await;
   }
 
   fn get_session_by_id(&self, id: Uuid) -> Option<&Session> {
