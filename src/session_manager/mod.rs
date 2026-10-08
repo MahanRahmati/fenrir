@@ -44,8 +44,22 @@ impl SessionManager {
     &mut self,
     content: &str,
   ) -> SessionManagerResult<()> {
+    let session_id = match self.current_session {
+      Some(id) => id,
+      None => return Err(SessionManagerError::NoCurrentSession),
+    };
+    return self
+      .add_system_message_to_session(session_id, content)
+      .await;
+  }
+
+  pub async fn add_system_message_to_session(
+    &mut self,
+    session_id: Uuid,
+    content: &str,
+  ) -> SessionManagerResult<()> {
     self
-      .add_message_to_current_session(|session| {
+      .add_message_to_session(session_id, |session| {
         session.add_system_message(content);
       })
       .await?;
@@ -56,8 +70,20 @@ impl SessionManager {
     &mut self,
     content: &str,
   ) -> SessionManagerResult<()> {
+    let session_id = match self.current_session {
+      Some(id) => id,
+      None => return Err(SessionManagerError::NoCurrentSession),
+    };
+    return self.add_user_message_to_session(session_id, content).await;
+  }
+
+  pub async fn add_user_message_to_session(
+    &mut self,
+    session_id: Uuid,
+    content: &str,
+  ) -> SessionManagerResult<()> {
     self
-      .add_message_to_current_session(|session| {
+      .add_message_to_session(session_id, |session| {
         session.add_user_message(content);
       })
       .await?;
@@ -68,8 +94,22 @@ impl SessionManager {
     &mut self,
     content: &str,
   ) -> SessionManagerResult<()> {
+    let session_id = match self.current_session {
+      Some(id) => id,
+      None => return Err(SessionManagerError::NoCurrentSession),
+    };
+    return self
+      .add_assistant_message_to_session(session_id, content)
+      .await;
+  }
+
+  pub async fn add_assistant_message_to_session(
+    &mut self,
+    session_id: Uuid,
+    content: &str,
+  ) -> SessionManagerResult<()> {
     self
-      .add_message_to_current_session(|session| {
+      .add_message_to_session(session_id, |session| {
         session.add_assistant_message(content);
       })
       .await?;
@@ -80,8 +120,22 @@ impl SessionManager {
     &mut self,
     content: &str,
   ) -> SessionManagerResult<()> {
+    let session_id = match self.current_session {
+      Some(id) => id,
+      None => return Err(SessionManagerError::NoCurrentSession),
+    };
+    return self
+      .add_reasoning_message_to_session(session_id, content)
+      .await;
+  }
+
+  pub async fn add_reasoning_message_to_session(
+    &mut self,
+    session_id: Uuid,
+    content: &str,
+  ) -> SessionManagerResult<()> {
     self
-      .add_message_to_current_session(|session| {
+      .add_message_to_session(session_id, |session| {
         session.add_reasoning_message(content);
       })
       .await?;
@@ -93,8 +147,23 @@ impl SessionManager {
     tool_call_id: &str,
     result: &str,
   ) -> SessionManagerResult<()> {
+    let session_id = match self.current_session {
+      Some(id) => id,
+      None => return Err(SessionManagerError::NoCurrentSession),
+    };
+    return self
+      .add_tool_result_to_session(session_id, tool_call_id, result)
+      .await;
+  }
+
+  pub async fn add_tool_result_to_session(
+    &mut self,
+    session_id: Uuid,
+    tool_call_id: &str,
+    result: &str,
+  ) -> SessionManagerResult<()> {
     self
-      .add_message_to_current_session(|session| {
+      .add_message_to_session(session_id, |session| {
         session
           .add_tool_result(tool_call_id, &format!("Tool result: {result}"));
       })
@@ -108,25 +177,38 @@ impl SessionManager {
     tool_name: &str,
     arguments: &str,
   ) -> SessionManagerResult<()> {
+    let session_id = match self.current_session {
+      Some(id) => id,
+      None => return Err(SessionManagerError::NoCurrentSession),
+    };
+    return self
+      .add_tool_call_to_session(session_id, tool_call_id, tool_name, arguments)
+      .await;
+  }
+
+  pub async fn add_tool_call_to_session(
+    &mut self,
+    session_id: Uuid,
+    tool_call_id: &str,
+    tool_name: &str,
+    arguments: &str,
+  ) -> SessionManagerResult<()> {
     self
-      .add_message_to_current_session(|session| {
+      .add_message_to_session(session_id, |session| {
         session.add_tool_call(tool_call_id, tool_name, arguments);
       })
       .await?;
     return Ok(());
   }
 
-  async fn add_message_to_current_session<F>(
+  async fn add_message_to_session<F>(
     &mut self,
+    session_id: Uuid,
     f: F,
   ) -> SessionManagerResult<()>
   where
     F: FnOnce(&mut Session),
   {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
     if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
     {
       f(session);
@@ -147,6 +229,17 @@ impl SessionManager {
       Some(id) => id,
       None => return Err(SessionManagerError::NoCurrentSession),
     };
+    return self
+      .add_summary_to_session(session_id, content, covers_message_id)
+      .await;
+  }
+
+  pub async fn add_summary_to_session(
+    &mut self,
+    session_id: Uuid,
+    content: &str,
+    covers_message_id: Uuid,
+  ) -> SessionManagerResult<()> {
     if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
     {
       session.add_summary(content, covers_message_id);
@@ -166,6 +259,14 @@ impl SessionManager {
       Some(id) => id,
       None => return Err(SessionManagerError::NoCurrentSession),
     };
+    return self.update_session_title(session_id, title).await;
+  }
+
+  pub async fn update_session_title(
+    &mut self,
+    session_id: Uuid,
+    title: &str,
+  ) -> SessionManagerResult<()> {
     if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
     {
       session.title = Some(title.to_string());
