@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, mpsc};
-use tokio_util::sync::CancellationToken;
 
 use crate::agent_manager::AgentManager;
 use crate::app::App;
@@ -39,7 +38,10 @@ impl AgentManager {
         };
 
         if let Some(command) = command {
-          let cancel = CancellationToken::new();
+          let cancel = {
+            let app_locked = app.lock().await;
+            app_locked.shutdown.child_token()
+          };
           sink.set_cancel_token(cancel.clone());
 
           if matches!(&command, AppCommand::Compact) {
@@ -191,7 +193,10 @@ impl AgentManager {
         });
         sink.on_event(AppEvent::Processing { processing: true });
 
-        let cancel = CancellationToken::new();
+        let cancel = {
+          let app_locked = app.lock().await;
+          app_locked.shutdown.child_token()
+        };
         sink.set_cancel_token(cancel.clone());
 
         let (tx, mut rx) = mpsc::channel::<AppEvent>(256);

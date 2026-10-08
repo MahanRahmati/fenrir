@@ -42,4 +42,10 @@ impl Shutdown {
   pub fn is_cancelled(&self) -> bool {
     self.token.is_cancelled()
   }
+
+  /// Returns a child of the shutdown token, canceled when a shutdown signal
+  /// arrives.
+  pub fn child_token(&self) -> CancellationToken {
+    return self.token.child_token();
+  }
 }
