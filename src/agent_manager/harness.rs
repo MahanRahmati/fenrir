@@ -180,10 +180,17 @@ impl AgentManager {
             .ensure_session_with_system_message()
             .await?;
 
+          let session_id = app_locked
+            .agent_manager
+            .session_manager
+            .get_current_session()
+            .map(|s| s.id)
+            .ok_or(RuntimeError::Session("No active session".into()))?;
+
           app_locked
             .agent_manager
             .session_manager
-            .add_user_message_to_current_session(&input)
+            .add_user_message_to_session(session_id, &input)
             .await
             .map_err(|e| RuntimeError::Session(e.to_string()))?;
         }

@@ -68,7 +68,7 @@ impl AgentManager {
     vlog!("Prompt: {}", prompt.get_system_prompt());
     self
       .session_manager
-      .add_system_message_to_current_session(prompt.get_system_prompt())
+      .add_system_message_to_session(session_id, prompt.get_system_prompt())
       .await
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
 

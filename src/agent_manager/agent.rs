@@ -5,6 +5,7 @@ use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::app::AppEvent;
 use crate::app::errors::{RuntimeError, RuntimeResult};
@@ -109,7 +110,7 @@ impl Agent {
     }
 
     session_manager
-      .update_current_session_title(&title)
+      .update_session_title(session.id, &title)
       .await
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
     return Ok(());
@@ -127,6 +128,7 @@ impl Agent {
       let session = session_manager
         .get_current_session()
         .ok_or(RuntimeError::Session("No active session".into()))?;
+      let session_id = session.id;
 
       let messages = &session.build_chat_context();
       let tools = self
@@ -214,13 +216,13 @@ impl Agent {
 
       if self.config.general.show_reasoning && !reasoning_buffer.is_empty() {
         session_manager
-          .add_reasoning_message_to_current_session(&reasoning_buffer)
+          .add_reasoning_message_to_session(session_id, &reasoning_buffer)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
       }
       if !content_buffer.is_empty() || tool_call_builders.is_empty() {
         session_manager
-          .add_assistant_message_to_current_session(&content_buffer)
+          .add_assistant_message_to_session(session_id, &content_buffer)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
       }
@@ -232,7 +234,13 @@ impl Agent {
       let tool_calls: Vec<ToolCall> =
         tool_call_builders.into_values().collect();
       self
-        .execute_tool_calls(session_manager, &tool_calls, tx, cancel)
+        .execute_tool_calls(
+          session_manager,
+          session_id,
+          &tool_calls,
+          tx,
+          cancel,
+        )
         .await?;
     }
 
@@ -253,7 +261,8 @@ impl Agent {
       }
       let session = session_manager
         .get_current_session()
-        .ok_or_else(|| RuntimeError::Session("No active session".into()))?;
+        .ok_or(RuntimeError::Session("No active session".into()))?;
+      let session_id = session.id;
 
       let messages = &session.build_chat_context();
       let tools = self
@@ -296,13 +305,13 @@ impl Agent {
         && !reasoning.is_empty()
       {
         session_manager
-          .add_reasoning_message_to_current_session(reasoning)
+          .add_reasoning_message_to_session(session_id, reasoning)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
       }
       if let Some(ref content) = response.content {
         session_manager
-          .add_assistant_message_to_current_session(content)
+          .add_assistant_message_to_session(session_id, content)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
       }
@@ -312,7 +321,13 @@ impl Agent {
       }
 
       self
-        .execute_tool_calls(session_manager, &response.tool_calls, tx, cancel)
+        .execute_tool_calls(
+          session_manager,
+          session_id,
+          &response.tool_calls,
+          tx,
+          cancel,
+        )
         .await?;
     }
 
@@ -322,6 +337,7 @@ impl Agent {
   async fn execute_tool_calls(
     &mut self,
     session_manager: &mut SessionManager,
+    session_id: Uuid,
     tool_calls: &[ToolCall],
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
@@ -337,7 +353,8 @@ impl Agent {
       );
 
       session_manager
-        .add_tool_call_to_current_session(
+        .add_tool_call_to_session(
+          session_id,
           &tool_call.id,
           &tool_call.name,
           &tool_call.arguments,
@@ -404,7 +421,7 @@ impl Agent {
           ),
         };
         session_manager
-          .add_tool_result_to_current_session(&tool_call.id, &result)
+          .add_tool_result_to_session(session_id, &tool_call.id, &result)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
         if self.config.general.show_tools {
@@ -430,7 +447,7 @@ impl Agent {
       };
 
       session_manager
-        .add_tool_result_to_current_session(&tool_call.id, &result_str)
+        .add_tool_result_to_session(session_id, &tool_call.id, &result_str)
         .await
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 

@@ -76,7 +76,7 @@ impl AgentManager {
 
     self
       .session_manager
-      .add_summary_to_current_session(&summary, covers_message_id)
+      .add_summary_to_session(session.id, &summary, covers_message_id)
       .await
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
 

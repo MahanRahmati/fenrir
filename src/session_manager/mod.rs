@@ -10,9 +10,7 @@ pub use crate::session_manager::session::Message;
 pub use crate::session_manager::summary::Summary;
 
 use crate::database::DB;
-use crate::session_manager::errors::{
-  SessionManagerError, SessionManagerResult,
-};
+use crate::session_manager::errors::SessionManagerResult;
 use crate::session_manager::repository::SessionRepository;
 use crate::session_manager::session::Session;
 
@@ -40,19 +38,6 @@ impl SessionManager {
     return Ok(id);
   }
 
-  pub async fn add_system_message_to_current_session(
-    &mut self,
-    content: &str,
-  ) -> SessionManagerResult<()> {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
-    return self
-      .add_system_message_to_session(session_id, content)
-      .await;
-  }
-
   pub async fn add_system_message_to_session(
     &mut self,
     session_id: Uuid,
@@ -64,17 +49,6 @@ impl SessionManager {
       })
       .await?;
     return Ok(());
-  }
-
-  pub async fn add_user_message_to_current_session(
-    &mut self,
-    content: &str,
-  ) -> SessionManagerResult<()> {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
-    return self.add_user_message_to_session(session_id, content).await;
   }
 
   pub async fn add_user_message_to_session(
@@ -90,19 +64,6 @@ impl SessionManager {
     return Ok(());
   }
 
-  pub async fn add_assistant_message_to_current_session(
-    &mut self,
-    content: &str,
-  ) -> SessionManagerResult<()> {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
-    return self
-      .add_assistant_message_to_session(session_id, content)
-      .await;
-  }
-
   pub async fn add_assistant_message_to_session(
     &mut self,
     session_id: Uuid,
@@ -114,19 +75,6 @@ impl SessionManager {
       })
       .await?;
     return Ok(());
-  }
-
-  pub async fn add_reasoning_message_to_current_session(
-    &mut self,
-    content: &str,
-  ) -> SessionManagerResult<()> {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
-    return self
-      .add_reasoning_message_to_session(session_id, content)
-      .await;
   }
 
   pub async fn add_reasoning_message_to_session(
@@ -142,20 +90,6 @@ impl SessionManager {
     return Ok(());
   }
 
-  pub async fn add_tool_result_to_current_session(
-    &mut self,
-    tool_call_id: &str,
-    result: &str,
-  ) -> SessionManagerResult<()> {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
-    return self
-      .add_tool_result_to_session(session_id, tool_call_id, result)
-      .await;
-  }
-
   pub async fn add_tool_result_to_session(
     &mut self,
     session_id: Uuid,
@@ -169,21 +103,6 @@ impl SessionManager {
       })
       .await?;
     return Ok(());
-  }
-
-  pub async fn add_tool_call_to_current_session(
-    &mut self,
-    tool_call_id: &str,
-    tool_name: &str,
-    arguments: &str,
-  ) -> SessionManagerResult<()> {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
-    return self
-      .add_tool_call_to_session(session_id, tool_call_id, tool_name, arguments)
-      .await;
   }
 
   pub async fn add_tool_call_to_session(
@@ -220,20 +139,6 @@ impl SessionManager {
     return Ok(());
   }
 
-  pub async fn add_summary_to_current_session(
-    &mut self,
-    content: &str,
-    covers_message_id: Uuid,
-  ) -> SessionManagerResult<()> {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
-    return self
-      .add_summary_to_session(session_id, content, covers_message_id)
-      .await;
-  }
-
   pub async fn add_summary_to_session(
     &mut self,
     session_id: Uuid,
@@ -249,17 +154,6 @@ impl SessionManager {
       }
     }
     return Ok(());
-  }
-
-  pub async fn update_current_session_title(
-    &mut self,
-    title: &str,
-  ) -> SessionManagerResult<()> {
-    let session_id = match self.current_session {
-      Some(id) => id,
-      None => return Err(SessionManagerError::NoCurrentSession),
-    };
-    return self.update_session_title(session_id, title).await;
   }
 
   pub async fn update_session_title(
