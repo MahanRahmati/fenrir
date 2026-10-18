@@ -56,6 +56,18 @@ impl Agent {
     self
       .generate_title_from_workflow(session_manager, workflow_manager, cancel)
       .await?;
+    return self.run_chat_loop(session_manager, tx, cancel).await;
+  }
+
+  pub async fn run_chat_loop(
+    &mut self,
+    session_manager: &mut SessionManager,
+    tx: &Sender<AppEvent>,
+    cancel: &CancellationToken,
+  ) -> RuntimeResult<String> {
+    if cancel.is_cancelled() {
+      return Ok(String::new());
+    }
     if self.config.general.stream {
       return self.process_chat_stream(session_manager, tx, cancel).await;
     }
