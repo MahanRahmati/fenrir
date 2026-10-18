@@ -29,8 +29,11 @@ impl SessionManager {
     };
   }
 
-  pub async fn create_session(&mut self) -> SessionManagerResult<Uuid> {
-    let session = Session::new();
+  pub async fn create_session(
+    &mut self,
+    parent_id: Option<Uuid>,
+  ) -> SessionManagerResult<Uuid> {
+    let session = Session::new(parent_id);
     self.repository.insert_session(&session).await?;
     let id = session.id;
     self.sessions.push(session);

@@ -58,7 +58,7 @@ impl AgentManager {
 
     let session_id = self
       .session_manager
-      .create_session()
+      .create_session(None)
       .await
       .map_err(|e| RuntimeError::Session(e.to_string()))?;
     vlog!("Created session with ID: {}", session_id);

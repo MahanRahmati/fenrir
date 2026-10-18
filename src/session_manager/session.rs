@@ -47,11 +47,11 @@ pub struct Session {
 }
 
 impl Session {
-  pub fn new() -> Self {
+  pub fn new(parent_id: Option<Uuid>) -> Self {
     let now = Utc::now().timestamp();
     return Self {
       id: Uuid::now_v7(),
-      parent_id: None,
+      parent_id,
       title: None,
       created_at: now,
       last_interaction: now,
