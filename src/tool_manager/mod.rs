@@ -52,31 +52,15 @@ use crate::tool_manager::subagent::SubagentTool;
 pub use crate::tool_manager::subagent::task_summary;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams, ToolSpec};
 use crate::tool_manager::write_file::WriteFileTool;
-use crate::utils::path::is_path_within;
-
-pub enum ToolRejection {
-  NotAllowedForPersona,
-  CwdRestriction { path: String },
-  UserDeclined,
-}
-
-pub enum ToolApproval {
-  Allowed,
-  NeedsConfirmation { message: String },
-  Rejected(ToolRejection),
-}
 
 pub struct ToolManager {
   tools: Vec<Box<dyn Tool>>,
   tool_timeout: Duration,
-  restrict_write_tools_to_cwd: bool,
 }
 
 impl ToolManager {
   pub fn new(config: &Config, agent_kind: &AgentKind) -> Self {
     let tool_timeout = Duration::from_secs(config.general.tool_timeout_seconds);
-    let restrict_write_tools_to_cwd =
-      config.general.restrict_write_tools_to_cwd;
     let mut tools: Vec<Box<dyn Tool>> = Vec::new();
     if config.permissions.datetime {
       tools.push(Box::new(DateTimeTool));
@@ -138,7 +122,6 @@ impl ToolManager {
     return Self {
       tools,
       tool_timeout,
-      restrict_write_tools_to_cwd,
     };
   }
 
@@ -191,50 +174,7 @@ impl ToolManager {
       .map(|t| t.as_ref());
   }
 
-  fn needs_confirmation(&self, name: &str, params: &ToolParams) -> bool {
-    let tool = match self.find_tool(name) {
-      Some(t) => t,
-      None => return false,
-    };
-
-    if tool.is_read_only() {
-      return false;
-    }
-
-    let path = match params.get("path") {
-      Some(p) => p,
-      None => return false,
-    };
-
-    let cwd = match std::env::current_dir() {
-      Ok(dir) => dir.canonicalize().unwrap_or(dir),
-      Err(_) => return false,
-    };
-
-    return !is_path_within(path, &cwd);
-  }
-
-  pub fn approve_tool_call(
-    &self,
-    name: &str,
-    params: &ToolParams,
-    tool_access: ToolAccess,
-  ) -> ToolApproval {
-    if !tool_access.allows(name) {
-      return ToolApproval::Rejected(ToolRejection::NotAllowedForPersona);
-    }
-    if !self.needs_confirmation(name, params) {
-      return ToolApproval::Allowed;
-    }
-    if self.restrict_write_tools_to_cwd {
-      let path = params.get("path").cloned().unwrap_or_default();
-      return ToolApproval::Rejected(ToolRejection::CwdRestriction { path });
-    }
-    let path = match params.get("path") {
-      Some(p) => p.as_str(),
-      None => return ToolApproval::Allowed,
-    };
-    let msg = format!("Tool \"{name}\" wants to access: {path}");
-    return ToolApproval::NeedsConfirmation { message: msg };
+  pub fn is_read_only(&self, name: &str) -> Option<bool> {
+    return self.find_tool(name).map(|t| t.is_read_only());
   }
 }

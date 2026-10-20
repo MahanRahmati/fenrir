@@ -5,6 +5,7 @@ mod cli;
 mod config;
 mod database;
 mod files;
+mod hook_manager;
 mod input;
 mod logging;
 mod mentions;

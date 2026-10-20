@@ -3,27 +3,29 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::app::AppEvent;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
+use crate::hook_manager::HookManager;
+use crate::hook_manager::hook::{
+  HookContext, HookDecision, HookEvent, ToolCallContext,
+};
 use crate::mentions::strip_mentions;
 use crate::persona_manager::PersonaManager;
 use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, ProviderManager, ToolCall};
 use crate::session_manager::SessionManager;
 use crate::tool_manager::SUBAGENT_TOOL_NAME;
-use crate::tool_manager::ToolApproval;
 use crate::tool_manager::ToolManager;
-use crate::tool_manager::ToolRejection;
 use crate::tool_manager::tool::{ToolContext, parse_tool_params};
 use crate::vlog;
 use crate::workflow_manager::WorkflowManager;
 use crate::workflow_manager::title::TitleParams;
 
+#[derive(Debug, Clone, Copy)]
 pub enum AgentKind {
   Primary,
   Subagent,
@@ -35,6 +37,7 @@ pub struct Agent {
   pub persona_manager: PersonaManager,
   pub provider_manager: Arc<ProviderManager>,
   pub workflow_manager: WorkflowManager,
+  pub hook_manager: HookManager,
   pub last_usage: Option<ChatUsage>,
   pub kind: AgentKind,
 }
@@ -53,12 +56,14 @@ impl Agent {
     let persona_manager = PersonaManager::new();
     let workflow_manager =
       WorkflowManager::new(config.clone(), provider_manager.clone());
+    let hook_manager = HookManager::new();
     return Agent {
       config,
       tool_manager,
       persona_manager,
       provider_manager,
       workflow_manager,
+      hook_manager,
       last_usage: None,
       kind,
     };
@@ -484,66 +489,42 @@ impl Agent {
         .ok();
       }
 
-      let tool_access = self.persona_manager.current().allowed_tools();
-      let approval = self.tool_manager.approve_tool_call(
-        &tool_call.name,
-        &params,
-        tool_access,
-      );
-      let rejection = match approval {
-        ToolApproval::Allowed => None,
-        ToolApproval::NeedsConfirmation { message } => {
-          let message = if is_subagent {
-            format!("[subagent] {message}")
-          } else {
-            message
-          };
-          let (reply_tx, reply_rx) = oneshot::channel();
-          tx.send(AppEvent::ToolConfirmation {
-            message,
-            reply: reply_tx,
-          })
-          .await
-          .ok();
-          match reply_rx.await {
-            Ok(true) => None,
-            _ => Some(ToolRejection::UserDeclined),
-          }
-        }
-        ToolApproval::Rejected(rejection) => Some(rejection),
+      let mut hook_context = HookContext {
+        session_id,
+        config: &self.config,
+        persona: self.persona_manager.current(),
+        agent_kind: self.kind,
+        tx,
+        tool_call: Some(ToolCallContext {
+          name: &tool_call.name,
+          params: &params,
+          is_read_only: self.tool_manager.is_read_only(&tool_call.name),
+        }),
       };
-      if let Some(rejection) = rejection {
-        let (result, error) = match rejection {
-          ToolRejection::NotAllowedForPersona => (
-            format!(
-              "Tool '{}' is not available for the current persona. Use only the tools available to this persona.",
-              tool_call.name
-            ),
-            true,
-          ),
-          ToolRejection::CwdRestriction { path } => (
-            format!(
-              "Tool '{}' was blocked: the target path '{}' is outside the current working directory. Tools are restricted to the current working directory; retry with a path inside it.",
-              tool_call.name, path
-            ),
-            true,
-          ),
-          ToolRejection::UserDeclined => (
-            format!(
-              "Tool '{}' was cancelled by the user. Respect the user's decision; do not retry the same action unless the user asks.",
-              tool_call.name
-            ),
-            false,
-          ),
-        };
-        session_manager
-          .add_tool_result_to_session(session_id, &tool_call.id, &result)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
-        if self.config.general.show_tools && !is_subagent {
-          tx.send(AppEvent::ToolResult { result, error }).await.ok();
+
+      let decision = self
+        .hook_manager
+        .run(HookEvent::PreToolUse, &mut hook_context)
+        .await
+        .map_err(|e| RuntimeError::Hook(e.to_string()))?;
+
+      match decision {
+        HookDecision::Continue | HookDecision::Allow => {}
+        HookDecision::Deny { reason, error } => {
+          session_manager
+            .add_tool_result_to_session(session_id, &tool_call.id, &reason)
+            .await
+            .map_err(|e| RuntimeError::Session(e.to_string()))?;
+          if self.config.general.show_tools && !is_subagent {
+            tx.send(AppEvent::ToolResult {
+              result: reason,
+              error,
+            })
+            .await
+            .ok();
+          }
+          continue;
         }
-        continue;
       }
 
       if self.config.general.show_tools && !is_subagent && tool_is_subagent {
