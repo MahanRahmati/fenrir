@@ -16,6 +16,7 @@ pub struct Config {
   pub providers: ProvidersConfig,
   pub permissions: PermissionsConfig,
   pub compaction: CompactionConfig,
+  pub subagent: SubagentConfig,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -123,6 +124,18 @@ impl Default for CompactionConfig {
       threshold: None,
       tool_result_max_chars: 2000,
     };
+  }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct SubagentConfig {
+  pub enabled: bool,
+}
+
+impl Default for SubagentConfig {
+  fn default() -> Self {
+    return Self { enabled: true };
   }
 }
 

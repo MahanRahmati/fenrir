@@ -1,8 +1,28 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use tokio::sync::mpsc::Sender;
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
+
+use crate::app::AppEvent;
+use crate::config::Config;
+use crate::persona_manager::Persona;
+use crate::provider_manager::ProviderManager;
+use crate::session_manager::SessionManager;
 use crate::tool_manager::errors::ToolManagerResult;
 
 pub type ToolParams = HashMap<String, String>;
+
+pub struct ToolContext<'a> {
+  pub config: &'a Config,
+  pub persona: &'a Persona,
+  pub provider_manager: &'a Arc<ProviderManager>,
+  pub session_manager: &'a mut SessionManager,
+  pub tx: &'a Sender<AppEvent>,
+  pub cancel: &'a CancellationToken,
+  pub session_id: Uuid,
+}
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ToolSpec {

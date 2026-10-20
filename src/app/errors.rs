@@ -19,6 +19,9 @@ pub enum RuntimeError {
 
   #[error("Compaction error: {0}")]
   Compaction(String),
+
+  #[error("Subagent error: {0}")]
+  Subagent(String),
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;

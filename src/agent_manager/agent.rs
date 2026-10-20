@@ -12,74 +12,162 @@ use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
 use crate::mentions::strip_mentions;
 use crate::persona_manager::PersonaManager;
+use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, ProviderManager, ToolCall};
 use crate::session_manager::SessionManager;
+use crate::tool_manager::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::ToolApproval;
 use crate::tool_manager::ToolManager;
 use crate::tool_manager::ToolRejection;
-use crate::tool_manager::tool::parse_tool_params;
+use crate::tool_manager::tool::{ToolContext, parse_tool_params};
 use crate::vlog;
 use crate::workflow_manager::WorkflowManager;
 use crate::workflow_manager::title::TitleParams;
+
+pub enum AgentKind {
+  Primary,
+  Subagent,
+}
 
 pub struct Agent {
   pub config: Config,
   pub tool_manager: ToolManager,
   pub persona_manager: PersonaManager,
   pub provider_manager: Arc<ProviderManager>,
+  pub workflow_manager: WorkflowManager,
   pub last_usage: Option<ChatUsage>,
+  pub kind: AgentKind,
 }
 
 impl Agent {
-  pub fn new(config: Config, provider_manager: Arc<ProviderManager>) -> Self {
-    let tool_manager = ToolManager::new(&config);
+  pub fn new(
+    config: Config,
+    provider_manager: Arc<ProviderManager>,
+    parent_session_id: Option<Uuid>,
+  ) -> Self {
+    let kind = match parent_session_id {
+      Some(_) => AgentKind::Subagent,
+      None => AgentKind::Primary,
+    };
+    let tool_manager = ToolManager::new(&config, &kind);
     let persona_manager = PersonaManager::new();
+    let workflow_manager =
+      WorkflowManager::new(config.clone(), provider_manager.clone());
     return Agent {
       config,
       tool_manager,
       persona_manager,
       provider_manager,
+      workflow_manager,
       last_usage: None,
+      kind,
     };
+  }
+
+  pub async fn run_subagent(
+    context: &mut ToolContext<'_>,
+    task: &str,
+  ) -> RuntimeResult<String> {
+    let task = task.trim();
+    if task.is_empty() {
+      return Err(RuntimeError::Subagent("Task cannot be empty".to_string()));
+    }
+    context.tx.send(AppEvent::Subagents { delta: 1 }).await.ok();
+    let result = Self::run_subagent_inner(context, task).await;
+    context
+      .tx
+      .send(AppEvent::Subagents { delta: -1 })
+      .await
+      .ok();
+    return result;
+  }
+
+  async fn run_subagent_inner(
+    context: &mut ToolContext<'_>,
+    task: &str,
+  ) -> RuntimeResult<String> {
+    let parent_session_id = context.session_id;
+    let session_id = context
+      .session_manager
+      .create_session(Some(parent_session_id))
+      .await
+      .map_err(|e| RuntimeError::Session(e.to_string()))?;
+    vlog!(
+      "Started subagent session {session_id} (parent {parent_session_id}): {task}"
+    );
+
+    let prompt = Prompt::new(context.config, context.persona);
+    context
+      .session_manager
+      .add_system_message_to_session(session_id, prompt.get_system_prompt())
+      .await
+      .map_err(|e| RuntimeError::Session(e.to_string()))?;
+    context
+      .session_manager
+      .add_user_message_to_session(session_id, task)
+      .await
+      .map_err(|e| RuntimeError::Session(e.to_string()))?;
+
+    let mut agent = Self::new(
+      context.config.clone(),
+      context.provider_manager.clone(),
+      Some(parent_session_id),
+    );
+    agent.persona_manager.set_persona(context.persona.clone());
+
+    let result = agent
+      .process_chat(context.session_manager, context.tx, context.cancel)
+      .await;
+
+    context
+      .session_manager
+      .set_current_session(parent_session_id);
+
+    let report = result?.trim().to_string();
+    if report.is_empty() {
+      if context.cancel.is_cancelled() {
+        vlog!("Subagent session {session_id} was cancelled.");
+        return Ok(
+          "The subagent was cancelled before producing a report.".to_string(),
+        );
+      }
+      vlog!("Subagent session {session_id} finished without a report.");
+      return Ok(
+        "The subagent finished without producing a report.".to_string(),
+      );
+    }
+    vlog!("Subagent session {session_id} finished.");
+    return Ok(report);
   }
 
   pub async fn process_chat(
     &mut self,
     session_manager: &mut SessionManager,
-    workflow_manager: &WorkflowManager,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> RuntimeResult<String> {
     if cancel.is_cancelled() {
       return Ok(String::new());
     }
-    self
-      .generate_title_from_workflow(session_manager, workflow_manager, cancel)
-      .await?;
-    return self.run_chat_loop(session_manager, tx, cancel).await;
-  }
-
-  pub async fn run_chat_loop(
-    &mut self,
-    session_manager: &mut SessionManager,
-    tx: &Sender<AppEvent>,
-    cancel: &CancellationToken,
-  ) -> RuntimeResult<String> {
-    if cancel.is_cancelled() {
-      return Ok(String::new());
+    let is_subagent = matches!(self.kind, AgentKind::Subagent);
+    if !is_subagent {
+      self
+        .generate_title_from_workflow(session_manager, cancel)
+        .await?;
     }
     if self.config.general.stream {
-      return self.process_chat_stream(session_manager, tx, cancel).await;
+      return self
+        .process_chat_stream(session_manager, tx, cancel, is_subagent)
+        .await;
     }
     return self
-      .process_chat_non_streaming(session_manager, tx, cancel)
+      .process_chat_non_streaming(session_manager, tx, cancel, is_subagent)
       .await;
   }
 
   async fn generate_title_from_workflow(
     &mut self,
     session_manager: &mut SessionManager,
-    workflow_manager: &WorkflowManager,
     cancel: &CancellationToken,
   ) -> RuntimeResult<()> {
     let session = match session_manager.get_current_session() {
@@ -108,7 +196,7 @@ impl Agent {
         vlog!("Session title generation cancelled.");
         return Ok(());
       }
-      result = workflow_manager.generate_title(params) => result,
+      result = self.workflow_manager.generate_title(params) => result,
     } {
       Ok(title) => title,
       Err(e) => {
@@ -133,6 +221,7 @@ impl Agent {
     session_manager: &mut SessionManager,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
+    is_subagent: bool,
   ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
 
@@ -177,24 +266,26 @@ impl Agent {
 
         if let Some(text) = delta.content {
           content_buffer.push_str(&text);
-          tx.send(AppEvent::Token {
-            text,
-            reasoning: false,
-          })
-          .await
-          .ok();
+          if !is_subagent {
+            tx.send(AppEvent::Token {
+              text,
+              reasoning: false,
+            })
+            .await
+            .ok();
+          }
         }
 
         if let Some(text) = delta.reasoning {
-          if self.config.general.show_reasoning {
+          reasoning_buffer.push_str(&text);
+          if self.config.general.show_reasoning && !is_subagent {
             tx.send(AppEvent::Token {
-              text: text.clone(),
+              text,
               reasoning: true,
             })
             .await
             .ok();
           }
-          reasoning_buffer.push_str(&text);
         }
 
         for tc_delta in delta.tool_calls {
@@ -252,6 +343,7 @@ impl Agent {
           &tool_calls,
           tx,
           cancel,
+          is_subagent,
         )
         .await?;
     }
@@ -264,6 +356,7 @@ impl Agent {
     session_manager: &mut SessionManager,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
+    is_subagent: bool,
   ) -> RuntimeResult<String> {
     let mut assistant_content = String::new();
 
@@ -292,6 +385,7 @@ impl Agent {
       }
 
       if self.config.general.show_reasoning
+        && !is_subagent
         && let Some(ref reasoning) = response.reasoning
       {
         tx.send(AppEvent::Token {
@@ -303,12 +397,14 @@ impl Agent {
       }
 
       if let Some(ref content) = response.content {
-        tx.send(AppEvent::Token {
-          text: content.clone(),
-          reasoning: false,
-        })
-        .await
-        .ok();
+        if !is_subagent {
+          tx.send(AppEvent::Token {
+            text: content.clone(),
+            reasoning: false,
+          })
+          .await
+          .ok();
+        }
         assistant_content.push_str(content);
       }
 
@@ -339,6 +435,7 @@ impl Agent {
           &response.tool_calls,
           tx,
           cancel,
+          is_subagent,
         )
         .await?;
     }
@@ -353,6 +450,7 @@ impl Agent {
     tool_calls: &[ToolCall],
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
+    is_subagent: bool,
   ) -> RuntimeResult<()> {
     for tool_call in tool_calls {
       if cancel.is_cancelled() {
@@ -374,7 +472,10 @@ impl Agent {
         .await
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
-      if self.config.general.show_tools {
+      let params = parse_tool_params(&tool_call.arguments);
+      let tool_is_subagent = tool_call.name == SUBAGENT_TOOL_NAME;
+
+      if self.config.general.show_tools && !is_subagent && !tool_is_subagent {
         tx.send(AppEvent::ToolCall {
           name: tool_call.name.clone(),
           arguments: tool_call.arguments.clone(),
@@ -382,8 +483,6 @@ impl Agent {
         .await
         .ok();
       }
-
-      let params = parse_tool_params(&tool_call.arguments);
 
       let tool_access = self.persona_manager.current().allowed_tools();
       let approval = self.tool_manager.approve_tool_call(
@@ -394,6 +493,11 @@ impl Agent {
       let rejection = match approval {
         ToolApproval::Allowed => None,
         ToolApproval::NeedsConfirmation { message } => {
+          let message = if is_subagent {
+            format!("[subagent] {message}")
+          } else {
+            message
+          };
           let (reply_tx, reply_rx) = oneshot::channel();
           tx.send(AppEvent::ToolConfirmation {
             message,
@@ -436,15 +540,29 @@ impl Agent {
           .add_tool_result_to_session(session_id, &tool_call.id, &result)
           .await
           .map_err(|e| RuntimeError::Session(e.to_string()))?;
-        if self.config.general.show_tools {
+        if self.config.general.show_tools && !is_subagent {
           tx.send(AppEvent::ToolResult { result, error }).await.ok();
         }
         continue;
       }
 
+      if self.config.general.show_tools && !is_subagent && tool_is_subagent {
+        let task = params.get("task").cloned().unwrap_or_default();
+        tx.send(AppEvent::SubagentStarted { task }).await.ok();
+      }
+
+      let mut context = ToolContext {
+        config: &self.config,
+        persona: self.persona_manager.current(),
+        provider_manager: &self.provider_manager,
+        session_manager: &mut *session_manager,
+        tx,
+        cancel,
+        session_id,
+      };
       let result = self
         .tool_manager
-        .execute_tool(&tool_call.name, params)
+        .execute_tool(&tool_call.name, params, &mut context)
         .await;
 
       let (result_str, error) = match result {
@@ -463,7 +581,10 @@ impl Agent {
         .await
         .map_err(|e| RuntimeError::Session(e.to_string()))?;
 
-      if self.config.general.show_tools {
+      if self.config.general.show_tools
+        && !is_subagent
+        && (!tool_is_subagent || error)
+      {
         tx.send(AppEvent::ToolResult {
           result: result_str,
           error,

@@ -72,14 +72,23 @@ impl EventSink for TuiSink {
       AppEvent::ToolCall { name, arguments } => {
         self.tui.add_tool_call(name, arguments);
       }
+      AppEvent::SubagentStarted { task } => {
+        self.tui.add_subagent_launch(task);
+      }
       AppEvent::ToolResult { result, error } => {
         self.tui.add_tool_result(result, error);
       }
       AppEvent::Processing { processing } => {
         self.tui.set_processing(processing);
+        if !processing {
+          self.tui.reset_subagents();
+        }
       }
       AppEvent::Usage { usage } => {
         self.tui.set_usage(usage);
+      }
+      AppEvent::Subagents { delta } => {
+        self.tui.update_subagents(delta);
       }
       AppEvent::Compacted { summary } => {
         self.tui.add_summary(summary);

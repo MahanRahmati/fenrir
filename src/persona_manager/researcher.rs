@@ -21,6 +21,7 @@ pub const RESEARCHER_PERSONA: Persona = Persona::new(
     "list_directories",
     "notify",
     "browser",
+    "subagent",
   ]),
   true,
 );

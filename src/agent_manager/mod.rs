@@ -1,4 +1,4 @@
-mod agent;
+pub mod agent;
 mod compaction;
 mod harness;
 
@@ -19,11 +19,9 @@ use crate::provider_manager::{ChatUsage, ProviderManager};
 use crate::session_manager::SessionManager;
 use crate::slash_commands::SlashCommand;
 use crate::vlog;
-use crate::workflow_manager::WorkflowManager;
 
 pub struct AgentManager {
   pub session_manager: SessionManager,
-  pub workflow_manager: WorkflowManager,
   pub provider_manager: Arc<ProviderManager>,
   pub config: Config,
   pub current: Agent,
@@ -33,12 +31,9 @@ impl AgentManager {
   pub fn new(config: Config, db: DB) -> Self {
     let session_manager = SessionManager::new(db);
     let provider_manager = Arc::new(ProviderManager::new(config.clone()));
-    let workflow_manager =
-      WorkflowManager::new(config.clone(), provider_manager.clone());
-    let current = Agent::new(config.clone(), provider_manager.clone());
+    let current = Agent::new(config.clone(), provider_manager.clone(), None);
     return AgentManager {
       session_manager,
-      workflow_manager,
       provider_manager,
       config,
       current,
@@ -82,12 +77,7 @@ impl AgentManager {
   ) -> RuntimeResult<String> {
     return self
       .current
-      .process_chat(
-        &mut self.session_manager,
-        &self.workflow_manager,
-        tx,
-        cancel,
-      )
+      .process_chat(&mut self.session_manager, tx, cancel)
       .await;
   }
 

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::Write;
 use std::sync::Arc;
 
@@ -15,6 +16,9 @@ use crate::persona_manager::Persona;
 use crate::provider_manager::Model;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
+use crate::tool_manager::SUBAGENT_TOOL_NAME;
+use crate::tool_manager::task_summary;
+use crate::tool_manager::tool::parse_tool_params;
 use crate::utils::datetime::format_timestamp;
 use crate::utils::usage::format_usage;
 
@@ -58,6 +62,16 @@ impl EventSink for CliSink {
         println!("[tool] {name}({arguments})");
         self.stdout.flush().ok();
       }
+      AppEvent::SubagentStarted { task } => {
+        if self.reasoning_open {
+          self.reasoning_open = false;
+          if !self.reasoning_ends_with_newline {
+            println!();
+          }
+        }
+        println!("[subagent] {}", task_summary(&task));
+        self.stdout.flush().ok();
+      }
       AppEvent::ToolResult { result, error } => {
         if error {
           println!("[error] {result}");
@@ -81,6 +95,7 @@ impl EventSink for CliSink {
           println!("\n[usage] {usage}",);
         }
       }
+      AppEvent::Subagents { .. } => {}
       AppEvent::Compacted { summary } => {
         println!("\n[Compaction Summary]\n");
         println!("{summary}\n");
@@ -280,13 +295,25 @@ fn read_index(count: usize, name: &str) -> RuntimeResult<Option<usize>> {
 }
 
 fn print_session_messages(session: &Session) {
+  let mut subagent_calls: HashSet<String> = HashSet::new();
   for msg in &session.messages {
     if msg.role == "system" {
       continue;
     }
     if let Some(calls) = &msg.tool_calls {
       for call in calls {
-        println!("[tool] {}({})", call.function.name, call.function.arguments);
+        if call.function.name == SUBAGENT_TOOL_NAME {
+          let task = parse_tool_params(&call.function.arguments)
+            .remove("task")
+            .unwrap_or_default();
+          println!("[subagent] {}", task_summary(&task));
+          subagent_calls.insert(call.id.clone());
+        } else {
+          println!(
+            "[tool] {}({})",
+            call.function.name, call.function.arguments
+          );
+        }
       }
       continue;
     }
@@ -299,6 +326,11 @@ fn print_session_messages(session: &Session) {
         }
       }
       "tool" => {
+        if let Some(call_id) = &msg.tool_call_id
+          && subagent_calls.contains(call_id)
+        {
+          continue;
+        }
         let content = msg
           .content
           .strip_prefix("Tool result: ")

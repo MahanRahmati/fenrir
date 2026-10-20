@@ -200,4 +200,8 @@ impl SessionManager {
   pub fn clear_current_session(&mut self) {
     self.current_session = None;
   }
+
+  pub fn set_current_session(&mut self, id: Uuid) {
+    self.current_session = Some(id);
+  }
 }

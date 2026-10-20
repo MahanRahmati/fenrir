@@ -50,6 +50,10 @@ impl PersonaManager {
     return Ok(());
   }
 
+  pub fn set_persona(&mut self, persona: Persona) {
+    self.current_persona = persona;
+  }
+
   pub fn reset(&mut self) {
     self.current_persona = DEFAULT_PERSONA;
   }

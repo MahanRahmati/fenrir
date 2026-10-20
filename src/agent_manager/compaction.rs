@@ -59,7 +59,7 @@ impl AgentManager {
         vlog!("Session compaction cancelled.");
         return Err(RuntimeError::Compaction("Cancelled".into()));
       }
-      result = self.workflow_manager.compact(params) => result,
+      result = self.current.workflow_manager.compact(params) => result,
     } {
       Ok(summary) => summary,
       Err(e) => {

@@ -16,6 +16,7 @@ pub struct StatusLine {
   cwd: String,
   version: &'static str,
   usage: Option<ChatUsage>,
+  subagents: usize,
   state: State,
 }
 
@@ -29,12 +30,25 @@ impl StatusLine {
       cwd,
       version,
       usage: None,
+      subagents: 0,
       state: State::Idle,
     };
   }
 
   pub fn set_usage(&mut self, usage: Option<ChatUsage>) {
     self.usage = usage;
+  }
+
+  pub fn update_subagents(&mut self, delta: i32) {
+    self.subagents = if delta >= 0 {
+      self.subagents.saturating_add(delta as usize)
+    } else {
+      self.subagents.saturating_sub(delta.unsigned_abs() as usize)
+    };
+  }
+
+  pub fn reset_subagents(&mut self) {
+    self.subagents = 0;
   }
 
   pub fn set_processing(&mut self, processing: bool) {
@@ -67,8 +81,16 @@ impl StatusLine {
     let usage_display = self.usage.and_then(|u| format_usage(u.prompt_tokens));
     let version_display = format!("v{}", self.version);
     let mut right_label = String::new();
+    if self.subagents > 0 {
+      let label = if self.subagents == 1 {
+        "1 Subagent".to_string()
+      } else {
+        format!("{} Subagents", self.subagents)
+      };
+      right_label = format!("{label} ");
+    }
     if let Some(usage) = usage_display {
-      right_label = format!("{usage} ");
+      right_label = format!("{right_label}{usage} ");
     }
     right_label = format!("{right_label}{version_display}");
     return right_label;

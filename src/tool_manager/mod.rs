@@ -18,6 +18,7 @@ mod read_pdf;
 mod remove_file;
 mod rust;
 mod screenshot;
+mod subagent;
 pub mod tool;
 mod write_file;
 
@@ -25,6 +26,7 @@ use std::time::Duration;
 
 use tokio::time;
 
+use crate::agent_manager::agent::AgentKind;
 use crate::config::Config;
 use crate::persona_manager::ToolAccess;
 use crate::tool_manager::browser::BrowserTool;
@@ -45,7 +47,10 @@ use crate::tool_manager::read_pdf::ReadPdfTool;
 use crate::tool_manager::remove_file::RemoveFileTool;
 use crate::tool_manager::rust::RustTool;
 use crate::tool_manager::screenshot::ScreenshotTool;
-use crate::tool_manager::tool::{Tool, ToolParams, ToolSpec};
+pub use crate::tool_manager::subagent::SUBAGENT_TOOL_NAME;
+use crate::tool_manager::subagent::SubagentTool;
+pub use crate::tool_manager::subagent::task_summary;
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams, ToolSpec};
 use crate::tool_manager::write_file::WriteFileTool;
 use crate::utils::path::is_path_within;
 
@@ -68,7 +73,7 @@ pub struct ToolManager {
 }
 
 impl ToolManager {
-  pub fn new(config: &Config) -> Self {
+  pub fn new(config: &Config, agent_kind: &AgentKind) -> Self {
     let tool_timeout = Duration::from_secs(config.general.tool_timeout_seconds);
     let restrict_write_tools_to_cwd =
       config.general.restrict_write_tools_to_cwd;
@@ -127,6 +132,9 @@ impl ToolManager {
     if config.permissions.ddg {
       tools.push(Box::new(DdgTool::new()));
     }
+    if matches!(agent_kind, AgentKind::Primary) && config.subagent.enabled {
+      tools.push(Box::new(SubagentTool));
+    }
     return Self {
       tools,
       tool_timeout,
@@ -147,9 +155,13 @@ impl ToolManager {
     &self,
     name: &str,
     params: ToolParams,
+    context: &mut ToolContext<'_>,
   ) -> ToolManagerResult<String> {
     for tool in &self.tools {
       if tool.name() == name {
+        if name == SUBAGENT_TOOL_NAME {
+          return Box::pin(SubagentTool::run(params, context)).await;
+        }
         match time::timeout(self.tool_timeout, tool.execute(params)).await {
           Ok(result) => return result,
           Err(_) => {

@@ -85,6 +85,14 @@ impl Tui {
     self.statusline.set_processing(processing);
   }
 
+  pub fn update_subagents(&mut self, delta: i32) {
+    self.statusline.update_subagents(delta);
+  }
+
+  pub fn reset_subagents(&mut self) {
+    self.statusline.reset_subagents();
+  }
+
   pub fn set_cancel_token(&mut self, token: CancellationToken) {
     self.cancel_token = Some(token);
   }
@@ -372,6 +380,10 @@ impl Tui {
 
   pub fn add_tool_call(&mut self, name: String, arguments: String) {
     self.messages_list.add_tool_call(name, arguments);
+  }
+
+  pub fn add_subagent_launch(&mut self, task: String) {
+    self.messages_list.add_subagent_launch(task);
   }
 
   pub fn add_tool_result(&mut self, result: String, error: bool) {

@@ -32,6 +32,12 @@ pub enum AppEvent {
   Usage {
     usage: Option<ChatUsage>,
   },
+  SubagentStarted {
+    task: String,
+  },
+  Subagents {
+    delta: i32,
+  },
   Compacted {
     summary: String,
   },

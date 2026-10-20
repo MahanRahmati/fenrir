@@ -4,6 +4,7 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use ratatui::widgets::Widget;
 
+use crate::tool_manager::task_summary;
 use crate::tui::container::Container;
 use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
 
@@ -14,6 +15,7 @@ pub enum Role {
   User,
   Assistant,
   Reasoning,
+  SubagentLaunch,
   ToolCall,
   ToolResult,
   Compaction,
@@ -25,7 +27,7 @@ impl Role {
       Role::User | Role::ToolCall | Role::ToolResult | Role::Compaction => {
         HORIZONTAL_PADDING
       }
-      Role::Assistant | Role::Reasoning => {
+      Role::Assistant | Role::Reasoning | Role::SubagentLaunch => {
         HORIZONTAL_PADDING + TEXT_EXTRA_PADDING
       }
     };
@@ -88,6 +90,13 @@ impl MessageItem {
     };
   }
 
+  pub fn new_subagent_launch(task: String) -> Self {
+    return Self::new(
+      format!("Subagent › {}", task_summary(&task)),
+      Role::SubagentLaunch,
+    );
+  }
+
   pub fn push_tool_result(&mut self, result: String, error: bool) {
     self.tool_result = Some((result, error));
   }
@@ -103,6 +112,7 @@ impl MessageItem {
       Role::User => self.user_list_item(width),
       Role::Assistant => self.llm_list_item(width),
       Role::Reasoning => self.reasoning_list_item(width),
+      Role::SubagentLaunch => self.subagent_list_item(width),
       Role::ToolCall | Role::ToolResult => self.tool_list_item(width),
       Role::Compaction => self.compaction_list_item(width),
     };
@@ -137,6 +147,16 @@ impl MessageItem {
     let container = Container::builder(self.text.clone())
       .borderless()
       .style(Style::default().dim())
+      .build();
+    let height = Self::container_height(&container, width);
+    return (container, height);
+  }
+
+  fn subagent_list_item(&self, width: u16) -> (Container<'static>, u16) {
+    let line = self.text.lines().next().unwrap_or("");
+    let container = Container::builder(truncate_line(line, width))
+      .borderless()
+      .style(Style::default().fg(Color::Cyan))
       .build();
     let height = Self::container_height(&container, width);
     return (container, height);
@@ -221,4 +241,18 @@ impl MessageItem {
   pub fn push_string(&mut self, text: &str) {
     self.text.push_str(text);
   }
+}
+
+fn truncate_line(text: &str, width: u16) -> String {
+  let width = width as usize;
+  let text_len = text.chars().count();
+  if text_len <= width {
+    return text.to_string();
+  }
+  if width <= 3 {
+    return ".".repeat(width);
+  }
+  let mut truncated: String = text.chars().take(width - 3).collect();
+  truncated.push_str("...");
+  return truncated;
 }
