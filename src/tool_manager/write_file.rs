@@ -5,12 +5,14 @@ use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
 
+pub const WRITE_FILE_TOOL_NAME: &str = "write_file";
+
 pub struct WriteFileTool;
 
 #[async_trait::async_trait]
 impl Tool for WriteFileTool {
   fn name(&self) -> &str {
-    return "write_file";
+    return WRITE_FILE_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -33,15 +35,16 @@ impl Tool for WriteFileTool {
   }
 
   async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
-    let path = get_param::<String>(&params, "write_file", "path")?;
-    let content = get_param::<String>(&params, "write_file", "content")?;
+    let path = get_param::<String>(&params, WRITE_FILE_TOOL_NAME, "path")?;
+    let content =
+      get_param::<String>(&params, WRITE_FILE_TOOL_NAME, "content")?;
 
     if let Some(parent) = Path::new(&path).parent()
       && let Some(parent_str) = parent.as_os_str().to_str()
     {
       create_directory_all(parent_str).await.map_err(|e| {
         ToolManagerError::ExecutionFailed {
-          name: "write_file".to_string(),
+          name: WRITE_FILE_TOOL_NAME.to_string(),
           reason: format!(
             "Cannot create parent directories for '{}': {}",
             &path, e
@@ -52,7 +55,7 @@ impl Tool for WriteFileTool {
 
     write_file(&path, &content).await.map_err(|e| {
       ToolManagerError::ExecutionFailed {
-        name: "write_file".to_string(),
+        name: WRITE_FILE_TOOL_NAME.to_string(),
         reason: format!("Cannot write to file '{}': {}", &path, e),
       }
     })?;
