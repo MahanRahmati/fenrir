@@ -97,6 +97,8 @@ impl HttpClient {
     request_builder: RequestBuilder,
     headers: Option<HashMap<String, String>>,
   ) -> RequestBuilder {
+    let request_builder = request_builder
+      .header("User-Agent", concat!("Fenrir/", env!("CARGO_PKG_VERSION")));
     if let Some(hdrs) = headers {
       vlog!("Applying headers to request: {:?}", hdrs);
       return hdrs
