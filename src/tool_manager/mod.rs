@@ -3,11 +3,10 @@ mod cache;
 mod control_keyboard;
 mod datetime;
 mod ddg;
-mod edit_file;
+pub mod edit_file;
 mod errors;
 mod find_file;
 mod find_text;
-mod go;
 mod helpers;
 mod list_directories;
 mod music;
@@ -16,11 +15,10 @@ mod project_context;
 mod read_file;
 mod read_pdf;
 mod remove_file;
-mod rust;
 mod screenshot;
 mod subagent;
 pub mod tool;
-mod write_file;
+pub mod write_file;
 
 use std::time::Duration;
 
@@ -37,7 +35,6 @@ use crate::tool_manager::edit_file::EditFileTool;
 use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::find_file::FindFileTool;
 use crate::tool_manager::find_text::FindTextTool;
-use crate::tool_manager::go::GoTool;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
 use crate::tool_manager::music::MusicTool;
 use crate::tool_manager::notify::NotifyTool;
@@ -45,7 +42,6 @@ use crate::tool_manager::project_context::ProjectContextTool;
 use crate::tool_manager::read_file::ReadFileTool;
 use crate::tool_manager::read_pdf::ReadPdfTool;
 use crate::tool_manager::remove_file::RemoveFileTool;
-use crate::tool_manager::rust::RustTool;
 use crate::tool_manager::screenshot::ScreenshotTool;
 pub use crate::tool_manager::subagent::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::subagent::SubagentTool;
@@ -91,12 +87,6 @@ impl ToolManager {
     }
     if config.permissions.project_context {
       tools.push(Box::new(ProjectContextTool));
-    }
-    if config.permissions.rust {
-      tools.push(Box::new(RustTool));
-    }
-    if config.permissions.go {
-      tools.push(Box::new(GoTool));
     }
     if config.permissions.screenshot {
       tools.push(Box::new(ScreenshotTool));

@@ -15,6 +15,7 @@ pub struct Config {
   pub general: GeneralConfig,
   pub providers: ProvidersConfig,
   pub permissions: PermissionsConfig,
+  pub hooks: HooksConfig,
   pub compaction: CompactionConfig,
   pub subagent: SubagentConfig,
 }
@@ -76,8 +77,6 @@ pub struct PermissionsConfig {
   pub list_directories: bool,
   pub read_pdf: bool,
   pub project_context: bool,
-  pub rust: bool,
-  pub go: bool,
   pub screenshot: bool,
   pub notify: bool,
   pub control_keyboard: bool,
@@ -99,14 +98,30 @@ impl Default for PermissionsConfig {
       list_directories: true,
       read_pdf: true,
       project_context: true,
-      rust: true,
-      go: true,
       screenshot: true,
       notify: true,
       control_keyboard: true,
       music: true,
       browser: true,
       ddg: true,
+    };
+  }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct HooksConfig {
+  pub hook_timeout_seconds: u64,
+  pub rust: bool,
+  pub go: bool,
+}
+
+impl Default for HooksConfig {
+  fn default() -> Self {
+    return Self {
+      hook_timeout_seconds: 60,
+      rust: true,
+      go: true,
     };
   }
 }

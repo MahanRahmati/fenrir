@@ -11,7 +11,7 @@ use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
 use crate::hook_manager::HookManager;
 use crate::hook_manager::hook::{
-  HookContext, HookDecision, HookEvent, ToolCallContext,
+  HookContext, HookDecision, ToolCallContext, ToolResultContext,
 };
 use crate::mentions::strip_mentions;
 use crate::persona_manager::PersonaManager;
@@ -56,7 +56,7 @@ impl Agent {
     let persona_manager = PersonaManager::new();
     let workflow_manager =
       WorkflowManager::new(config.clone(), provider_manager.clone());
-    let hook_manager = HookManager::new();
+    let hook_manager = HookManager::new(&config);
     return Agent {
       config,
       tool_manager,
@@ -489,24 +489,22 @@ impl Agent {
         .ok();
       }
 
-      let mut hook_context = HookContext {
+      let hook_context = HookContext {
         session_id,
         config: &self.config,
         persona: self.persona_manager.current(),
         agent_kind: self.kind,
         tx,
-        tool_call: Some(ToolCallContext {
-          name: &tool_call.name,
-          params: &params,
-          is_read_only: self.tool_manager.is_read_only(&tool_call.name),
-        }),
       };
-
+      let tool_call_context = ToolCallContext {
+        name: &tool_call.name,
+        params: &params,
+        is_read_only: self.tool_manager.is_read_only(&tool_call.name),
+      };
       let decision = self
         .hook_manager
-        .run(HookEvent::PreToolUse, &mut hook_context)
-        .await
-        .map_err(|e| RuntimeError::Hook(e.to_string()))?;
+        .pre_tool_use(&hook_context, &tool_call_context)
+        .await;
 
       match decision {
         HookDecision::Continue | HookDecision::Allow => {}
@@ -546,7 +544,7 @@ impl Agent {
         .execute_tool(&tool_call.name, params, &mut context)
         .await;
 
-      let (result_str, error) = match result {
+      let (mut result_str, error) = match result {
         Ok(r) => {
           vlog!("Tool '{}' result: {}", tool_call.name, r);
           (r, false)
@@ -556,6 +554,25 @@ impl Agent {
           (format!("Tool error: {e}"), true)
         }
       };
+
+      let tool_result_context = ToolResultContext {
+        name: &tool_call.name,
+        arguments: &tool_call.arguments,
+        error: &error,
+      };
+      let hook_failure = self
+        .hook_manager
+        .post_tool_use(&hook_context, &tool_result_context)
+        .await;
+
+      if !hook_failure.is_empty() {
+        vlog!(
+          "Post tool use hook failure for '{}': {}",
+          tool_call.name,
+          hook_failure
+        );
+        result_str.push_str(&hook_failure);
+      }
 
       session_manager
         .add_tool_result_to_session(session_id, &tool_call.id, &result_str)

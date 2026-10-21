@@ -22,9 +22,6 @@ pub enum RuntimeError {
 
   #[error("Subagent error: {0}")]
   Subagent(String),
-
-  #[error("Hook error: {0}")]
-  Hook(String),
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
