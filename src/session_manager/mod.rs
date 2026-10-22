@@ -1,16 +1,15 @@
-mod errors;
 mod queries;
 mod repository;
 pub mod session;
 mod summary;
 
+use anyhow::Result;
 use uuid::Uuid;
 
 pub use crate::session_manager::session::Message;
 pub use crate::session_manager::summary::Summary;
 
 use crate::database::DB;
-use crate::session_manager::errors::SessionManagerResult;
 use crate::session_manager::repository::SessionRepository;
 use crate::session_manager::session::Session;
 
@@ -32,7 +31,7 @@ impl SessionManager {
   pub async fn create_session(
     &mut self,
     parent_id: Option<Uuid>,
-  ) -> SessionManagerResult<Uuid> {
+  ) -> Result<Uuid> {
     let session = Session::new(parent_id);
     self.repository.insert_session(&session).await?;
     let id = session.id;
@@ -45,7 +44,7 @@ impl SessionManager {
     &mut self,
     session_id: Uuid,
     content: &str,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     self
       .add_message_to_session(session_id, |session| {
         session.add_system_message(content);
@@ -58,7 +57,7 @@ impl SessionManager {
     &mut self,
     session_id: Uuid,
     content: &str,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     self
       .add_message_to_session(session_id, |session| {
         session.add_user_message(content);
@@ -71,7 +70,7 @@ impl SessionManager {
     &mut self,
     session_id: Uuid,
     content: &str,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     self
       .add_message_to_session(session_id, |session| {
         session.add_assistant_message(content);
@@ -84,7 +83,7 @@ impl SessionManager {
     &mut self,
     session_id: Uuid,
     content: &str,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     self
       .add_message_to_session(session_id, |session| {
         session.add_reasoning_message(content);
@@ -98,7 +97,7 @@ impl SessionManager {
     session_id: Uuid,
     tool_call_id: &str,
     result: &str,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     self
       .add_message_to_session(session_id, |session| {
         session
@@ -114,7 +113,7 @@ impl SessionManager {
     tool_call_id: &str,
     tool_name: &str,
     arguments: &str,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     self
       .add_message_to_session(session_id, |session| {
         session.add_tool_call(tool_call_id, tool_name, arguments);
@@ -127,7 +126,7 @@ impl SessionManager {
     &mut self,
     session_id: Uuid,
     f: F,
-  ) -> SessionManagerResult<()>
+  ) -> Result<()>
   where
     F: FnOnce(&mut Session),
   {
@@ -147,7 +146,7 @@ impl SessionManager {
     session_id: Uuid,
     content: &str,
     covers_message_id: Uuid,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
     {
       session.add_summary(content, covers_message_id);
@@ -163,7 +162,7 @@ impl SessionManager {
     &mut self,
     session_id: Uuid,
     title: &str,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
     {
       session.title = Some(title.to_string());
@@ -172,18 +171,14 @@ impl SessionManager {
     return Ok(());
   }
 
-  pub async fn load_session_from_db(
-    &mut self,
-    id: Uuid,
-  ) -> SessionManagerResult<()> {
+  pub async fn load_session_from_db(&mut self, id: Uuid) -> Result<()> {
     let session = self.repository.load(id).await?;
-
     self.sessions.push(session);
     self.current_session = Some(id);
     return Ok(());
   }
 
-  pub async fn list_sessions(&self) -> SessionManagerResult<Vec<Session>> {
+  pub async fn list_sessions(&self) -> Result<Vec<Session>> {
     return self.repository.list().await;
   }
 

@@ -1,9 +1,7 @@
+use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
 use crate::database::DB;
-use crate::session_manager::errors::{
-  SessionManagerError, SessionManagerResult,
-};
 use crate::session_manager::queries::*;
 use crate::session_manager::session::{Message, Session};
 use crate::session_manager::summary::Summary;
@@ -17,11 +15,8 @@ impl SessionRepository {
     return Self { db };
   }
 
-  pub async fn insert_session(
-    &self,
-    session: &Session,
-  ) -> SessionManagerResult<()> {
-    match self
+  pub async fn insert_session(&self, session: &Session) -> Result<()> {
+    self
       .db
       .execute(
         INSERT_SESSION,
@@ -34,23 +29,21 @@ impl SessionRepository {
         ),
       )
       .await
-    {
-      Ok(_) => Ok(()),
-      Err(e) => Err(SessionManagerError::DatabaseError(e.to_string())),
-    }
+      .context("Failed to insert session")?;
+    return Ok(());
   }
 
   pub async fn insert_message(
     &self,
     session_id: Uuid,
     msg: &Message,
-  ) -> SessionManagerResult<()> {
+  ) -> Result<()> {
     let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
     let tool_calls = match &msg.tool_calls {
       Some(calls) => serde_json::to_string(calls).unwrap_or_default(),
       None => String::new(),
     };
-    match self
+    self
       .db
       .execute(
         INSERT_MESSAGE,
@@ -65,18 +58,16 @@ impl SessionRepository {
         ),
       )
       .await
-    {
-      Ok(_) => Ok(()),
-      Err(e) => Err(SessionManagerError::DatabaseError(e.to_string())),
-    }
+      .context(format!("Failed to insert message '{}'", msg.id))?;
+    return Ok(());
   }
 
   pub async fn insert_summary(
     &self,
     session_id: Uuid,
     summary: &Summary,
-  ) -> SessionManagerResult<()> {
-    match self
+  ) -> Result<()> {
+    self
       .db
       .execute(
         INSERT_SUMMARY,
@@ -89,59 +80,47 @@ impl SessionRepository {
         ),
       )
       .await
-    {
-      Ok(_) => Ok(()),
-      Err(e) => Err(SessionManagerError::DatabaseError(e.to_string())),
-    }
+      .context(format!("Failed to insert summary '{}'", summary.id))?;
+    return Ok(());
   }
 
   pub async fn update_title(
     &self,
     session_id: Uuid,
     title: &str,
-  ) -> SessionManagerResult<()> {
-    match self
+  ) -> Result<()> {
+    self
       .db
       .execute(UPDATE_SESSION_TITLE, (title, session_id.to_string()))
       .await
-    {
-      Ok(_) => Ok(()),
-      Err(e) => Err(SessionManagerError::DatabaseError(e.to_string())),
-    }
+      .context(format!("Failed to update title for session '{session_id}'"))?;
+    return Ok(());
   }
 
-  pub async fn load(&self, id: Uuid) -> SessionManagerResult<Session> {
-    let mut session_row =
-      match self.db.query(LOAD_SESSION, (id.to_string(),)).await {
-        Ok(rows) => rows,
-        Err(e) => {
-          return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-        }
-      };
+  pub async fn load(&self, id: Uuid) -> Result<Session> {
+    let mut session_row = self
+      .db
+      .query(LOAD_SESSION, (id.to_string(),))
+      .await
+      .context(format!("Failed to load session '{id}'"))?;
 
     let row = match session_row.next().await {
       Ok(Some(row)) => row,
       _ => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Session not found".to_string(),
-        ));
+        bail!("Session not found");
       }
     };
 
     let session_id: String = match row.get(0) {
       Ok(v) => v,
       Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
+        bail!("Invalid session data");
       }
     };
     let session_id = match Uuid::parse_str(&session_id) {
       Ok(v) => v,
       Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
+        bail!("Invalid session data");
       }
     };
     let parent_id: String = row.get(1).unwrap_or_default();
@@ -151,9 +130,7 @@ impl SessionRepository {
       match Uuid::parse_str(&parent_id) {
         Ok(v) => Some(v),
         Err(_) => {
-          return Err(SessionManagerError::SessionLoadFailed(
-            "Invalid session data".to_string(),
-          ));
+          bail!("Invalid session data");
         }
       }
     };
@@ -162,30 +139,23 @@ impl SessionRepository {
     let created_at: i64 = match row.get(3) {
       Ok(v) => v,
       Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
+        bail!("Invalid session data");
       }
     };
     let last_interaction: i64 = match row.get(4) {
       Ok(v) => v,
       Err(_) => {
-        return Err(SessionManagerError::SessionLoadFailed(
-          "Invalid session data".to_string(),
-        ));
+        bail!("Invalid session data");
       }
     };
 
-    let mut messages_rows = match self
+    let mut messages_rows = self
       .db
       .query(LOAD_MESSAGES, (session_id.to_string(),))
       .await
-    {
-      Ok(rows) => rows,
-      Err(e) => {
-        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-      }
-    };
+      .context(format!(
+        "Failed to load messages for session '{session_id}'"
+      ))?;
 
     let mut messages = Vec::new();
     while let Ok(Some(msg_row)) = messages_rows.next().await {
@@ -236,16 +206,13 @@ impl SessionRepository {
       messages.push(message);
     }
 
-    let mut summaries_rows = match self
+    let mut summaries_rows = self
       .db
       .query(LOAD_SUMMARIES, (session_id.to_string(),))
       .await
-    {
-      Ok(rows) => rows,
-      Err(e) => {
-        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-      }
-    };
+      .context(format!(
+        "Failed to load summaries for session '{session_id}'"
+      ))?;
 
     let mut summaries = Vec::new();
     while let Ok(Some(summary_row)) = summaries_rows.next().await {
@@ -298,13 +265,12 @@ impl SessionRepository {
     return Ok(session);
   }
 
-  pub async fn list(&self) -> SessionManagerResult<Vec<Session>> {
-    let mut rows = match self.db.query(LIST_SESSIONS, ()).await {
-      Ok(rows) => rows,
-      Err(e) => {
-        return Err(SessionManagerError::SessionLoadFailed(e.to_string()));
-      }
-    };
+  pub async fn list(&self) -> Result<Vec<Session>> {
+    let mut rows = self
+      .db
+      .query(LIST_SESSIONS, ())
+      .await
+      .context("Failed to list sessions")?;
 
     let mut result = Vec::new();
     while let Ok(Some(row)) = rows.next().await {
