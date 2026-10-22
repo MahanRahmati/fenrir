@@ -1,10 +1,10 @@
+use anyhow::Result;
 use uuid::Uuid;
 
 use crate::persona_manager::Persona;
 use crate::provider_manager::Model;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
-use crate::slash_commands::SlashCommandResult;
 use crate::slash_commands::parse_command;
 
 pub enum AppCommand {
@@ -45,7 +45,7 @@ pub enum AppCommandResult {
 }
 
 impl AppCommand {
-  pub fn parse(input: &str) -> SlashCommandResult<Option<Self>> {
+  pub fn parse(input: &str) -> Result<Option<Self>> {
     return parse_command(input).map(|command| {
       command.map(|command| match command {
         SlashCommand::Exit => Self::Exit,

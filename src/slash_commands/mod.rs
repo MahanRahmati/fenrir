@@ -1,10 +1,10 @@
 pub mod commands;
-pub mod errors;
+
+use anyhow::{Result, bail};
 
 pub use commands::SlashCommand;
-pub use errors::{SlashCommandError, SlashCommandResult};
 
-pub fn parse_command(input: &str) -> SlashCommandResult<Option<SlashCommand>> {
+pub fn parse_command(input: &str) -> Result<Option<SlashCommand>> {
   if !input.starts_with('/') {
     return Ok(None);
   }
@@ -14,5 +14,5 @@ pub fn parse_command(input: &str) -> SlashCommandResult<Option<SlashCommand>> {
       return Ok(Some(cmd.clone()));
     }
   }
-  return Err(SlashCommandError::UnknownCommand(trimmed.to_string()));
+  bail!("Unknown command '{trimmed}'. Type '/help' for available commands.");
 }
