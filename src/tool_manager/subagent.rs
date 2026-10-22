@@ -1,5 +1,6 @@
+use anyhow::{Context, Result, bail};
+
 use crate::agent_manager::agent::Agent;
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
@@ -31,11 +32,8 @@ impl Tool for SubagentTool {
     return false;
   }
 
-  async fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
-    return Err(ToolManagerError::ExecutionFailed {
-      name: SUBAGENT_TOOL_NAME.to_string(),
-      reason: "The subagent tool requires an execution context".to_string(),
-    });
+  async fn execute(&self, _params: ToolParams) -> Result<String> {
+    bail!("The subagent tool requires an execution context");
   }
 }
 
@@ -43,14 +41,11 @@ impl SubagentTool {
   pub async fn run(
     params: ToolParams,
     context: &mut ToolContext<'_>,
-  ) -> ToolManagerResult<String> {
+  ) -> Result<String> {
     let task = get_param::<String>(&params, SUBAGENT_TOOL_NAME, "task")?;
-    return Agent::run_subagent(context, &task).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: SUBAGENT_TOOL_NAME.to_string(),
-        reason: e.to_string(),
-      }
-    });
+    return Agent::run_subagent(context, &task)
+      .await
+      .context("Failed to run subagent");
   }
 }
 

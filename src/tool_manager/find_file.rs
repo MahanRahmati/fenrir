@@ -1,4 +1,5 @@
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
+use anyhow::{Context, Result, bail};
+
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::process;
@@ -45,7 +46,7 @@ impl Tool for FindFileTool {
     return true;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let path = get_param::<String>(&params, "find_file", "path")?;
     let include = get_optional_param::<String>(&params, "find_file", "include")
       .unwrap_or(DEFAULT_INCLUDE.to_string());
@@ -75,12 +76,9 @@ impl Tool for FindFileTool {
       args.push(exclude);
     }
 
-    let output = process::run("fd", &args).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: "find_file".to_string(),
-        reason: e,
-      }
-    })?;
+    let output = process::run("fd", &args)
+      .await
+      .context("Failed to run fd")?;
 
     if output.exit_code.is_success() {
       let results: Vec<&str> = output.stdout.lines().collect();
@@ -94,9 +92,6 @@ impl Tool for FindFileTool {
       return Ok(format!("No files found matching '{include}' in '{path}'."));
     }
 
-    return Err(ToolManagerError::ExecutionFailed {
-      name: "find_file".to_string(),
-      reason: format!("fd failed: {}", output.stderr.trim()),
-    });
+    bail!("fd failed: {}", output.stderr.trim());
   }
 }

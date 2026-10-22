@@ -1,7 +1,8 @@
 use std::path::Path;
 
+use anyhow::{Context, Result};
+
 use crate::files::operations::{create_directory_all, write_file};
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
 
@@ -34,7 +35,7 @@ impl Tool for WriteFileTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let path = get_param::<String>(&params, WRITE_FILE_TOOL_NAME, "path")?;
     let content =
       get_param::<String>(&params, WRITE_FILE_TOOL_NAME, "content")?;
@@ -42,23 +43,14 @@ impl Tool for WriteFileTool {
     if let Some(parent) = Path::new(&path).parent()
       && let Some(parent_str) = parent.as_os_str().to_str()
     {
-      create_directory_all(parent_str).await.map_err(|e| {
-        ToolManagerError::ExecutionFailed {
-          name: WRITE_FILE_TOOL_NAME.to_string(),
-          reason: format!(
-            "Cannot create parent directories for '{}': {}",
-            &path, e
-          ),
-        }
-      })?;
+      create_directory_all(parent_str)
+        .await
+        .context(format!("Cannot create parent directories for '{path}'"))?;
     }
 
-    write_file(&path, &content).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: WRITE_FILE_TOOL_NAME.to_string(),
-        reason: format!("Cannot write to file '{}': {}", &path, e),
-      }
-    })?;
+    write_file(&path, &content)
+      .await
+      .context(format!("Cannot write to file '{path}'"))?;
 
     return Ok(format!(
       "Successfully wrote {} bytes to '{}'",

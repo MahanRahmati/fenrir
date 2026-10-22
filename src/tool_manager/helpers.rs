@@ -1,4 +1,5 @@
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
+use anyhow::{Result, bail};
+
 use crate::tool_manager::tool::ToolParams;
 use crate::vlog;
 
@@ -6,24 +7,23 @@ pub fn get_param<T>(
   params: &ToolParams,
   tool_name: &str,
   param_name: &str,
-) -> ToolManagerResult<T>
+) -> Result<T>
 where
   T: std::str::FromStr,
 {
   vlog!("Getting parameter '{param_name}' for tool '{tool_name}'");
-  let value =
-    params
-      .get(param_name)
-      .ok_or(ToolManagerError::MissingParameter {
-        param: param_name.to_string(),
-        name: tool_name.to_string(),
-      })?;
-  return value
-    .parse::<T>()
-    .map_err(|_| ToolManagerError::ExecutionFailed {
-      name: tool_name.to_string(),
-      reason: format!("Invalid value for parameter '{param_name}': {value}"),
-    });
+  let Some(value) = params.get(param_name) else {
+    bail!("Missing parameter '{param_name}' for tool '{tool_name}'");
+  };
+  let value = match value.parse::<T>() {
+    Ok(value) => value,
+    Err(_) => {
+      bail!(
+        "Failed to execute tool '{tool_name}': invalid value for parameter '{param_name}': {value}"
+      );
+    }
+  };
+  return Ok(value);
 }
 
 pub fn get_optional_param<T>(

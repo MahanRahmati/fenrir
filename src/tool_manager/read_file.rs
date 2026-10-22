@@ -1,6 +1,7 @@
+use anyhow::{Context, Result, bail};
+
 use crate::files::operations::read_to_string;
 use crate::tool_manager::cache::ToolCache;
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::hash;
@@ -24,7 +25,7 @@ impl ReadFileTool {
     };
   }
 
-  fn read_empty(&self, path: &str, hash: u64) -> ToolManagerResult<String> {
+  fn read_empty(&self, path: &str, hash: u64) -> Result<String> {
     let key = cache_key(path);
     if let Some(entry) = self.cache.get(&key)
       && entry.hash == hash
@@ -74,15 +75,12 @@ impl Tool for ReadFileTool {
     self.cache.clear();
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let path = get_param::<String>(&params, "read_file", "path")?;
 
-    let content = read_to_string(&path).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: "read_file".to_string(),
-        reason: format!("Cannot read file '{path}': {e}"),
-      }
-    })?;
+    let content = read_to_string(&path)
+      .await
+      .context(format!("Cannot read file '{path}'"))?;
 
     let hash = hash::file_hash(&content);
     let lines: Vec<&str> = content.lines().collect();
@@ -107,14 +105,11 @@ impl Tool for ReadFileTool {
       .unwrap_or(total_lines - 1);
 
     if start > end {
-      return Err(ToolManagerError::ExecutionFailed {
-        name: "read_file".to_string(),
-        reason: format!(
-          "start_line ({}) is greater than end_line ({})",
-          start + 1,
-          end + 1
-        ),
-      });
+      bail!(
+        "start_line ({}) is greater than end_line ({})",
+        start + 1,
+        end + 1
+      );
     }
 
     let key = cache_key(&path);

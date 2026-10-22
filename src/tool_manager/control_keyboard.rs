@@ -1,5 +1,6 @@
+use anyhow::{Context, Result, anyhow};
+
 use crate::capability::keyboard;
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolParams};
 
@@ -35,31 +36,22 @@ impl Tool for ControlKeyboardTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let action = get_param::<String>(&params, "control_keyboard", "action")?;
     return match action.as_str() {
       "type" => {
         let text = get_param::<String>(&params, "control_keyboard", "text")?;
-        keyboard::type_with_keyboard(&text).await.map_err(|e| {
-          ToolManagerError::ExecutionFailed {
-            name: "control_keyboard".to_string(),
-            reason: format!("Failed to type text '{text}' on keyboard: {e}"),
-          }
-        })
+        keyboard::type_with_keyboard(&text)
+          .await
+          .context(format!("Failed to type text '{text}' on keyboard"))
       }
       "key" => {
         let key = get_param::<String>(&params, "control_keyboard", "key")?;
-        keyboard::press_key_on_keyboard(&key).await.map_err(|e| {
-          ToolManagerError::ExecutionFailed {
-            name: "control_keyboard".to_string(),
-            reason: format!("Failed to press key '{key}' on keyboard: {e}"),
-          }
-        })
+        keyboard::press_key_on_keyboard(&key)
+          .await
+          .context(format!("Failed to press key '{key}' on keyboard"))
       }
-      other => Err(ToolManagerError::ExecutionFailed {
-        name: "control_keyboard".to_string(),
-        reason: format!("Unknown action '{other}'"),
-      }),
+      other => Err(anyhow!("Unknown action '{other}'")),
     };
   }
 }

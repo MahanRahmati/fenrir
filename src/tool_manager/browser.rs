@@ -1,5 +1,6 @@
+use anyhow::{Context, Result, anyhow};
+
 use crate::capability::browser;
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolParams};
 
@@ -36,7 +37,7 @@ impl Tool for BrowserTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let action = get_param::<String>(&params, "browser", "action")?;
 
     return match action.as_str() {
@@ -44,22 +45,15 @@ impl Tool for BrowserTool {
         let url = get_param::<String>(&params, "browser", "url")?;
         browser::open_url(&url)
           .await
-          .map_err(|e| tool_error(e.to_string()))
+          .context(format!("Failed to open URL '{url}'"))
       }
       "save_as_pdf" => browser::save_as_pdf()
         .await
         .map(|destination| format!("Saved PDF to @{destination}"))
-        .map_err(|e| tool_error(e.to_string())),
-      _ => Err(tool_error(format!(
+        .context("Failed to save page as PDF"),
+      _ => Err(anyhow!(
         "Invalid action '{action}'. Valid actions: open_url, save_as_pdf"
-      ))),
+      )),
     };
   }
-}
-
-fn tool_error(reason: impl Into<String>) -> ToolManagerError {
-  return ToolManagerError::ExecutionFailed {
-    name: "browser".to_string(),
-    reason: reason.into(),
-  };
 }

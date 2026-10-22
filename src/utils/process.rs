@@ -1,5 +1,6 @@
 use std::process::Stdio;
 
+use anyhow::{Context, Result};
 use tokio::process::Command;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +27,7 @@ pub struct Output {
   pub exit_code: ExitCode,
 }
 
-pub async fn run(program: &str, args: &[&str]) -> Result<Output, String> {
+pub async fn run(program: &str, args: &[&str]) -> Result<Output> {
   let output = Command::new(program)
     .args(args)
     .stdout(Stdio::piped())
@@ -34,7 +35,7 @@ pub async fn run(program: &str, args: &[&str]) -> Result<Output, String> {
     .kill_on_drop(true)
     .output()
     .await
-    .map_err(|e| format!("Failed to execute '{program}': {e}"))?;
+    .context(format!("Failed to execute '{program}'"))?;
 
   let stdout = String::from_utf8_lossy(&output.stdout).to_string();
   let stderr = String::from_utf8_lossy(&output.stderr).to_string();

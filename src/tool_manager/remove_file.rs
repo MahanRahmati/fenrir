@@ -1,5 +1,6 @@
+use anyhow::{Context, Result};
+
 use crate::files::operations::{remove_file, validate_file_exists};
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
 
@@ -29,22 +30,16 @@ impl Tool for RemoveFileTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let path = get_param::<String>(&params, "remove_file", "path")?;
 
-    validate_file_exists(&path).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: "remove_file".to_string(),
-        reason: format!("Cannot remove file '{}': {}", &path, e),
-      }
-    })?;
+    validate_file_exists(&path)
+      .await
+      .context(format!("File '{path}' does not exist"))?;
 
-    remove_file(&path).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: "remove_file".to_string(),
-        reason: format!("Cannot remove file '{}': {}", &path, e),
-      }
-    })?;
+    remove_file(&path)
+      .await
+      .context(format!("Cannot remove file '{path}'"))?;
 
     return Ok(format!("Successfully removed '{}'", &path));
   }

@@ -1,4 +1,5 @@
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
+use anyhow::{Context, Result, bail};
+
 use crate::tool_manager::helpers::{get_optional_param, get_param};
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::process;
@@ -52,7 +53,7 @@ impl Tool for MusicTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let action = get_param::<String>(&params, "music", "action")?;
 
     if action != "status" {
@@ -65,13 +66,9 @@ impl Tool for MusicTool {
       let mut found = false;
       for search_type in &["title", "artist", "album"] {
         let search_args = ["search", search_type, &query];
-        let search_output =
-          process::run("mpc", &search_args).await.map_err(|e| {
-            ToolManagerError::ExecutionFailed {
-              name: "music".to_string(),
-              reason: format!("Failed to search song: {e}"),
-            }
-          })?;
+        let search_output = process::run("mpc", &search_args)
+          .await
+          .context("Failed to search song")?;
 
         let Some(first_line) = search_output.stdout.trim().lines().next()
         else {
@@ -84,10 +81,7 @@ impl Tool for MusicTool {
 
         let add_output = process::run("mpc", &["add", file_path])
           .await
-          .map_err(|e| ToolManagerError::ExecutionFailed {
-            name: "music".to_string(),
-            reason: format!("Failed to add song: {e}"),
-          })?;
+          .context("Failed to add song")?;
         if !add_output.exit_code.is_success() {
           continue;
         }
@@ -95,10 +89,7 @@ impl Tool for MusicTool {
         let playlist =
           process::run("mpc", &["playlist", "-f", "%position%:%file%"])
             .await
-            .map_err(|e| ToolManagerError::ExecutionFailed {
-              name: "music".to_string(),
-              reason: format!("Failed to read queue: {e}"),
-            })?;
+            .context("Failed to read queue")?;
 
         let position = playlist.stdout.lines().find_map(|line| {
           let (pos, path) = line.split_once(':')?;
@@ -113,13 +104,9 @@ impl Tool for MusicTool {
           continue;
         };
 
-        let output =
-          process::run("mpc", &["play", &position])
-            .await
-            .map_err(|e| ToolManagerError::ExecutionFailed {
-              name: "music".to_string(),
-              reason: format!("Failed to play: {e}"),
-            })?;
+        let output = process::run("mpc", &["play", &position])
+          .await
+          .context("Failed to play")?;
 
         check_mpc_error(&output)?;
 
@@ -128,10 +115,7 @@ impl Tool for MusicTool {
       }
 
       if !found {
-        return Err(ToolManagerError::ExecutionFailed {
-          name: "music".to_string(),
-          reason: format!("No songs found matching '{query}'"),
-        });
+        bail!("No songs found matching '{query}'");
       }
 
       return Ok("Song playing".to_string());
@@ -140,12 +124,9 @@ impl Tool for MusicTool {
     let args = build_mpc_args(&action, &params)?;
     let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-    let output = process::run("mpc", &args_refs).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: "music".to_string(),
-        reason: format!("Failed to execute mpc: {e}"),
-      }
-    })?;
+    let output = process::run("mpc", &args_refs)
+      .await
+      .context("Failed to execute mpc")?;
 
     check_mpc_error(&output)?;
 
@@ -159,16 +140,13 @@ impl Tool for MusicTool {
   }
 }
 
-async fn ensure_modes() -> ToolManagerResult<()> {
+async fn ensure_modes() -> Result<()> {
   let _ = process::run("mpc", &["random", "on"]).await;
   let _ = process::run("mpc", &["repeat", "on"]).await;
   return Ok(());
 }
 
-fn build_mpc_args(
-  action: &str,
-  params: &ToolParams,
-) -> ToolManagerResult<Vec<String>> {
+fn build_mpc_args(action: &str, params: &ToolParams) -> Result<Vec<String>> {
   let mut args = vec![action.to_string()];
 
   match action {
@@ -199,19 +177,16 @@ fn build_mpc_args(
     }
     "status" => {}
     _ => {
-      return Err(ToolManagerError::ExecutionFailed {
-        name: "music".to_string(),
-        reason: format!(
-          "Invalid action '{action}'. Valid actions: play, pause, next, previous, volume, add, clear, status, play_song"
-        ),
-      });
+      bail!(
+        "Invalid action '{action}'. Valid actions: play, pause, next, previous, volume, add, clear, status, play_song"
+      );
     }
   }
 
   return Ok(args);
 }
 
-fn check_mpc_error(output: &process::Output) -> ToolManagerResult<()> {
+fn check_mpc_error(output: &process::Output) -> Result<()> {
   if output.exit_code.is_success() {
     return Ok(());
   }
@@ -223,8 +198,5 @@ fn check_mpc_error(output: &process::Output) -> ToolManagerResult<()> {
   } else {
     format!("mpc error: {stderr}")
   };
-  return Err(ToolManagerError::ExecutionFailed {
-    name: "music".to_string(),
-    reason,
-  });
+  bail!("{reason}");
 }

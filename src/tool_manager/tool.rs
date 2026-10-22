@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use anyhow::Result;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -10,7 +11,6 @@ use crate::config::Config;
 use crate::persona_manager::Persona;
 use crate::provider_manager::ProviderManager;
 use crate::session_manager::SessionManager;
-use crate::tool_manager::errors::ToolManagerResult;
 
 pub type ToolParams = HashMap<String, String>;
 
@@ -42,7 +42,7 @@ pub trait Tool: Send + Sync {
       "required": [],
     });
   }
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String>;
+  async fn execute(&self, params: ToolParams) -> Result<String>;
   fn is_read_only(&self) -> bool;
   fn reset_cache(&self) {}
   fn to_tool_spec(&self) -> ToolSpec {

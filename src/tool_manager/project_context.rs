@@ -1,7 +1,8 @@
 use std::path::Path;
 
+use anyhow::Result;
+
 use crate::files::operations;
-use crate::tool_manager::errors::ToolManagerResult;
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::process;
 
@@ -29,7 +30,7 @@ impl Tool for ProjectContextTool {
     return true;
   }
 
-  async fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, _params: ToolParams) -> Result<String> {
     let mut sections: Vec<String> = Vec::new();
 
     sections.push(directory_section().await);

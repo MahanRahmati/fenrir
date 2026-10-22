@@ -4,7 +4,6 @@ mod control_keyboard;
 mod datetime;
 mod ddg;
 pub mod edit_file;
-mod errors;
 mod find_file;
 mod find_text;
 mod helpers;
@@ -22,6 +21,7 @@ pub mod write_file;
 
 use std::time::Duration;
 
+use anyhow::{Result, bail};
 use tokio::time;
 
 use crate::agent_manager::agent::AgentKind;
@@ -32,7 +32,6 @@ use crate::tool_manager::control_keyboard::ControlKeyboardTool;
 use crate::tool_manager::datetime::DateTimeTool;
 use crate::tool_manager::ddg::DdgTool;
 use crate::tool_manager::edit_file::EditFileTool;
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::find_file::FindFileTool;
 use crate::tool_manager::find_text::FindTextTool;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
@@ -129,7 +128,7 @@ impl ToolManager {
     name: &str,
     params: ToolParams,
     context: &mut ToolContext<'_>,
-  ) -> ToolManagerResult<String> {
+  ) -> Result<String> {
     for tool in &self.tools {
       if tool.name() == name {
         if name == SUBAGENT_TOOL_NAME {
@@ -138,16 +137,12 @@ impl ToolManager {
         match time::timeout(self.tool_timeout, tool.execute(params)).await {
           Ok(result) => return result,
           Err(_) => {
-            return Err(ToolManagerError::Timeout {
-              name: name.to_string(),
-            });
+            bail!("Tool '{name}' timed out");
           }
         }
       }
     }
-    return Err(ToolManagerError::NotFound {
-      name: name.to_string(),
-    });
+    bail!("Could not find tool '{name}'");
   }
 
   pub fn reset_cache(&self) {

@@ -1,4 +1,5 @@
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
+use anyhow::{Context, Result, bail};
+
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::process;
@@ -37,7 +38,7 @@ impl Tool for FindTextTool {
     return true;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let pattern = get_param::<String>(&params, "find_text", "pattern")?;
     let path = get_optional_param::<String>(&params, "find_text", "path")
       .unwrap_or(DEFAULT_PATH.to_string());
@@ -72,12 +73,9 @@ impl Tool for FindTextTool {
     args.push(pattern.as_str());
     args.push(path.as_str());
 
-    let output = process::run("rg", &args).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: "find_text".to_string(),
-        reason: e,
-      }
-    })?;
+    let output = process::run("rg", &args)
+      .await
+      .context("Failed to run rg")?;
 
     if output.exit_code.is_success() {
       let lines: Vec<&str> = output.stdout.lines().take(max_results).collect();
@@ -91,9 +89,6 @@ impl Tool for FindTextTool {
       return Ok(format!("No matches found for '{pattern}' in '{path}'."));
     }
 
-    return Err(ToolManagerError::ExecutionFailed {
-      name: "find_text".to_string(),
-      reason: format!("ripgrep failed: {}", output.stderr.trim()),
-    });
+    bail!("ripgrep failed: {}", output.stderr.trim());
   }
 }

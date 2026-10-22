@@ -1,5 +1,6 @@
+use anyhow::{Context, Result, bail};
+
 use crate::files::operations::{read_to_string, write_file};
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolParams};
 
@@ -34,7 +35,7 @@ impl Tool for EditFileTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let path = get_param::<String>(&params, EDIT_FILE_TOOL_NAME, "path")?;
     let start_line =
       get_param::<usize>(&params, EDIT_FILE_TOOL_NAME, "start_line")?;
@@ -44,38 +45,21 @@ impl Tool for EditFileTool {
       get_param::<String>(&params, EDIT_FILE_TOOL_NAME, "new_content")?;
 
     if start_line < 1 {
-      return Err(ToolManagerError::ExecutionFailed {
-        name: EDIT_FILE_TOOL_NAME.to_string(),
-        reason: format!("start_line must be >= 1, got {start_line}"),
-      });
+      bail!("start_line must be >= 1, got {start_line}");
     }
     if end_line < 1 {
-      return Err(ToolManagerError::ExecutionFailed {
-        name: EDIT_FILE_TOOL_NAME.to_string(),
-        reason: format!("end_line must be >= 1, got {end_line}"),
-      });
+      bail!("end_line must be >= 1, got {end_line}");
     }
     if start_line > end_line {
-      return Err(ToolManagerError::ExecutionFailed {
-        name: EDIT_FILE_TOOL_NAME.to_string(),
-        reason: format!(
-          "start_line ({start_line}) must be <= end_line ({end_line})"
-        ),
-      });
+      bail!("start_line ({start_line}) must be <= end_line ({end_line})");
     }
     if new_content.is_empty() {
-      return Err(ToolManagerError::ExecutionFailed {
-        name: EDIT_FILE_TOOL_NAME.to_string(),
-        reason: "new_content must not be empty".to_string(),
-      });
+      bail!("new_content must not be empty");
     }
 
-    let content = read_to_string(&path).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: EDIT_FILE_TOOL_NAME.to_string(),
-        reason: format!("Cannot read file '{path}': {e}"),
-      }
-    })?;
+    let content = read_to_string(&path)
+      .await
+      .context(format!("Cannot read file '{path}'"))?;
 
     let lines: Vec<&str> = content.lines().collect();
     let total_lines = lines.len();
@@ -98,12 +82,9 @@ impl Tool for EditFileTool {
       (result.join("\n"), end_idx.saturating_sub(start_line) + 1)
     };
 
-    write_file(&path, &output).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: EDIT_FILE_TOOL_NAME.to_string(),
-        reason: format!("Cannot write to file '{path}': {e}"),
-      }
-    })?;
+    write_file(&path, &output)
+      .await
+      .context(format!("Cannot write to file '{path}'"))?;
 
     return Ok(format!("Successfully edited {replaced} lines in '{path}'"));
   }

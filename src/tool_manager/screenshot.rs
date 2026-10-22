@@ -1,5 +1,6 @@
+use anyhow::{Context, Result};
+
 use crate::capability::screenshot;
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
 use crate::tool_manager::helpers::get_optional_param;
 use crate::tool_manager::tool::{Tool, ToolParams};
 
@@ -30,16 +31,12 @@ impl Tool for ScreenshotTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let path = get_optional_param::<String>(&params, "screenshot", "path");
     let delay = get_optional_param::<u64>(&params, "screenshot", "delay");
-    let destination =
-      screenshot::screenshot(path, delay).await.map_err(|e| {
-        ToolManagerError::ExecutionFailed {
-          name: "screenshot".to_string(),
-          reason: e.to_string(),
-        }
-      })?;
+    let destination = screenshot::screenshot(path, delay)
+      .await
+      .context("Failed to take screenshot")?;
     return Ok(format!("Screenshot saved to @{destination}"));
   }
 }

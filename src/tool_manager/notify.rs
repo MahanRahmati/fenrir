@@ -1,4 +1,5 @@
-use crate::tool_manager::errors::{ToolManagerError, ToolManagerResult};
+use anyhow::{Context, Result, bail};
+
 use crate::tool_manager::helpers::{get_optional_param, get_param};
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::process;
@@ -30,7 +31,7 @@ impl Tool for NotifyTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, params: ToolParams) -> Result<String> {
     let summary = get_param::<String>(&params, "notify", "summary")?;
     let body = get_optional_param::<String>(&params, "notify", "body")
       .unwrap_or_default();
@@ -55,12 +56,9 @@ impl Tool for NotifyTool {
       "int32:-1",
     ];
 
-    let output = process::run("dbus-send", &args).await.map_err(|e| {
-      ToolManagerError::ExecutionFailed {
-        name: "notify".to_string(),
-        reason: format!("Failed to invoke dbus-send: {e}"),
-      }
-    })?;
+    let output = process::run("dbus-send", &args)
+      .await
+      .context("Failed to invoke dbus-send")?;
 
     if !output.exit_code.is_success() {
       let stderr = output.stderr.trim();
@@ -69,10 +67,7 @@ impl Tool for NotifyTool {
       } else {
         stderr.to_string()
       };
-      return Err(ToolManagerError::ExecutionFailed {
-        name: "notify".to_string(),
-        reason: details,
-      });
+      bail!("{details}");
     }
 
     return match parse_notification_id(&output.stdout) {

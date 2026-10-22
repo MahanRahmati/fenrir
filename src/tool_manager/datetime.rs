@@ -1,4 +1,5 @@
-use crate::tool_manager::errors::ToolManagerResult;
+use anyhow::Result;
+
 use crate::tool_manager::tool::{Tool, ToolParams};
 use crate::utils::datetime::get_current_datetime;
 
@@ -18,7 +19,7 @@ impl Tool for DateTimeTool {
     return true;
   }
 
-  async fn execute(&self, _params: ToolParams) -> ToolManagerResult<String> {
+  async fn execute(&self, _params: ToolParams) -> Result<String> {
     return Ok(get_current_datetime());
   }
 }
