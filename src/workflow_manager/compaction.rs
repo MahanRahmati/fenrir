@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -9,9 +10,6 @@ use crate::prompt::Prompt;
 use crate::provider_manager::ProviderManager;
 use crate::session_manager::{Message, Summary};
 use crate::vlog;
-use crate::workflow_manager::errors::{
-  WorkflowManagerError, WorkflowManagerResult,
-};
 
 pub struct CompactionParams {
   pub messages: Vec<Message>,
@@ -25,7 +23,7 @@ impl CompactionWorkflow {
     provider: Arc<ProviderManager>,
     config: Config,
     params: CompactionParams,
-  ) -> WorkflowManagerResult<String> {
+  ) -> Result<String> {
     let prompt = Prompt::new(&config, &COMPACTION_PERSONA);
     let now = Utc::now().timestamp();
     let max_chars = config.compaction.tool_result_max_chars;
@@ -88,26 +86,18 @@ impl CompactionWorkflow {
       }
     }
 
-    let response = provider.chat(&messages, &[]).await.map_err(|e| {
-      WorkflowManagerError::ExecutionFailed {
-        name: "compaction".to_string(),
-        reason: e.to_string(),
-      }
-    })?;
+    let response = provider
+      .chat(&messages, &[])
+      .await
+      .context("Failed to execute compaction workflow")?;
 
     let Some(content) = response.content else {
-      return Err(WorkflowManagerError::ExecutionFailed {
-        name: "compaction".to_string(),
-        reason: "No content in response".to_string(),
-      });
+      bail!("Compaction workflow returned no content");
     };
 
     let content = content.trim().to_string();
     if content.is_empty() {
-      return Err(WorkflowManagerError::ExecutionFailed {
-        name: "compaction".to_string(),
-        reason: "Empty content".to_string(),
-      });
+      bail!("Compaction workflow returned empty content");
     }
 
     vlog!("Compacted session: {content}");

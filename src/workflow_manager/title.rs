@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::{Context, Result};
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -8,9 +9,6 @@ use crate::prompt::Prompt;
 use crate::provider_manager::ProviderManager;
 use crate::session_manager::Message;
 use crate::vlog;
-use crate::workflow_manager::errors::{
-  WorkflowManagerError, WorkflowManagerResult,
-};
 
 pub struct TitleParams {
   pub message: String,
@@ -23,7 +21,7 @@ impl TitleWorkflow {
     provider: Arc<ProviderManager>,
     config: Config,
     params: TitleParams,
-  ) -> WorkflowManagerResult<String> {
+  ) -> Result<String> {
     if params.message.is_empty() {
       return Ok(String::new());
     }
@@ -51,16 +49,10 @@ impl TitleWorkflow {
       },
     ];
 
-    let response = match provider.chat(&messages, &[]).await {
-      Ok(response) => response,
-      Err(e) => {
-        vlog!("Failed to generate session title: {e}");
-        return Err(WorkflowManagerError::ExecutionFailed {
-          name: "title".to_string(),
-          reason: e.to_string(),
-        });
-      }
-    };
+    let response = provider
+      .chat(&messages, &[])
+      .await
+      .context("Failed to execute title workflow")?;
 
     let Some(content) = response.content else {
       return Ok(String::new());
