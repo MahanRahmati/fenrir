@@ -10,7 +10,6 @@ use crate::agent_manager::AgentManager;
 use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
 use crate::input::confirm_with;
-use crate::input::errors::InputError;
 use crate::input::read_from_stdin;
 use crate::persona_manager::Persona;
 use crate::provider_manager::Model;
@@ -115,11 +114,7 @@ impl EventSink for CliSink {
   }
 
   async fn read_input(&mut self) -> RuntimeResult<Option<String>> {
-    return match read_from_stdin() {
-      Ok(input) => Ok(Some(input)),
-      Err(InputError::Eof) | Err(InputError::EmptyInput) => Ok(None),
-      Err(e) => Err(RuntimeError::Input(e.to_string())),
-    };
+    return read_from_stdin().map_err(|e| RuntimeError::Input(e.to_string()));
   }
 
   async fn poll_events(&mut self) {}
@@ -275,9 +270,8 @@ fn handle_models(
 
 fn read_index(count: usize, name: &str) -> RuntimeResult<Option<usize>> {
   let input = match read_from_stdin() {
-    Ok(input) => input,
-    Err(InputError::Eof) => return Ok(None),
-    Err(InputError::EmptyInput) => return Ok(None),
+    Ok(Some(input)) => input,
+    Ok(None) => return Ok(None),
     Err(e) => return Err(RuntimeError::Input(e.to_string())),
   };
   let index = match input.trim().parse::<usize>() {

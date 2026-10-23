@@ -1,26 +1,23 @@
-pub mod errors;
+use anyhow::{Context, Result};
 
-use crate::input::errors::{InputError, InputResult};
-
-pub fn read_from_stdin() -> InputResult<String> {
+pub fn read_from_stdin() -> Result<Option<String>> {
   let _ = std::io::Write::flush(&mut std::io::stdout());
   let mut input = String::new();
   let bytes_read = std::io::stdin()
     .read_line(&mut input)
-    .map_err(|e| InputError::StdinRead(e.to_string()))?;
+    .context("Cannot read input from stdin")?;
   if bytes_read == 0 {
-    return Err(InputError::Eof);
+    return Ok(None);
   }
   let input = input.trim().to_string();
-  return match input.is_empty() {
-    true => Err(InputError::EmptyInput),
-    false => Ok(input),
-  };
+  return Ok((!input.is_empty()).then_some(input));
 }
 
-fn confirm(prompt: &str) -> InputResult<bool> {
+fn confirm(prompt: &str) -> Result<bool> {
   print!("{prompt}");
-  let input = read_from_stdin()?;
+  let Some(input) = read_from_stdin()? else {
+    return Ok(false);
+  };
   let answer = input.trim().to_lowercase();
   return Ok(answer == "y" || answer == "yes");
 }
