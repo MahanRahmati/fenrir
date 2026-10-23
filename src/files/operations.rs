@@ -1,23 +1,23 @@
 use std::path::Path;
 
-use crate::files::errors::{FileError, FileResult};
+use anyhow::{Context, Result, bail};
 
-pub async fn remove_file(file_path: &str) -> FileResult<()> {
+pub async fn remove_file(file_path: &str) -> Result<()> {
   let path = Path::new(file_path);
   return tokio::fs::remove_file(path)
     .await
-    .map_err(|e| FileError::FileRemove(e.to_string()));
+    .context(format!("Cannot remove file '{file_path}'"));
 }
 
-pub async fn create_directory_all(dir_path: &str) -> FileResult<()> {
+pub async fn create_directory_all(dir_path: &str) -> Result<()> {
   return tokio::fs::create_dir_all(dir_path)
     .await
-    .map_err(|e| FileError::DirectoryCreate(e.to_string()));
+    .context(format!("Cannot create directory '{dir_path}'"));
 }
 
-pub async fn validate_file_exists(file_path: &str) -> FileResult<()> {
+pub async fn validate_file_exists(file_path: &str) -> Result<()> {
   if !file_exists(file_path).await {
-    return Err(FileError::FileNotFound(file_path.to_string()));
+    bail!("File '{file_path}' does not exist");
   }
   return Ok(());
 }
@@ -33,70 +33,70 @@ pub async fn is_dir(file_path: &str) -> bool {
     .unwrap_or(false);
 }
 
-pub async fn read_to_string(file_path: &str) -> FileResult<String> {
+pub async fn read_to_string(file_path: &str) -> Result<String> {
   return tokio::fs::read_to_string(file_path)
     .await
-    .map_err(|e| FileError::FileRead(e.to_string()));
+    .context(format!("Cannot read file '{file_path}'"));
 }
 
-pub async fn read_bytes(file_path: &str) -> FileResult<Vec<u8>> {
+pub async fn read_bytes(file_path: &str) -> Result<Vec<u8>> {
   return tokio::fs::read(file_path)
     .await
-    .map_err(|e| FileError::FileRead(e.to_string()));
+    .context(format!("Cannot read file '{file_path}'"));
 }
 
-pub async fn write_file(file_path: &str, content: &str) -> FileResult<()> {
+pub async fn write_file(file_path: &str, content: &str) -> Result<()> {
   return tokio::fs::write(file_path, content)
     .await
-    .map_err(|e| FileError::FileWrite(e.to_string()));
+    .context(format!("Cannot write to file '{file_path}'"));
 }
 
-pub async fn copy_file(from_path: &str, to_path: &str) -> FileResult<()> {
+pub async fn copy_file(from_path: &str, to_path: &str) -> Result<()> {
   return tokio::fs::copy(from_path, to_path)
     .await
-    .map_err(|e| FileError::FileCopy(e.to_string()))
+    .context(format!("Cannot copy file '{from_path}' to '{to_path}'"))
     .map(|_| ());
 }
 
-pub async fn rename_file(from_path: &str, to_path: &str) -> FileResult<()> {
+pub async fn rename_file(from_path: &str, to_path: &str) -> Result<()> {
   return tokio::fs::rename(from_path, to_path)
     .await
-    .map_err(|e| FileError::FileRename(e.to_string()));
+    .context(format!("Cannot rename file '{from_path}' to '{to_path}'"));
 }
 
 pub async fn get_modified_time(
   file_path: &str,
-) -> FileResult<std::time::SystemTime> {
+) -> Result<std::time::SystemTime> {
   return tokio::fs::metadata(file_path)
     .await
-    .map_err(|e| FileError::FileRead(e.to_string()))?
+    .context(format!("Cannot read file '{file_path}'"))?
     .modified()
-    .map_err(|e| FileError::FileRead(e.to_string()));
+    .context(format!("Cannot read modification time for '{file_path}'"));
 }
 
-pub async fn get_file_size(file_path: &str) -> FileResult<u64> {
+pub async fn get_file_size(file_path: &str) -> Result<u64> {
   return tokio::fs::metadata(file_path)
     .await
-    .map_err(|e| FileError::FileRead(e.to_string()))
+    .context(format!("Cannot read file '{file_path}'"))
     .map(|meta| meta.len());
 }
 
-pub async fn read_dir(dir_path: &str) -> FileResult<Vec<(String, bool)>> {
+pub async fn read_dir(dir_path: &str) -> Result<Vec<(String, bool)>> {
   let mut entries = tokio::fs::read_dir(dir_path)
     .await
-    .map_err(|e| FileError::DirectoryRead(format!("{dir_path}: {e}")))?;
+    .context(format!("Cannot read directory '{dir_path}'"))?;
 
   let mut results: Vec<(String, bool)> = Vec::new();
 
   while let Some(entry) = entries
     .next_entry()
     .await
-    .map_err(|e| FileError::DirectoryRead(format!("{dir_path}: {e}")))?
+    .context(format!("Cannot read directory '{dir_path}'"))?
   {
     let file_type = entry
       .file_type()
       .await
-      .map_err(|e| FileError::DirectoryRead(format!("{dir_path}: {e}")))?;
+      .context(format!("Cannot read directory '{dir_path}'"))?;
     let name = entry.file_name().to_string_lossy().to_string();
     results.push((name, file_type.is_dir()));
   }
