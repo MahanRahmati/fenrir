@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use anyhow::Result;
 use chrono::Local;
 use tokio::time;
 
@@ -164,7 +165,7 @@ fn picture_dirs() -> Vec<PathBuf> {
   return dirs;
 }
 
-fn default_destination() -> Result<String, String> {
+fn default_destination() -> Result<String> {
   let data_home = xdg::data_home()?;
   let dir = data_home.join("screenshots");
   return Ok(

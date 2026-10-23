@@ -1,11 +1,10 @@
-mod errors;
 mod migrations;
 mod queries;
 
+use anyhow::{Context, Result};
 use chrono::Utc;
 use turso::{Database, Rows};
 
-use crate::database::errors::{DatabaseError, DatabaseResult};
 use crate::database::migrations::list_migrations;
 use crate::database::queries::*;
 use crate::utils::xdg;
@@ -17,20 +16,20 @@ pub struct DB {
 }
 
 impl DB {
-  pub async fn load() -> DatabaseResult<Self> {
+  pub async fn load() -> Result<Self> {
     let db_path = xdg::place_data_file(DEFAULT_DB_NAME)
-      .map_err(DatabaseError::Initialization)?;
+      .context("Failed to initialize database")?;
     let db = turso::Builder::new_local(db_path.to_string_lossy().as_ref())
       .experimental_multiprocess_wal(true)
       .build()
       .await
-      .map_err(|e| DatabaseError::Initialization(e.to_string()))?;
+      .context("Failed to initialize database")?;
     let db_instance = DB { db };
     db_instance.run_migrations().await?;
     return Ok(db_instance);
   }
 
-  async fn run_migrations(&self) -> DatabaseResult<()> {
+  async fn run_migrations(&self) -> Result<()> {
     let conn = self.connect()?;
 
     let applied: Vec<String> =
@@ -38,9 +37,8 @@ impl DB {
         Ok(mut rows) => {
           let mut result = Vec::new();
           while let Ok(Some(row)) = rows.next().await {
-            let name: String = row
-              .get(0)
-              .map_err(|e| DatabaseError::Migration(e.to_string()))?;
+            let name: String =
+              row.get(0).context("Failed to read applied migration")?;
             result.push(name);
           }
           result
@@ -55,23 +53,20 @@ impl DB {
       conn
         .execute(&migration.sql, ())
         .await
-        .map_err(|e| DatabaseError::Migration(e.to_string()))?;
-      conn
+        .context(format!("Failed to apply migration '{}'", migration.name))?;
+      let record = conn
         .execute(
           RECORD_MIGRATION,
           (migration.name.as_str(), Utc::now().timestamp()),
         )
-        .await
-        .map_err(|e| DatabaseError::Migration(e.to_string()))
-        .or_else(|e| {
-          if let DatabaseError::Migration(message) = e {
-            if message.contains("UNIQUE") {
-              return Ok(0);
-            }
-            return Err(DatabaseError::Migration(message));
-          }
-          return Err(e);
-        })?;
+        .await;
+      if let Err(e) = record {
+        if e.to_string().contains("UNIQUE") {
+          continue;
+        }
+        return Err(e)
+          .context(format!("Failed to record migration '{}'", migration.name));
+      }
     }
     return Ok(());
   }
@@ -80,12 +75,12 @@ impl DB {
     &self,
     sql: &str,
     params: impl turso::IntoParams,
-  ) -> DatabaseResult<()> {
+  ) -> Result<()> {
     let conn = self.connect()?;
     conn
       .execute(sql, params)
       .await
-      .map_err(|e| DatabaseError::Query(e.to_string()))?;
+      .context("Failed to execute query")?;
     return Ok(());
   }
 
@@ -93,22 +88,16 @@ impl DB {
     &self,
     sql: &str,
     params: impl turso::IntoParams,
-  ) -> DatabaseResult<Rows> {
+  ) -> Result<Rows> {
     let conn = self.connect()?;
-    return conn
-      .query(sql, params)
-      .await
-      .map_err(|e| DatabaseError::Query(e.to_string()));
+    return conn.query(sql, params).await.context("Failed to run query");
   }
 
-  fn connect(&self) -> DatabaseResult<turso::Connection> {
-    let conn = self
-      .db
-      .connect()
-      .map_err(|e| DatabaseError::Connection(e.to_string()))?;
+  fn connect(&self) -> Result<turso::Connection> {
+    let conn = self.db.connect().context("Failed to connect to database")?;
     conn
       .busy_timeout(std::time::Duration::from_millis(500))
-      .map_err(|e| DatabaseError::Connection(e.to_string()))?;
+      .context("Failed to set database busy timeout")?;
     return Ok(conn);
   }
 }

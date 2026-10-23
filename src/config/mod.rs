@@ -178,7 +178,7 @@ impl Config {
     }
     let default_config = Config::default();
     let config_path = xdg::place_config_file(DEFAULT_CONFIG_NAME)
-      .map_err(ConfigError::FileRead)?;
+      .map_err(|e| ConfigError::FileRead(e.to_string()))?;
     return Config::save_to_path(default_config, config_path).await;
   }
 
