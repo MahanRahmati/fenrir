@@ -1,10 +1,9 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use anyhow::{Context as _, Result};
 use bytes::Bytes;
 use futures::Stream;
-
-use crate::network::errors::NetworkError;
 
 pub struct SSEStream {
   body: Pin<Box<dyn Stream<Item = reqwest::Result<Bytes>> + Send>>,
@@ -27,7 +26,7 @@ impl SSEStream {
 }
 
 impl Stream for SSEStream {
-  type Item = Result<SSEChunk, NetworkError>;
+  type Item = Result<SSEChunk>;
 
   fn poll_next(
     mut self: Pin<&mut Self>,
@@ -51,9 +50,9 @@ impl Stream for SSEStream {
             self.buffer.push_str(&text);
           }
           Err(e) => {
-            return Poll::Ready(Some(Err(NetworkError::RequestFailed(
-              e.to_string(),
-            ))));
+            return Poll::Ready(Some(
+              Err(e).context("Failed to read response stream"),
+            ));
           }
         },
         Poll::Ready(None) => {

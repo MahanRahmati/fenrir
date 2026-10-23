@@ -1,12 +1,11 @@
-pub mod errors;
 pub mod sse;
 
 use std::collections::HashMap;
 
+use anyhow::{Context, Result, bail};
 use reqwest::{Client, RequestBuilder, Response};
 use serde::Serialize;
 
-use crate::network::errors::{NetworkError, NetworkResult};
 use crate::network::sse::SSEStream;
 use crate::vlog;
 
@@ -27,7 +26,7 @@ impl HttpClient {
     body: &B,
     endpoint: &str,
     headers: Option<HashMap<String, String>>,
-  ) -> NetworkResult<T>
+  ) -> Result<T>
   where
     T: serde::de::DeserializeOwned,
     B: Serialize,
@@ -41,7 +40,7 @@ impl HttpClient {
     let response = request_builder
       .send()
       .await
-      .map_err(|e| NetworkError::RequestFailed(e.to_string()))?;
+      .context(format!("Failed to send request to '{full_url}'"))?;
 
     if !response.status().is_success() {
       let status = response.status().as_str().to_string();
@@ -50,16 +49,13 @@ impl HttpClient {
         .await
         .unwrap_or_else(|_| String::from("Failed to read response body"));
       vlog!("Service returned error {}: {}", status, body_text);
-      return Err(NetworkError::ResponseError {
-        status,
-        body: body_text,
-      });
+      bail!("Service returned {status}: {body_text}");
     }
 
     let parsed_response = response
       .json::<T>()
       .await
-      .map_err(|e| NetworkError::DecodeError(e.to_string()))?;
+      .context("Failed to decode response")?;
 
     return Ok(parsed_response);
   }
@@ -69,7 +65,7 @@ impl HttpClient {
     body: &B,
     endpoint: &str,
     headers: Option<HashMap<String, String>>,
-  ) -> NetworkResult<SSEStream>
+  ) -> Result<SSEStream>
   where
     B: Serialize,
   {
@@ -82,7 +78,7 @@ impl HttpClient {
     let response = request_builder
       .send()
       .await
-      .map_err(|e| NetworkError::RequestFailed(e.to_string()))?;
+      .context(format!("Failed to send request to '{full_url}'"))?;
 
     return Self::response_to_stream(response).await;
   }
@@ -110,7 +106,7 @@ impl HttpClient {
     return request_builder;
   }
 
-  async fn response_to_stream(response: Response) -> NetworkResult<SSEStream> {
+  async fn response_to_stream(response: Response) -> Result<SSEStream> {
     vlog!("Received streaming response. Status: {}", response.status());
 
     if !response.status().is_success() {
@@ -120,7 +116,7 @@ impl HttpClient {
         .await
         .unwrap_or_else(|_| String::from("Failed to read response body"));
       vlog!("Service returned error {}: {}", status, body);
-      return Err(NetworkError::ResponseError { status, body });
+      bail!("Service returned {status}: {body}");
     }
 
     return Ok(SSEStream::from_response(response));
