@@ -1,13 +1,11 @@
-mod errors;
 mod provider;
 mod providers;
 
 use std::sync::Mutex;
 
+use anyhow::{Result, bail};
+
 use crate::config::Config;
-use crate::provider_manager::errors::{
-  ProviderManagerError, ProviderManagerResult,
-};
 pub use crate::provider_manager::provider::ChatUsage;
 pub use crate::provider_manager::provider::Model;
 pub use crate::provider_manager::provider::ToolCall;
@@ -57,16 +55,18 @@ impl ProviderManager {
     );
   }
 
-  fn resolve(&self) -> ProviderManagerResult<(Model, &dyn Provider)> {
-    let model = self
-      .active_model()
-      .ok_or(ProviderManagerError::NoActiveModel)?;
-    let provider = self
+  fn resolve(&self) -> Result<(Model, &dyn Provider)> {
+    let Some(model) = self.active_model() else {
+      bail!("No active model configured");
+    };
+    let Some(provider) = self
       .providers
       .iter()
       .find(|p| p.name() == model.provider)
       .map(|p| p.as_ref())
-      .ok_or(ProviderManagerError::NoActiveProvider)?;
+    else {
+      bail!("No active provider configured");
+    };
     return Ok((model, provider));
   }
 
@@ -74,7 +74,7 @@ impl ProviderManager {
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
-  ) -> ProviderManagerResult<ChatResponse> {
+  ) -> Result<ChatResponse> {
     let (model, provider) = self.resolve()?;
     return provider.chat(messages, tools, &model.name).await;
   }
@@ -83,7 +83,7 @@ impl ProviderManager {
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
-  ) -> ProviderManagerResult<ChatStream> {
+  ) -> Result<ChatStream> {
     let (model, provider) = self.resolve()?;
     return provider.chat_stream(messages, tools, &model.name).await;
   }

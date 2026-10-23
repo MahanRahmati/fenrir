@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use futures::{StreamExt, future};
 
+use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -13,9 +14,6 @@ use crate::mentions::{
 };
 use crate::network::HttpClient;
 use crate::network::sse::SSEChunk;
-use crate::provider_manager::errors::{
-  ProviderManagerError, ProviderManagerResult,
-};
 use crate::provider_manager::provider::{
   ChatResponse, ChatStream, ChatStreamDelta, ChatUsage, Model, Provider,
   StreamToolCallDelta, ToolCall,
@@ -210,7 +208,7 @@ impl OpenAICompatibleProvider {
     messages: &[Message],
     tools: &[ToolSpec],
     stream: bool,
-  ) -> ProviderManagerResult<ChatCompletionRequest> {
+  ) -> Result<ChatCompletionRequest> {
     let mut chat_messages: Vec<ChatMessage> = Vec::new();
     for msg in messages {
       if msg.role == "reasoning" {
@@ -280,7 +278,7 @@ impl OpenAICompatibleProvider {
 async fn build_content_parts(
   content: &str,
   strict: bool,
-) -> ProviderManagerResult<ChatContent> {
+) -> Result<ChatContent> {
   let paths = extract_paths(content);
   if paths.is_empty() {
     return Ok(ChatContent::Text(content.to_string()));
@@ -295,9 +293,7 @@ async fn build_content_parts(
       Some(kind) => kind,
       None => {
         if strict {
-          return Err(ProviderManagerError::ProviderError(format!(
-            "Cannot attach '{path}': unsupported file (no extension)"
-          )));
+          bail!("Cannot attach '{path}': unsupported file (no extension)");
         }
         continue;
       }
@@ -308,18 +304,14 @@ async fn build_content_parts(
           Ok(bytes) => bytes,
           Err(e) => {
             if strict {
-              return Err(ProviderManagerError::ProviderError(format!(
-                "Cannot attach '@{path}': {e}"
-              )));
+              return Err(e).context(format!("Cannot attach '@{path}'"));
             }
             continue;
           }
         };
         let Some(mime) = mime_type(&path) else {
           if strict {
-            return Err(ProviderManagerError::ProviderError(format!(
-              "Cannot attach '@{path}': unsupported image type"
-            )));
+            bail!("Cannot attach '@{path}': unsupported image type");
           }
           continue;
         };
@@ -338,9 +330,7 @@ async fn build_content_parts(
           Ok(contents) => contents,
           Err(e) => {
             if strict {
-              return Err(ProviderManagerError::ProviderError(format!(
-                "Cannot attach '@{path}': {e}"
-              )));
+              return Err(e).context(format!("Cannot attach '@{path}'"));
             }
             continue;
           }
@@ -354,9 +344,7 @@ async fn build_content_parts(
           Ok(info) => info,
           Err(e) => {
             if strict {
-              return Err(ProviderManagerError::ProviderError(format!(
-                "Cannot inspect '@{path}': {e}"
-              )));
+              return Err(e).context(format!("Cannot inspect '@{path}'"));
             }
             continue;
           }
@@ -373,11 +361,9 @@ async fn build_content_parts(
   return Ok(ChatContent::Parts(parts));
 }
 
-fn parse_sse_chunk(
-  chunk: SSEChunk,
-) -> Option<ProviderManagerResult<ChatStreamDelta>> {
+fn parse_sse_chunk(chunk: SSEChunk) -> Option<Result<ChatStreamDelta>> {
   if chunk.event == "error" {
-    return Some(Err(ProviderManagerError::ProviderError(chunk.data)));
+    return Some(Err(anyhow!("Failed to parse sse '{}'", chunk.data)));
   }
   if chunk.data.trim() == "[DONE]" {
     return None;
@@ -414,7 +400,7 @@ fn parse_sse_chunk(
       }));
     }
     Err(e) => {
-      return Some(Err(ProviderManagerError::ProviderError(e.to_string())));
+      return Some(Err(e).context("Failed to parse stream chunk"));
     }
   }
 }
@@ -434,7 +420,7 @@ impl Provider for OpenAICompatibleProvider {
     messages: &[Message],
     tools: &[ToolSpec],
     model: &str,
-  ) -> ProviderManagerResult<ChatResponse> {
+  ) -> Result<ChatResponse> {
     let request = self
       .build_request(model.to_string(), messages, tools, false)
       .await?;
@@ -446,10 +432,10 @@ impl Provider for OpenAICompatibleProvider {
       .client
       .post(&request, "/v1/chat/completions", headers)
       .await
-      .map_err(|e| ProviderManagerError::ProviderError(e.to_string()))?;
+      .context("Failed to send chat request")?;
 
     if response.choices.is_empty() {
-      return Err(ProviderManagerError::EmptyResponseChoices);
+      bail!("Empty response choices");
     }
 
     let choice = &response.choices[0];
@@ -492,7 +478,7 @@ impl Provider for OpenAICompatibleProvider {
     messages: &[Message],
     tools: &[ToolSpec],
     model: &str,
-  ) -> ProviderManagerResult<ChatStream> {
+  ) -> Result<ChatStream> {
     let request = self
       .build_request(model.to_string(), messages, tools, true)
       .await?;
@@ -504,12 +490,12 @@ impl Provider for OpenAICompatibleProvider {
       .client
       .post_stream(&request, "/v1/chat/completions", headers)
       .await
-      .map_err(|e| ProviderManagerError::ProviderError(e.to_string()))?;
+      .context("Failed to start chat stream")?;
 
     let mapped = sse_stream.filter_map(|chunk_result| {
       future::ready(match chunk_result {
         Ok(chunk) => parse_sse_chunk(chunk),
-        Err(e) => Some(Err(ProviderManagerError::ProviderError(e.to_string()))),
+        Err(e) => Some(Err(e).context("Failed to read chat stream")),
       })
     });
 

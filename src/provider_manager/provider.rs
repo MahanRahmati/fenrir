@@ -1,9 +1,9 @@
 use std::pin::Pin;
 
+use anyhow::Result;
 use futures::Stream;
 use serde::Deserialize;
 
-use crate::provider_manager::errors::ProviderManagerResult;
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
 
@@ -56,7 +56,7 @@ pub struct StreamToolCallDelta {
 }
 
 pub type ChatStream =
-  Pin<Box<dyn Stream<Item = ProviderManagerResult<ChatStreamDelta>> + Send>>;
+  Pin<Box<dyn Stream<Item = Result<ChatStreamDelta>> + Send>>;
 
 #[async_trait::async_trait]
 pub trait Provider: Send + Sync {
@@ -67,11 +67,11 @@ pub trait Provider: Send + Sync {
     messages: &[Message],
     tools: &[ToolSpec],
     model: &str,
-  ) -> ProviderManagerResult<ChatResponse>;
+  ) -> Result<ChatResponse>;
   async fn chat_stream(
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
     model: &str,
-  ) -> ProviderManagerResult<ChatStream>;
+  ) -> Result<ChatStream>;
 }
