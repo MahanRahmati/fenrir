@@ -1,8 +1,7 @@
-pub mod errors;
-
 use std::path::PathBuf;
 
-use crate::config::errors::{ConfigError, ConfigResult};
+use anyhow::{Context, Result};
+
 use crate::files::operations;
 use crate::utils::xdg;
 
@@ -155,7 +154,7 @@ impl Default for SubagentConfig {
 }
 
 impl Config {
-  pub async fn load() -> ConfigResult<Config> {
+  pub async fn load() -> Result<Config> {
     let config_path = match xdg::find_config_file(DEFAULT_CONFIG_NAME) {
       Some(path) => path,
       None => {
@@ -166,7 +165,7 @@ impl Config {
     return Config::load_from_path(config_path).await;
   }
 
-  pub async fn reset_to_defaults(yes: bool) -> ConfigResult<()> {
+  pub async fn reset_to_defaults(yes: bool) -> Result<()> {
     if !yes {
       let should_reset = crate::input::confirm_with(
         "Are you sure you want to reset the configuration to default values? (y/n) ",
@@ -177,32 +176,37 @@ impl Config {
       }
     }
     let default_config = Config::default();
-    let config_path = xdg::place_config_file(DEFAULT_CONFIG_NAME)
-      .map_err(|e| ConfigError::FileRead(e.to_string()))?;
+    let config_path = xdg::place_config_file(DEFAULT_CONFIG_NAME)?;
     return Config::save_to_path(default_config, config_path).await;
   }
 
-  pub(crate) async fn load_from_path(
-    config_path: PathBuf,
-  ) -> ConfigResult<Config> {
+  pub(crate) async fn load_from_path(config_path: PathBuf) -> Result<Config> {
     let config_content =
       operations::read_to_string(&config_path.to_string_lossy())
         .await
-        .map_err(|e| ConfigError::FileRead(e.to_string()))?;
-    let config = toml::from_str(&config_content)
-      .map_err(|e| ConfigError::Parse(e.to_string()))?;
+        .context(format!(
+          "Cannot read configuration file '{}'",
+          config_path.display()
+        ))?;
+    let config = toml::from_str(&config_content).context(format!(
+      "Configuration file '{}' is invalid",
+      config_path.display()
+    ))?;
     return Ok(config);
   }
 
   pub(crate) async fn save_to_path(
     config: Config,
     config_path: PathBuf,
-  ) -> ConfigResult<()> {
+  ) -> Result<()> {
     let config_content = toml::to_string_pretty(&config)
-      .map_err(|e| ConfigError::Parse(e.to_string()))?;
+      .context("Failed to serialize configuration")?;
     operations::write_file(&config_path.to_string_lossy(), &config_content)
       .await
-      .map_err(|e| ConfigError::FileWrite(e.to_string()))?;
+      .context(format!(
+        "Cannot save configuration file '{}'",
+        config_path.display()
+      ))?;
     return Ok(());
   }
 }
