@@ -1,7 +1,8 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use crate::capability::errors::*;
+use anyhow::{Context, Result, anyhow, bail};
+
 use crate::capability::keyboard;
 use crate::capability::window;
 use crate::files::operations::{
@@ -18,12 +19,10 @@ const KEY_PACING_MS: u64 = 400;
 const SAVE_POLL_TIMEOUT_SECS: u64 = 30;
 const SAVE_POLL_INTERVAL_MS: u64 = 300;
 
-pub async fn open_url(url: &str) -> CapabilityErrorResult<String> {
-  let output = process::run("xdg-open", &[url]).await.map_err(|e| {
-    CapabilityError::Browser {
-      reason: format!("Failed to invoke xdg-open: {e}"),
-    }
-  })?;
+pub async fn open_url(url: &str) -> Result<String> {
+  let output = process::run("xdg-open", &[url])
+    .await
+    .context(format!("Failed to run xdg-open for '{url}'"))?;
 
   if !output.exit_code.is_success() {
     let stderr = output.stderr.trim();
@@ -32,7 +31,7 @@ pub async fn open_url(url: &str) -> CapabilityErrorResult<String> {
     } else {
       stderr.to_string()
     };
-    return Err(CapabilityError::Browser { reason: details });
+    bail!("{details}");
   }
 
   delay(Some(DEFAULT_FOCUS_DELAY)).await;
@@ -41,7 +40,7 @@ pub async fn open_url(url: &str) -> CapabilityErrorResult<String> {
   return Ok(format!("Opened {url} in the default browser"));
 }
 
-pub async fn save_as_pdf() -> CapabilityErrorResult<String> {
+pub async fn save_as_pdf() -> Result<String> {
   let pdf_dir = pdf_dir().await?;
   let destination = pdf_destination(&pdf_dir);
   let start = SystemTime::now();
@@ -57,33 +56,29 @@ pub async fn save_as_pdf() -> CapabilityErrorResult<String> {
   return Ok(destination);
 }
 
-async fn focus_browser() -> CapabilityErrorResult<String> {
+async fn focus_browser() -> Result<String> {
   let browser_id = get_browser_window_id().await?;
-  let id = window::focus_window(&browser_id, None).await.map_err(|e| {
-    CapabilityError::Browser {
-      reason: format!("Browser window could not be focused: {e}"),
-    }
-  })?;
+  let id = window::focus_window(&browser_id, None)
+    .await
+    .context("Browser window could not be focused")?;
   return Ok(id);
 }
 
-async fn open_print_dialog() -> CapabilityErrorResult<()> {
+async fn open_print_dialog() -> Result<()> {
   keyboard::press_key_on_keyboard("ctrl+p")
     .await
-    .map_err(|e| CapabilityError::Browser {
-      reason: format!("Could not open the print dialog: {e}"),
-    })?;
+    .context("Could not open the print dialog")?;
   delay(Some(PRINT_DIALOG_DELAY_SECS)).await;
   return Ok(());
 }
 
-async fn open_save_dialog() -> CapabilityErrorResult<()> {
+async fn open_save_dialog() -> Result<()> {
   press("enter").await?;
   delay(Some(DIALOG_STEP_DELAY_SECS)).await;
   return Ok(());
 }
 
-async fn navigate_to(dir: &str) -> CapabilityErrorResult<()> {
+async fn navigate_to(dir: &str) -> Result<()> {
   press("ctrl+l").await?;
   type_text(dir).await?;
   delay(Some(DIALOG_STEP_DELAY_SECS)).await;
@@ -92,26 +87,21 @@ async fn navigate_to(dir: &str) -> CapabilityErrorResult<()> {
   return Ok(());
 }
 
-async fn confirm_save() -> CapabilityErrorResult<()> {
+async fn confirm_save() -> Result<()> {
   press("enter").await?;
   delay(Some(DIALOG_STEP_DELAY_SECS)).await;
   return Ok(());
 }
 
-async fn wait_for_pdf(
-  dir: &str,
-  start: SystemTime,
-) -> CapabilityErrorResult<String> {
+async fn wait_for_pdf(dir: &str, start: SystemTime) -> Result<String> {
   let timeout = Duration::from_secs(SAVE_POLL_TIMEOUT_SECS);
   let interval = Duration::from_millis(SAVE_POLL_INTERVAL_MS);
   let saved = poll(timeout, interval, || newest_pdf(dir, start)).await;
   return match saved {
     Some(path) => Ok(path),
-    None => Err(CapabilityError::Browser {
-      reason: format!(
-        "The PDF was not saved to '{dir}' within {SAVE_POLL_TIMEOUT_SECS} seconds"
-      ),
-    }),
+    None => Err(anyhow!(
+      "The PDF was not saved to '{dir}' within {SAVE_POLL_TIMEOUT_SECS} seconds"
+    )),
   };
 }
 
@@ -139,16 +129,13 @@ async fn newest_pdf(dir: &str, start: SystemTime) -> Option<String> {
   return newest.map(|(_, path)| path);
 }
 
-async fn pdf_dir() -> CapabilityErrorResult<String> {
-  let data_home = xdg::data_home().map_err(|e| CapabilityError::Browser {
-    reason: format!("Cannot determine the fenrir data directory: {e}"),
-  })?;
+async fn pdf_dir() -> Result<String> {
+  let data_home =
+    xdg::data_home().context("Cannot determine the fenrir data directory")?;
   let dir = data_home.join("pdfs").to_string_lossy().to_string();
   create_directory_all(&dir)
     .await
-    .map_err(|e| CapabilityError::Browser {
-      reason: format!("Cannot create directory '{dir}': {e}"),
-    })?;
+    .context(format!("Cannot create directory '{dir}'"))?;
   return Ok(dir);
 }
 
@@ -164,49 +151,35 @@ fn pdf_filename() -> String {
   return format!("pdf_{timestamp}.pdf");
 }
 
-async fn rename_to(
-  saved: &str,
-  destination: &str,
-) -> CapabilityErrorResult<()> {
+async fn rename_to(saved: &str, destination: &str) -> Result<()> {
   if saved == destination {
     return Ok(());
   }
-  return rename_file(saved, destination).await.map_err(|e| {
-    CapabilityError::Browser {
-      reason: format!(
-        "The PDF was saved as '{saved}' but could not be renamed to '{destination}': {e}"
-      ),
-    }
-  });
+  return rename_file(saved, destination).await.context(format!(
+    "The PDF was saved as '{saved}' but could not be renamed to '{destination}'"
+  ));
 }
 
-async fn press(key: &str) -> CapabilityErrorResult<()> {
-  keyboard::press_key_on_keyboard(key).await.map_err(|e| {
-    CapabilityError::Browser {
-      reason: format!("Could not press key '{key}': {e}"),
-    }
-  })?;
+async fn press(key: &str) -> Result<()> {
+  keyboard::press_key_on_keyboard(key)
+    .await
+    .context(format!("Could not press key '{key}'"))?;
   milli_delay(Some(KEY_PACING_MS)).await;
   return Ok(());
 }
 
-async fn type_text(text: &str) -> CapabilityErrorResult<()> {
-  keyboard::type_with_keyboard(text).await.map_err(|e| {
-    CapabilityError::Browser {
-      reason: format!("Could not type text '{text}': {e}"),
-    }
-  })?;
+async fn type_text(text: &str) -> Result<()> {
+  keyboard::type_with_keyboard(text)
+    .await
+    .context(format!("Could not type text '{text}'"))?;
   milli_delay(Some(KEY_PACING_MS)).await;
   return Ok(());
 }
 
-async fn get_browser_window_id() -> CapabilityErrorResult<String> {
-  let window_ids =
-    window::window_ids()
-      .await
-      .map_err(|e| CapabilityError::Browser {
-        reason: e.to_string(),
-      })?;
+async fn get_browser_window_id() -> Result<String> {
+  let window_ids = window::window_ids()
+    .await
+    .context("Failed to list windows")?;
   for window_id in &window_ids {
     let class = window::window_class(window_id).await;
     let Ok(class) = class else {
@@ -216,9 +189,7 @@ async fn get_browser_window_id() -> CapabilityErrorResult<String> {
       return Ok(window_id.to_string());
     }
   }
-  return Err(CapabilityError::Browser {
-    reason: "No open browser windows found".to_string(),
-  });
+  bail!("No open browser windows found");
 }
 
 fn is_browser_class(class: &str) -> bool {

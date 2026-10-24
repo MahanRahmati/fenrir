@@ -1,21 +1,18 @@
-use crate::capability::errors::*;
+use anyhow::{Context, Result, bail};
+
 use crate::utils::process;
 
-pub async fn type_with_keyboard(text: &str) -> CapabilityErrorResult<String> {
+pub async fn type_with_keyboard(text: &str) -> Result<String> {
   let output = process::run("ydotool", &["type", text])
     .await
-    .map_err(|e| CapabilityError::Keyboard {
-      reason: format!("Failed to run ydotool: {e}"),
-    })?;
+    .context("Failed to run ydotool")?;
   if !output.exit_code.is_success() {
-    return Err(CapabilityError::Keyboard {
-      reason: ydotool_failure(&output, "ydotool could not type the text"),
-    });
+    bail!(ydotool_failure(&output, "ydotool could not type the text"));
   }
   return Ok(format!("Typed text ({} characters)", text.chars().count()));
 }
 
-pub async fn press_key_on_keyboard(key: &str) -> CapabilityErrorResult<String> {
+pub async fn press_key_on_keyboard(key: &str) -> Result<String> {
   let codes = key_combination(key)?;
   let args: Vec<String> = codes
     .iter()
@@ -24,20 +21,16 @@ pub async fn press_key_on_keyboard(key: &str) -> CapabilityErrorResult<String> {
     .collect();
   let mut cmd = vec!["key"];
   cmd.extend(args.iter().map(|arg| arg.as_str()));
-  let output = process::run("ydotool", &cmd).await.map_err(|e| {
-    CapabilityError::Keyboard {
-      reason: format!("Failed to run ydotool: {e}"),
-    }
-  })?;
+  let output = process::run("ydotool", &cmd)
+    .await
+    .context("Failed to run ydotool")?;
   if !output.exit_code.is_success() {
-    return Err(CapabilityError::Keyboard {
-      reason: ydotool_failure(&output, "ydotool could not press the key"),
-    });
+    bail!(ydotool_failure(&output, "ydotool could not press the key"));
   }
   return Ok(format!("Pressed '{key}'"));
 }
 
-fn key_combination(key: &str) -> CapabilityErrorResult<Vec<i32>> {
+fn key_combination(key: &str) -> Result<Vec<i32>> {
   let mut codes = Vec::new();
   for part in key.split('+').map(|p| p.trim().to_ascii_lowercase()) {
     if part.is_empty() {
@@ -50,19 +43,13 @@ fn key_combination(key: &str) -> CapabilityErrorResult<Vec<i32>> {
     let mut chars = part.chars();
     let c = chars.next();
     if chars.next().is_some() {
-      return Err(CapabilityError::Keyboard {
-        reason: format!("Unknown key '{part}'"),
-      });
+      bail!("Unknown key '{part}'");
     }
     let Some(c) = c else {
-      return Err(CapabilityError::Keyboard {
-        reason: format!("Cannot parse key '{key}'"),
-      });
+      bail!("Cannot parse key '{key}'");
     };
     let Some((code, shifted)) = char_evdev_code(c) else {
-      return Err(CapabilityError::Keyboard {
-        reason: format!("Unknown key '{part}'"),
-      });
+      bail!("Unknown key '{part}'");
     };
     if shifted {
       codes.push(Key::Shift.evdev_code());
@@ -70,9 +57,7 @@ fn key_combination(key: &str) -> CapabilityErrorResult<Vec<i32>> {
     codes.push(code);
   }
   if codes.is_empty() {
-    return Err(CapabilityError::Keyboard {
-      reason: format!("Cannot parse key '{key}'"),
-    });
+    bail!("Cannot parse key '{key}'");
   }
   return Ok(codes);
 }

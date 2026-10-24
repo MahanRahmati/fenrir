@@ -1,18 +1,14 @@
-use crate::capability::errors::*;
+use anyhow::{Context, Result, bail};
+
 use crate::utils::process;
 use crate::utils::sleep::delay;
 
-pub async fn window_ids() -> CapabilityErrorResult<Vec<String>> {
-  let output =
-    process::run("kdotool", &["search", ".+"])
-      .await
-      .map_err(|e| CapabilityError::Window {
-        reason: format!("Failed to run kdotool: {e}"),
-      })?;
+pub async fn window_ids() -> Result<Vec<String>> {
+  let output = process::run("kdotool", &["search", ".+"])
+    .await
+    .context("Failed to run kdotool")?;
   if !output.exit_code.is_success() {
-    return Err(CapabilityError::Window {
-      reason: kdotool_failure(&output, "kdotool could not list windows"),
-    });
+    bail!(kdotool_failure(&output, "kdotool could not list windows"));
   }
   let ids: Vec<String> = output
     .stdout
@@ -23,37 +19,29 @@ pub async fn window_ids() -> CapabilityErrorResult<Vec<String>> {
   return Ok(ids);
 }
 
-pub async fn window_class(id: &str) -> CapabilityErrorResult<String> {
+pub async fn window_class(id: &str) -> Result<String> {
   let output = process::run("kdotool", &["getwindowclassname", id])
     .await
-    .map_err(|e| CapabilityError::Window {
-      reason: format!("Failed to run kdotool: {e}"),
-    })?;
+    .context("Failed to run kdotool")?;
   if !output.exit_code.is_success() {
-    return Err(CapabilityError::Window {
-      reason: kdotool_failure(
-        &output,
-        "kdotool could not query the window class",
-      ),
-    });
+    bail!(kdotool_failure(
+      &output,
+      "kdotool could not query the window class"
+    ));
   }
   return Ok(output.stdout.trim().to_lowercase());
 }
 
-pub async fn focus_window(
-  id: &str,
-  duration: Option<u64>,
-) -> CapabilityErrorResult<String> {
+pub async fn focus_window(id: &str, duration: Option<u64>) -> Result<String> {
   delay(duration).await;
   let output = process::run("kdotool", &["windowactivate", id])
     .await
-    .map_err(|e| CapabilityError::Window {
-      reason: format!("Failed to run kdotool: {e}"),
-    })?;
+    .context("Failed to run kdotool")?;
   if !output.exit_code.is_success() {
-    return Err(CapabilityError::Window {
-      reason: kdotool_failure(&output, "kdotool could not activate the window"),
-    });
+    bail!(kdotool_failure(
+      &output,
+      "kdotool could not activate the window"
+    ));
   }
   return Ok(id.to_string());
 }

@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use crate::capability::errors::*;
+use anyhow::{Context, Result, bail};
+
 use crate::files::operations::{
   create_directory_all, file_exists, get_file_size, validate_file_exists,
 };
@@ -15,12 +16,8 @@ pub struct PdfInfo {
   pub file_size: String,
 }
 
-pub async fn pdf_info(pdf: &str) -> CapabilityErrorResult<PdfInfo> {
-  validate_file_exists(pdf)
-    .await
-    .map_err(|e| CapabilityError::Pdf {
-      reason: format!("'{pdf}' does not exist: {e}"),
-    })?;
+pub async fn pdf_info(pdf: &str) -> Result<PdfInfo> {
+  validate_file_exists(pdf).await?;
 
   let pages = pdf_page_count(pdf).await?;
   let file_size = file_size_label(pdf).await?;
@@ -28,19 +25,10 @@ pub async fn pdf_info(pdf: &str) -> CapabilityErrorResult<PdfInfo> {
   return Ok(PdfInfo { pages, file_size });
 }
 
-pub async fn render_page(
-  pdf: &str,
-  page: u32,
-) -> CapabilityErrorResult<String> {
-  validate_file_exists(pdf)
-    .await
-    .map_err(|e| CapabilityError::Pdf {
-      reason: format!("'{pdf}' does not exist: {e}"),
-    })?;
+pub async fn render_page(pdf: &str, page: u32) -> Result<String> {
+  validate_file_exists(pdf).await?;
   if page == 0 {
-    return Err(CapabilityError::Pdf {
-      reason: "Page numbers are 1-based".to_string(),
-    });
+    bail!("Page numbers are 1-based");
   }
 
   let output_dir = output_dir().await?;
@@ -63,9 +51,7 @@ pub async fn render_page(
     ],
   )
   .await
-  .map_err(|e| CapabilityError::Pdf {
-    reason: format!("Failed to invoke pdftoppm: {e}"),
-  })?;
+  .context(format!("Failed to run pdftoppm for '{pdf}'"))?;
 
   if !output.exit_code.is_success() {
     let stderr = output.stderr.trim();
@@ -74,29 +60,22 @@ pub async fn render_page(
     } else {
       stderr.to_string()
     };
-    return Err(CapabilityError::Pdf { reason: details });
+    bail!("{details}");
   }
 
   let png_path = format!("{output_path}-{page}.png");
   if !file_exists(&png_path).await {
-    return Err(CapabilityError::Pdf {
-      reason: format!("Page {page} of '{pdf}' does not exist"),
-    });
+    bail!("Page {page} of '{pdf}' does not exist");
   }
 
   return Ok(optimize_image(&png_path).await);
 }
 
-async fn output_dir() -> CapabilityErrorResult<String> {
-  let data_home = xdg::data_home().map_err(|e| CapabilityError::Pdf {
-    reason: format!("Cannot determine the fenrir data directory: {e}"),
-  })?;
+async fn output_dir() -> Result<String> {
+  let data_home =
+    xdg::data_home().context("Cannot determine the fenrir data directory")?;
   let dir = data_home.join("pdf_images").to_string_lossy().to_string();
-  create_directory_all(&dir)
-    .await
-    .map_err(|e| CapabilityError::Pdf {
-      reason: format!("Cannot create directory '{dir}': {e}"),
-    })?;
+  create_directory_all(&dir).await?;
   return Ok(dir);
 }
 
@@ -109,12 +88,10 @@ fn image_prefix(pdf: &str) -> String {
   return format!("{stem}_{timestamp}");
 }
 
-async fn pdf_page_count(pdf: &str) -> CapabilityErrorResult<u32> {
-  let output = process::run("pdfinfo", &[pdf]).await.map_err(|e| {
-    CapabilityError::Pdf {
-      reason: format!("Failed to invoke pdfinfo for '{pdf}': {e}"),
-    }
-  })?;
+async fn pdf_page_count(pdf: &str) -> Result<u32> {
+  let output = process::run("pdfinfo", &[pdf])
+    .await
+    .context(format!("Failed to run pdfinfo for '{pdf}'"))?;
   if !output.exit_code.is_success() {
     let stderr = output.stderr.trim();
     let details = if stderr.is_empty() {
@@ -122,36 +99,26 @@ async fn pdf_page_count(pdf: &str) -> CapabilityErrorResult<u32> {
     } else {
       stderr.to_string()
     };
-    return Err(CapabilityError::Pdf { reason: details });
+    bail!("{details}");
   }
   for line in output.stdout.lines() {
     if let Some(value) = line.strip_prefix("Pages:") {
-      let pages =
-        value
-          .trim()
-          .parse::<u32>()
-          .map_err(|_| CapabilityError::Pdf {
-            reason: format!(
-              "Could not parse page count from pdfinfo output for '{pdf}'"
-            ),
-          })?;
+      let pages = value.trim().parse::<u32>().context(format!(
+        "Could not parse page count from pdfinfo output for '{pdf}'"
+      ))?;
       if pages == 0 {
-        return Err(CapabilityError::Pdf {
-          reason: format!("pdfinfo reported 0 pages for '{pdf}'"),
-        });
+        bail!("pdfinfo reported 0 pages for '{pdf}'");
       }
       return Ok(pages);
     }
   }
-  return Err(CapabilityError::Pdf {
-    reason: format!("pdfinfo produced no page count for '{pdf}'"),
-  });
+  bail!("pdfinfo produced no page count for '{pdf}'");
 }
 
-async fn file_size_label(pdf: &str) -> CapabilityErrorResult<String> {
-  let bytes = get_file_size(pdf).await.map_err(|e| CapabilityError::Pdf {
-    reason: format!("Cannot determine the size of '{pdf}': {e}"),
-  })?;
+async fn file_size_label(pdf: &str) -> Result<String> {
+  let bytes = get_file_size(pdf)
+    .await
+    .context(format!("Cannot determine the size of '{pdf}'"))?;
   if bytes < 1024 * 1024 {
     return Ok(format!("{:.0} KB", bytes as f64 / 1024.0));
   }

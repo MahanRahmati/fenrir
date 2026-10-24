@@ -1,11 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use chrono::Local;
 use tokio::time;
 
-use crate::capability::errors::*;
 use crate::files::operations::{
   copy_file, create_directory_all, get_file_size, get_modified_time, read_dir,
   remove_file,
@@ -33,7 +32,7 @@ const STABILITY_INTERVAL: Duration = Duration::from_millis(300);
 pub async fn screenshot(
   path: Option<String>,
   delay: Option<u64>,
-) -> CapabilityErrorResult<String> {
+) -> Result<String> {
   if let Some(delay) = delay {
     time::sleep(Duration::from_secs(delay)).await;
   }
@@ -42,12 +41,9 @@ pub async fn screenshot(
   let snapshot = existing_pngs(&dirs).await;
   let call_start = SystemTime::now();
 
-  let output =
-    process::run("dbus-send", SCREENSHOT_ARGS)
-      .await
-      .map_err(|e| CapabilityError::Screenshot {
-        reason: format!("Failed to invoke dbus-send: {e}"),
-      })?;
+  let output = process::run("dbus-send", SCREENSHOT_ARGS)
+    .await
+    .context("Failed to run dbus-send")?;
 
   if !output.exit_code.is_success() {
     let stderr = output.stderr.trim();
@@ -56,80 +52,63 @@ pub async fn screenshot(
     } else {
       stderr.to_string()
     };
-    return Err(CapabilityError::Screenshot { reason: details });
+    bail!("{details}");
   }
 
   let source = match wait_for_new_png(&dirs, &snapshot, call_start).await {
     Some(path) => path,
     None => {
-      return Err(CapabilityError::Screenshot {
-        reason: format!(
-          "Screenshot was taken but no new image file appeared in {dirs:?}"
-        ),
-      });
+      bail!("Screenshot was taken but no new image file appeared in {dirs:?}");
     }
   };
 
   let destination = match path {
     Some(path) => path,
-    None => default_destination().map_err(|e| CapabilityError::Screenshot {
-      reason: format!("Cannot determine save location: {e}"),
-    })?,
+    None => default_destination().context("Cannot determine save location")?,
   };
-  let destination = resolve_destination(destination).await.map_err(|e| {
-    CapabilityError::Screenshot {
-      reason: format!("Cannot determine save location: {e}"),
-    }
-  })?;
+  let destination = resolve_destination(destination)
+    .await
+    .context("Cannot determine save location")?;
 
   if let Some(parent) = Path::new(&destination).parent()
     && let Some(parent_str) = parent.as_os_str().to_str()
   {
-    create_directory_all(parent_str).await.map_err(|e| {
-      CapabilityError::Screenshot {
-        reason: format!(
-          "Cannot create parent directories for '{destination}': {e}"
-        ),
-      }
-    })?;
+    create_directory_all(parent_str).await.context(format!(
+      "Cannot create parent directories for '{destination}'"
+    ))?;
   }
 
   copy_file(&source.to_string_lossy(), &destination)
     .await
-    .map_err(|e| CapabilityError::Screenshot {
-      reason: format!(
-        "Cannot copy '{}' to '{destination}': {e}",
-        source.display()
-      ),
-    })?;
+    .context(format!(
+      "Cannot copy '{}' to '{destination}'",
+      source.display()
+    ))?;
 
   let source_size = get_file_size(&source.to_string_lossy()).await;
   let dest_size = get_file_size(&destination).await;
   if let (Ok(source_size), Ok(dest_size)) = (source_size, dest_size)
     && source_size != dest_size
   {
-    return Err(CapabilityError::Screenshot {
-      reason: format!(
-        "Copy of '{}' to '{destination}' is incomplete ({dest_size} of {source_size} bytes). The original was left in place.",
-        source.display()
-      ),
-    });
+    bail!(
+      "Copy of '{}' to '{destination}' is incomplete ({dest_size} of {source_size} bytes). The original was left in place.",
+      source.display()
+    );
   }
 
   let destination = optimize_image(&destination).await;
 
-  remove_file(&source.to_string_lossy()).await.map_err(|e| {
-      CapabilityError::Screenshot {
-        reason: format!(
-          "Screenshot saved to '{destination}' but the original could not be removed: {e}"
-        ),
-      }
-    })?;
+  remove_file(&source.to_string_lossy())
+    .await
+    .context(format!(
+      "Screenshot saved to '{destination}' but the original '{}' could not be removed",
+      source.display()
+    ))?;
 
   return Ok(destination);
 }
 
-async fn resolve_destination(destination: String) -> Result<String, String> {
+async fn resolve_destination(destination: String) -> Result<String> {
   let path = Path::new(&destination);
   if path.is_dir()
     || destination.ends_with(std::path::MAIN_SEPARATOR)
@@ -138,7 +117,7 @@ async fn resolve_destination(destination: String) -> Result<String, String> {
     let dir = destination.trim_end_matches(std::path::MAIN_SEPARATOR);
     create_directory_all(dir)
       .await
-      .map_err(|e| format!("Cannot create directory '{dir}': {e}"))?;
+      .context(format!("Cannot create directory '{dir}'"))?;
     return Ok(
       Path::new(dir)
         .join(timestamped_name("screenshot"))
