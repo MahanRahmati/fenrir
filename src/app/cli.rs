@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::sync::Arc;
 
+use anyhow::Result;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::agent_manager::AgentManager;
-use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
 use crate::input::confirm_with;
 use crate::input::read_from_stdin;
@@ -113,8 +113,8 @@ impl EventSink for CliSink {
     return confirm_with(&format!("{message} (y/N): "));
   }
 
-  async fn read_input(&mut self) -> RuntimeResult<Option<String>> {
-    return read_from_stdin().map_err(|e| RuntimeError::Input(e.to_string()));
+  async fn read_input(&mut self) -> Result<Option<String>> {
+    return read_from_stdin();
   }
 
   async fn poll_events(&mut self) {}
@@ -132,7 +132,7 @@ impl EventSink for CliSink {
     &mut self,
     sessions: Vec<Session>,
     current: Option<Uuid>,
-  ) -> RuntimeResult<Option<Uuid>> {
+  ) -> Result<Option<Uuid>> {
     let session_id = handle_sessions(sessions, current)?;
     return Ok(session_id);
   }
@@ -149,7 +149,7 @@ impl EventSink for CliSink {
     &mut self,
     personas: Vec<Persona>,
     current: String,
-  ) -> RuntimeResult<Option<String>> {
+  ) -> Result<Option<String>> {
     let persona_name = handle_personas(personas, &current)?;
     return Ok(persona_name);
   }
@@ -162,7 +162,7 @@ impl EventSink for CliSink {
     &mut self,
     models: Vec<Model>,
     current: Option<Model>,
-  ) -> RuntimeResult<Option<Model>> {
+  ) -> Result<Option<Model>> {
     let model = handle_models(models, current)?;
     return Ok(model);
   }
@@ -175,7 +175,7 @@ impl EventSink for CliSink {
 }
 
 impl App {
-  pub async fn run(app: &Arc<Mutex<App>>) -> RuntimeResult<String> {
+  pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
     let mut sink = CliSink {
       stdout: std::io::stdout(),
       reasoning_open: false,
@@ -194,7 +194,7 @@ fn print_indexed_list(lines: &[String]) {
 fn handle_sessions(
   sessions: Vec<Session>,
   current: Option<Uuid>,
-) -> RuntimeResult<Option<Uuid>> {
+) -> Result<Option<Uuid>> {
   if sessions.is_empty() {
     println!("No sessions found.");
     return Ok(None);
@@ -225,7 +225,7 @@ fn handle_sessions(
 fn handle_personas(
   personas: Vec<Persona>,
   current: &str,
-) -> RuntimeResult<Option<String>> {
+) -> Result<Option<String>> {
   let lines: Vec<String> = personas
     .iter()
     .map(|p| {
@@ -245,7 +245,7 @@ fn handle_personas(
 fn handle_models(
   models: Vec<Model>,
   current: Option<Model>,
-) -> RuntimeResult<Option<Model>> {
+) -> Result<Option<Model>> {
   if models.is_empty() {
     println!("No models found.");
     return Ok(None);
@@ -268,11 +268,9 @@ fn handle_models(
   return Ok(Some(models[index].clone()));
 }
 
-fn read_index(count: usize, name: &str) -> RuntimeResult<Option<usize>> {
-  let input = match read_from_stdin() {
-    Ok(Some(input)) => input,
-    Ok(None) => return Ok(None),
-    Err(e) => return Err(RuntimeError::Input(e.to_string())),
+fn read_index(count: usize, name: &str) -> Result<Option<usize>> {
+  let Some(input) = read_from_stdin()? else {
+    return Ok(None);
   };
   let index = match input.trim().parse::<usize>() {
     Ok(index) => index,

@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use anyhow::{Context, Result, bail};
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::app::AppEvent;
-use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::config::Config;
 use crate::hook_manager::HookManager;
 use crate::hook_manager::hook::{
@@ -72,10 +72,10 @@ impl Agent {
   pub async fn run_subagent(
     context: &mut ToolContext<'_>,
     task: &str,
-  ) -> RuntimeResult<String> {
+  ) -> Result<String> {
     let task = task.trim();
     if task.is_empty() {
-      return Err(RuntimeError::Subagent("Task cannot be empty".to_string()));
+      bail!("Task cannot be empty");
     }
     context.tx.send(AppEvent::Subagents { delta: 1 }).await.ok();
     let result = Self::run_subagent_inner(context, task).await;
@@ -90,13 +90,12 @@ impl Agent {
   async fn run_subagent_inner(
     context: &mut ToolContext<'_>,
     task: &str,
-  ) -> RuntimeResult<String> {
+  ) -> Result<String> {
     let parent_session_id = context.session_id;
     let session_id = context
       .session_manager
       .create_session(Some(parent_session_id))
-      .await
-      .map_err(|e| RuntimeError::Session(e.to_string()))?;
+      .await?;
     vlog!(
       "Started subagent session {session_id} (parent {parent_session_id}): {task}"
     );
@@ -105,13 +104,11 @@ impl Agent {
     context
       .session_manager
       .add_system_message_to_session(session_id, prompt.get_system_prompt())
-      .await
-      .map_err(|e| RuntimeError::Session(e.to_string()))?;
+      .await?;
     context
       .session_manager
       .add_user_message_to_session(session_id, task)
-      .await
-      .map_err(|e| RuntimeError::Session(e.to_string()))?;
+      .await?;
 
     let mut agent = Self::new(
       context.config.clone(),
@@ -150,7 +147,7 @@ impl Agent {
     session_manager: &mut SessionManager,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
-  ) -> RuntimeResult<String> {
+  ) -> Result<String> {
     if cancel.is_cancelled() {
       return Ok(String::new());
     }
@@ -174,7 +171,7 @@ impl Agent {
     &mut self,
     session_manager: &mut SessionManager,
     cancel: &CancellationToken,
-  ) -> RuntimeResult<()> {
+  ) -> Result<()> {
     let session = match session_manager.get_current_session() {
       Some(session) if session.title.is_none() => session.clone(),
       _ => return Ok(()),
@@ -216,8 +213,7 @@ impl Agent {
 
     session_manager
       .update_session_title(session.id, &title)
-      .await
-      .map_err(|e| RuntimeError::Session(e.to_string()))?;
+      .await?;
     return Ok(());
   }
 
@@ -227,13 +223,13 @@ impl Agent {
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
     is_subagent: bool,
-  ) -> RuntimeResult<String> {
+  ) -> Result<String> {
     let mut assistant_content = String::new();
 
     loop {
       let session = session_manager
         .get_current_session()
-        .ok_or(RuntimeError::Session("No active session".into()))?;
+        .context("No active session")?;
       let session_id = session.id;
 
       let messages = &session.build_chat_context();
@@ -241,11 +237,8 @@ impl Agent {
         .tool_manager
         .get_tools_specs(self.persona_manager.current().allowed_tools());
 
-      let mut stream = self
-        .provider_manager
-        .chat_stream(messages, &tools)
-        .await
-        .map_err(|e| RuntimeError::Provider(e.to_string()))?;
+      let mut stream =
+        self.provider_manager.chat_stream(messages, &tools).await?;
 
       let mut content_buffer = String::new();
       let mut reasoning_buffer = String::new();
@@ -260,7 +253,7 @@ impl Agent {
             break;
           }
           chunk_result = stream.next() => match chunk_result {
-            Some(result) => result.map_err(|e| RuntimeError::Provider(e.to_string()))?,
+            Some(result) => result?,
             None => break,
           },
         };
@@ -325,14 +318,12 @@ impl Agent {
       if self.config.general.show_reasoning && !reasoning_buffer.is_empty() {
         session_manager
           .add_reasoning_message_to_session(session_id, &reasoning_buffer)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+          .await?;
       }
       if !content_buffer.is_empty() || tool_call_builders.is_empty() {
         session_manager
           .add_assistant_message_to_session(session_id, &content_buffer)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+          .await?;
       }
 
       if tool_call_builders.is_empty() {
@@ -362,7 +353,7 @@ impl Agent {
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
     is_subagent: bool,
-  ) -> RuntimeResult<String> {
+  ) -> Result<String> {
     let mut assistant_content = String::new();
 
     loop {
@@ -371,7 +362,7 @@ impl Agent {
       }
       let session = session_manager
         .get_current_session()
-        .ok_or(RuntimeError::Session("No active session".into()))?;
+        .context("No active session")?;
       let session_id = session.id;
 
       let messages = &session.build_chat_context();
@@ -379,11 +370,7 @@ impl Agent {
         .tool_manager
         .get_tools_specs(self.persona_manager.current().allowed_tools());
 
-      let response = self
-        .provider_manager
-        .chat(messages, &tools)
-        .await
-        .map_err(|e| RuntimeError::Provider(e.to_string()))?;
+      let response = self.provider_manager.chat(messages, &tools).await?;
 
       if let Some(usage) = response.usage {
         self.last_usage = Some(usage);
@@ -419,14 +406,12 @@ impl Agent {
       {
         session_manager
           .add_reasoning_message_to_session(session_id, reasoning)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+          .await?;
       }
       if let Some(ref content) = response.content {
         session_manager
           .add_assistant_message_to_session(session_id, content)
-          .await
-          .map_err(|e| RuntimeError::Session(e.to_string()))?;
+          .await?;
       }
 
       if response.tool_calls.is_empty() {
@@ -456,7 +441,7 @@ impl Agent {
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
     is_subagent: bool,
-  ) -> RuntimeResult<()> {
+  ) -> Result<()> {
     for tool_call in tool_calls {
       if cancel.is_cancelled() {
         break;
@@ -474,8 +459,7 @@ impl Agent {
           &tool_call.name,
           &tool_call.arguments,
         )
-        .await
-        .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        .await?;
 
       let params = parse_tool_params(&tool_call.arguments);
       let tool_is_subagent = tool_call.name == SUBAGENT_TOOL_NAME;
@@ -511,8 +495,7 @@ impl Agent {
         HookDecision::Deny { reason, error } => {
           session_manager
             .add_tool_result_to_session(session_id, &tool_call.id, &reason)
-            .await
-            .map_err(|e| RuntimeError::Session(e.to_string()))?;
+            .await?;
           if self.config.general.show_tools && !is_subagent {
             tx.send(AppEvent::ToolResult {
               result: reason,
@@ -576,8 +559,7 @@ impl Agent {
 
       session_manager
         .add_tool_result_to_session(session_id, &tool_call.id, &result_str)
-        .await
-        .map_err(|e| RuntimeError::Session(e.to_string()))?;
+        .await?;
 
       if self.config.general.show_tools
         && !is_subagent

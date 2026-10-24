@@ -1,3 +1,5 @@
+use anyhow::{Result, bail};
+
 mod compaction;
 mod default;
 mod persona;
@@ -40,12 +42,11 @@ impl PersonaManager {
     .collect();
   }
 
-  pub fn set(&mut self, name: &str) -> Result<(), String> {
+  pub fn set(&mut self, name: &str) -> Result<()> {
     let personas = self.list();
-    let persona = personas
-      .iter()
-      .find(|p| p.name() == name)
-      .ok_or_else(|| format!("Unknown persona: {name}"))?;
+    let Some(persona) = personas.iter().find(|p| p.name() == name) else {
+      bail!("Unknown persona: {name}");
+    };
     self.current_persona = persona.clone();
     return Ok(());
   }

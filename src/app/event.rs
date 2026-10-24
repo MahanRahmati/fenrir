@@ -1,9 +1,9 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::app::errors::RuntimeResult;
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
 use crate::provider_manager::Model;
@@ -54,7 +54,7 @@ pub enum AppEvent {
 pub trait EventSink {
   fn on_event(&mut self, event: AppEvent);
   fn confirm(&mut self, message: &str) -> bool;
-  async fn read_input(&mut self) -> RuntimeResult<Option<String>>;
+  async fn read_input(&mut self) -> Result<Option<String>>;
   async fn poll_events(&mut self);
   fn on_exit(&mut self);
   fn on_help(&mut self, commands: Vec<SlashCommand>);
@@ -62,19 +62,19 @@ pub trait EventSink {
     &mut self,
     sessions: Vec<Session>,
     current: Option<Uuid>,
-  ) -> RuntimeResult<Option<Uuid>>;
+  ) -> Result<Option<Uuid>>;
   fn on_session_selection(&mut self, session: Session);
   fn on_personas(
     &mut self,
     personas: Vec<Persona>,
     current: String,
-  ) -> RuntimeResult<Option<String>>;
+  ) -> Result<Option<String>>;
   fn on_persona_selection(&mut self, name: String);
   fn on_models(
     &mut self,
     models: Vec<Model>,
     current: Option<Model>,
-  ) -> RuntimeResult<Option<Model>>;
+  ) -> Result<Option<Model>>;
   fn on_model_selection(&mut self, model: Model);
   fn set_cancel_token(&mut self, token: CancellationToken);
 }

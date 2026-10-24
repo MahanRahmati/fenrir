@@ -1,6 +1,5 @@
 mod cli;
 pub mod command;
-pub mod errors;
 mod event;
 mod tui;
 

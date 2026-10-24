@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::{Context, Result};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::agent_manager::AgentManager;
@@ -7,14 +8,13 @@ use crate::app::App;
 use crate::app::AppEvent;
 use crate::app::EventSink;
 use crate::app::command::{AppCommand, AppCommandResult};
-use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::vlog;
 
 impl AgentManager {
   pub async fn harness_loop(
     app: &Arc<Mutex<App>>,
     sink: &mut impl EventSink,
-  ) -> RuntimeResult<String> {
+  ) -> Result<String> {
     loop {
       {
         let app_locked = app.lock().await;
@@ -185,14 +185,13 @@ impl AgentManager {
             .session_manager
             .get_current_session()
             .map(|s| s.id)
-            .ok_or(RuntimeError::Session("No active session".into()))?;
+            .context("No active session")?;
 
           app_locked
             .agent_manager
             .session_manager
             .add_user_message_to_session(session_id, &input)
-            .await
-            .map_err(|e| RuntimeError::Session(e.to_string()))?;
+            .await?;
         }
 
         sink.on_event(AppEvent::UserMessage {

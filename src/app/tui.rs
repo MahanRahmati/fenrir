@@ -3,6 +3,7 @@ use std::io::stdout;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::{Context, Result};
 use ratatui::crossterm;
 use ratatui::crossterm::event::{
   self, DisableMouseCapture, EnableMouseCapture, Event,
@@ -14,7 +15,6 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::agent_manager::AgentManager;
-use crate::app::errors::{RuntimeError, RuntimeResult};
 use crate::app::{App, AppEvent, EventSink};
 use crate::persona_manager::Persona;
 use crate::provider_manager::Model;
@@ -116,7 +116,7 @@ impl EventSink for TuiSink {
     return self.tui.get_confirmation();
   }
 
-  async fn read_input(&mut self) -> RuntimeResult<Option<String>> {
+  async fn read_input(&mut self) -> Result<Option<String>> {
     loop {
       if let Some(text) = self.get_message_from_queue() {
         return Ok(Some(text));
@@ -155,7 +155,7 @@ impl EventSink for TuiSink {
     &mut self,
     sessions: Vec<Session>,
     current: Option<Uuid>,
-  ) -> RuntimeResult<Option<Uuid>> {
+  ) -> Result<Option<Uuid>> {
     self.tui.open_sessions_popup(sessions, current);
     self.redraw();
     while self.tui.sessions_popup_open() {
@@ -178,7 +178,7 @@ impl EventSink for TuiSink {
     &mut self,
     personas: Vec<Persona>,
     current: String,
-  ) -> RuntimeResult<Option<String>> {
+  ) -> Result<Option<String>> {
     let current_persona = personas.iter().find(|p| p.name() == current);
     self.tui.open_personas_popup(&personas, current_persona);
     self.redraw();
@@ -203,7 +203,7 @@ impl EventSink for TuiSink {
     &mut self,
     models: Vec<Model>,
     current: Option<Model>,
-  ) -> RuntimeResult<Option<Model>> {
+  ) -> Result<Option<Model>> {
     self.tui.open_models_popup(models, current);
     self.redraw();
     while self.tui.models_popup_open() {
@@ -227,21 +227,21 @@ impl EventSink for TuiSink {
 }
 
 impl App {
-  pub async fn run_tui(app: &Arc<Mutex<App>>) -> RuntimeResult<String> {
+  pub async fn run_tui(app: &Arc<Mutex<App>>) -> Result<String> {
     let mut sink = TuiSink {
       tui: Tui::new(),
       terminal: ratatui::init(),
       message_queue: VecDeque::new(),
     };
     crossterm::execute!(stdout(), EnableMouseCapture)
-      .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+      .context("Failed to enable mouse capture")?;
     crossterm::execute!(
       stdout(),
       PushKeyboardEnhancementFlags(
         KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
       )
     )
-    .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+    .context("Failed to enable keyboard enhancement flags")?;
 
     let persona_name = {
       let app_locked = app.lock().await;
@@ -266,14 +266,14 @@ impl App {
     sink
       .terminal
       .draw(|frame| sink.tui.draw(frame))
-      .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+      .context("Failed to draw the TUI")?;
 
     let result = AgentManager::harness_loop(app, &mut sink).await;
 
     crossterm::execute!(stdout(), DisableMouseCapture)
-      .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+      .context("Failed to disable mouse capture")?;
     crossterm::execute!(stdout(), PopKeyboardEnhancementFlags)
-      .map_err(|e| RuntimeError::Tui(e.to_string()))?;
+      .context("Failed to restore keyboard enhancement flags")?;
     ratatui::restore();
     return result;
   }
