@@ -7,19 +7,20 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::agent_manager::AgentManager;
-use crate::app::{App, AppEvent, EventSink};
+use fenrir_core::agent_manager::AgentManager;
+use fenrir_core::app::{App, AppEvent, EventSink};
+use fenrir_core::persona_manager::Persona;
+use fenrir_core::provider_manager::Model;
+use fenrir_core::session_manager::session::Session;
+use fenrir_core::slash_commands::SlashCommand;
+use fenrir_core::tool_manager::SUBAGENT_TOOL_NAME;
+use fenrir_core::tool_manager::task_summary;
+use fenrir_core::tool_manager::tool::parse_tool_params;
+use fenrir_core::utils::datetime::format_timestamp;
+use fenrir_core::utils::usage::format_usage;
+
 use crate::input::confirm_with;
 use crate::input::read_from_stdin;
-use crate::persona_manager::Persona;
-use crate::provider_manager::Model;
-use crate::session_manager::session::Session;
-use crate::slash_commands::SlashCommand;
-use crate::tool_manager::SUBAGENT_TOOL_NAME;
-use crate::tool_manager::task_summary;
-use crate::tool_manager::tool::parse_tool_params;
-use crate::utils::datetime::format_timestamp;
-use crate::utils::usage::format_usage;
 
 struct CliSink {
   stdout: std::io::Stdout,
@@ -174,15 +175,13 @@ impl EventSink for CliSink {
   fn set_cancel_token(&mut self, _token: CancellationToken) {}
 }
 
-impl App {
-  pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
-    let mut sink = CliSink {
-      stdout: std::io::stdout(),
-      reasoning_open: false,
-      reasoning_ends_with_newline: false,
-    };
-    return AgentManager::harness_loop(app, &mut sink).await;
-  }
+pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
+  let mut sink = CliSink {
+    stdout: std::io::stdout(),
+    reasoning_open: false,
+    reasoning_ends_with_newline: false,
+  };
+  return AgentManager::harness_loop(app, &mut sink).await;
 }
 
 fn print_indexed_list(lines: &[String]) {

@@ -3,8 +3,8 @@ use ratatui::crossterm::event::KeyCode;
 use ratatui::text::Line;
 use ratatui::widgets::ListItem;
 
-use crate::provider_manager::Model;
 use crate::tui::popup_list::PopupList;
+use fenrir_core::provider_manager::Model;
 
 pub struct ModelsPopup {
   list: PopupList,

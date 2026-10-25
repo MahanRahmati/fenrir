@@ -6,8 +6,8 @@ use ratatui::widgets::{
   Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
 
-use crate::slash_commands::SlashCommand;
 use crate::tui::popup::{Popup, constrained_height, constrained_width};
+use fenrir_core::slash_commands::SlashCommand;
 
 const MAX_VISIBLE_ITEMS: u16 = 10;
 

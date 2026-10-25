@@ -1,36 +1,19 @@
-mod agent_manager;
 mod app;
-mod capability;
 mod cli;
-mod config;
-mod database;
-mod files;
-mod hook_manager;
 mod input;
-mod logging;
-mod mentions;
-mod network;
-mod persona_manager;
-mod prompt;
-mod provider_manager;
-mod session_manager;
-mod shutdown;
-mod slash_commands;
-mod tool_manager;
 mod tui;
-mod utils;
-mod workflow_manager;
 
 use std::sync::Arc;
 
 use clap::Parser;
+use fenrir_core::app::App;
+use fenrir_core::config::Config;
+use fenrir_core::database::DB;
+use fenrir_core::logging::{set_print_enabled, setup_logging};
 use tokio::sync::Mutex;
 
-use crate::app::App;
 use crate::cli::{Cli, Commands};
-use crate::config::Config;
-use crate::database::DB;
-use crate::logging::{set_print_enabled, setup_logging};
+use crate::input::confirm_with;
 
 #[tokio::main]
 async fn main() {
@@ -64,7 +47,16 @@ async fn main() {
 
   let result = match cli.command {
     Some(Commands::ResetConfig { yes }) => {
-      match Config::reset_to_defaults(yes).await {
+      if !yes
+        && !confirm_with(
+          "Are you sure you want to reset the configuration to default \
+           values? (y/n) ",
+        )
+      {
+        println!("Reset cancelled.");
+        return;
+      }
+      match Config::reset_to_defaults().await {
         Ok(_) => {
           println!("Configuration has been reset to default values.");
           return;
@@ -75,10 +67,10 @@ async fn main() {
         }
       }
     }
-    Some(Commands::Tui) => App::run_tui(&app).await,
+    Some(Commands::Tui) => crate::app::run_tui(&app).await,
     None => {
       set_print_enabled(true);
-      App::run(&app).await
+      crate::app::run(&app).await
     }
   };
 

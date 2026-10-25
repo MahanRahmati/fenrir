@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "fenrir-core"]
+resolver = "3"
+
 [package]
 name = "fenrir"
 version = "0.1.0"
@@ -5,33 +9,19 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
+fenrir-core = { path = "fenrir-core" }
 clap = { version = "4.6.7", features = ["derive"] }
-toml = "1.1.7"
-xdg = "3.0.0"
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-chrono = { version = "0.4.45", features = ["serde"] }
-reqwest = { version = "0.13.5", features = ["json", "stream"] }
 anyhow = "1.0.104"
-tokio = { version = "1.53.2", features = [
-  "fs",
-  "macros",
-  "process",
-  "rt-multi-thread",
-  "signal",
-  "sync",
-  "time",
-] }
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread", "sync"] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
-futures = "0.3.34"
-bytes = "1.12.1"
-turso = "0.8.2"
 async-trait = "0.1.92"
 ratatui = { version = "0.30.2", features = ["unstable-rendered-line-info"] }
 tui-widget-list = "0.15.3"
-base64 = "0.23.1"
 uuid = { version = "1.27.0", features = ["v7"] }
 
-[lints.clippy]
+[workspace.lints.clippy]
 needless_return = "allow"
 uninlined_format_args = "deny"
+
+[lints]
+workspace = true

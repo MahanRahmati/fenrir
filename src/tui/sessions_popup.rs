@@ -4,9 +4,9 @@ use ratatui::text::Line;
 use ratatui::widgets::ListItem;
 use uuid::Uuid;
 
-use crate::session_manager::session::Session;
 use crate::tui::popup_list::PopupList;
-use crate::utils::datetime::format_timestamp;
+use fenrir_core::session_manager::session::Session;
+use fenrir_core::utils::datetime::format_timestamp;
 
 pub struct SessionsPopup {
   list: PopupList,

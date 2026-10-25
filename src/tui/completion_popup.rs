@@ -7,11 +7,11 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem, ListState};
 
-use crate::files::operations::is_dir;
-use crate::slash_commands::SlashCommand;
 use crate::tui::input::Input;
 use crate::tui::popup::Popup;
-use crate::utils::process;
+use fenrir_core::files::operations::is_dir;
+use fenrir_core::slash_commands::SlashCommand;
+use fenrir_core::utils::process;
 
 const MAX_RESULTS: usize = 10;
 const MAX_POPUP_HEIGHT: usize = 10;

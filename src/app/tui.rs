@@ -14,12 +14,13 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::agent_manager::AgentManager;
-use crate::app::{App, AppEvent, EventSink};
-use crate::persona_manager::Persona;
-use crate::provider_manager::Model;
-use crate::session_manager::session::Session;
-use crate::slash_commands::SlashCommand;
+use fenrir_core::agent_manager::AgentManager;
+use fenrir_core::app::{App, AppEvent, EventSink};
+use fenrir_core::persona_manager::Persona;
+use fenrir_core::provider_manager::Model;
+use fenrir_core::session_manager::session::Session;
+use fenrir_core::slash_commands::SlashCommand;
+
 use crate::tui::Tui;
 
 struct TuiSink {
@@ -226,55 +227,53 @@ impl EventSink for TuiSink {
   }
 }
 
-impl App {
-  pub async fn run_tui(app: &Arc<Mutex<App>>) -> Result<String> {
-    let mut sink = TuiSink {
-      tui: Tui::new(),
-      terminal: ratatui::init(),
-      message_queue: VecDeque::new(),
-    };
-    crossterm::execute!(stdout(), EnableMouseCapture)
-      .context("Failed to enable mouse capture")?;
-    crossterm::execute!(
-      stdout(),
-      PushKeyboardEnhancementFlags(
-        KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-      )
+pub async fn run_tui(app: &Arc<Mutex<App>>) -> Result<String> {
+  let mut sink = TuiSink {
+    tui: Tui::new(),
+    terminal: ratatui::init(),
+    message_queue: VecDeque::new(),
+  };
+  crossterm::execute!(stdout(), EnableMouseCapture)
+    .context("Failed to enable mouse capture")?;
+  crossterm::execute!(
+    stdout(),
+    PushKeyboardEnhancementFlags(
+      KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
     )
-    .context("Failed to enable keyboard enhancement flags")?;
+  )
+  .context("Failed to enable keyboard enhancement flags")?;
 
-    let persona_name = {
-      let app_locked = app.lock().await;
-      app_locked
-        .agent_manager
-        .current
-        .persona_manager
-        .current()
-        .name()
-        .to_string()
-    };
-    sink.tui.set_persona(&persona_name);
+  let persona_name = {
+    let app_locked = app.lock().await;
+    app_locked
+      .agent_manager
+      .current
+      .persona_manager
+      .current()
+      .name()
+      .to_string()
+  };
+  sink.tui.set_persona(&persona_name);
 
-    let model = {
-      let app_locked = app.lock().await;
-      app_locked.agent_manager.provider_manager.active_model()
-    };
-    if let Some(model) = model {
-      sink.tui.set_model(&model.label());
-    }
-
-    sink
-      .terminal
-      .draw(|frame| sink.tui.draw(frame))
-      .context("Failed to draw the TUI")?;
-
-    let result = AgentManager::harness_loop(app, &mut sink).await;
-
-    crossterm::execute!(stdout(), DisableMouseCapture)
-      .context("Failed to disable mouse capture")?;
-    crossterm::execute!(stdout(), PopKeyboardEnhancementFlags)
-      .context("Failed to restore keyboard enhancement flags")?;
-    ratatui::restore();
-    return result;
+  let model = {
+    let app_locked = app.lock().await;
+    app_locked.agent_manager.provider_manager.active_model()
+  };
+  if let Some(model) = model {
+    sink.tui.set_model(&model.label());
   }
+
+  sink
+    .terminal
+    .draw(|frame| sink.tui.draw(frame))
+    .context("Failed to draw the TUI")?;
+
+  let result = AgentManager::harness_loop(app, &mut sink).await;
+
+  crossterm::execute!(stdout(), DisableMouseCapture)
+    .context("Failed to disable mouse capture")?;
+  crossterm::execute!(stdout(), PopKeyboardEnhancementFlags)
+    .context("Failed to restore keyboard enhancement flags")?;
+  ratatui::restore();
+  return result;
 }

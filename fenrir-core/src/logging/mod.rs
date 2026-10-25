@@ -40,7 +40,7 @@ static LOG_FILE: Mutex<Option<File>> = Mutex::new(None);
 /// # Arguments
 ///
 /// * `value` - Whether to enable verbose output
-pub(crate) fn set_verbose(value: bool) {
+pub fn set_verbose(value: bool) {
   VERBOSE.store(value, Ordering::Relaxed);
 }
 
@@ -49,7 +49,7 @@ pub(crate) fn set_verbose(value: bool) {
 /// # Returns
 ///
 /// `true` if verbose output is enabled, `false` otherwise.
-pub(crate) fn is_verbose() -> bool {
+pub fn is_verbose() -> bool {
   return VERBOSE.load(Ordering::Relaxed);
 }
 
@@ -61,7 +61,7 @@ pub(crate) fn is_verbose() -> bool {
 /// # Arguments
 ///
 /// * `value` - Whether to enable stdout printing
-pub(crate) fn set_print_enabled(value: bool) {
+pub fn set_print_enabled(value: bool) {
   PRINT_ENABLED.store(value, Ordering::Relaxed);
 }
 
@@ -70,7 +70,7 @@ pub(crate) fn set_print_enabled(value: bool) {
 /// # Returns
 ///
 /// `true` if printing to stdout is enabled, `false` otherwise.
-pub(crate) fn is_print_enabled() -> bool {
+pub fn is_print_enabled() -> bool {
   return PRINT_ENABLED.load(Ordering::Relaxed);
 }
 
@@ -145,7 +145,7 @@ pub fn setup_logging(value: bool) -> Result<(), String> {
 /// # Arguments
 ///
 /// * `msg` - The message to be written.
-pub(crate) fn write_to_log_file(msg: String) {
+pub fn write_to_log_file(msg: String) {
   if let Ok(mut guard) = LOG_FILE.lock()
     && let Some(file) = &mut *guard
   {

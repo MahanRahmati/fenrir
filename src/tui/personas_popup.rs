@@ -3,8 +3,8 @@ use ratatui::crossterm::event::KeyCode;
 use ratatui::text::Line;
 use ratatui::widgets::ListItem;
 
-use crate::persona_manager::Persona;
 use crate::tui::popup_list::PopupList;
+use fenrir_core::persona_manager::Persona;
 
 pub struct PersonasPopup {
   list: PopupList,

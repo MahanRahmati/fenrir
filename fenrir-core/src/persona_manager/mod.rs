@@ -59,3 +59,9 @@ impl PersonaManager {
     self.current_persona = DEFAULT_PERSONA;
   }
 }
+
+impl Default for PersonaManager {
+  fn default() -> Self {
+    return Self::new();
+  }
+}

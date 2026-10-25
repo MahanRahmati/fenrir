@@ -4,9 +4,9 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use ratatui::widgets::Widget;
 
-use crate::tool_manager::task_summary;
 use crate::tui::container::Container;
 use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
+use fenrir_core::tool_manager::task_summary;
 
 const TEXT_EXTRA_PADDING: u16 = 1;
 

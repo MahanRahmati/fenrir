@@ -23,11 +23,6 @@ use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::persona_manager::Persona;
-use crate::provider_manager::ChatUsage;
-use crate::provider_manager::Model;
-use crate::session_manager::session::Session;
-use crate::slash_commands::SlashCommand;
 use crate::tui::completion_popup::CompletionPopup;
 use crate::tui::confirm_popup::ConfirmPopup;
 use crate::tui::help_popup::HelpPopup;
@@ -38,6 +33,11 @@ use crate::tui::personas_popup::PersonasPopup;
 use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
+use fenrir_core::persona_manager::Persona;
+use fenrir_core::provider_manager::ChatUsage;
+use fenrir_core::provider_manager::Model;
+use fenrir_core::session_manager::session::Session;
+use fenrir_core::slash_commands::SlashCommand;
 
 const TOP_PADDING: u16 = 1;
 const HORIZONTAL_PADDING: u16 = 2;

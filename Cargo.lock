@@ -1007,19 +1007,31 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "clap",
+ "fenrir-core",
+ "ratatui",
+ "tokio",
+ "tokio-util",
+ "tui-widget-list",
+ "uuid",
+]
+
+[[package]]
+name = "fenrir-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
  "base64 0.23.1",
  "bytes",
  "chrono",
- "clap",
  "futures",
- "ratatui",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
  "tokio-util",
  "toml",
- "tui-widget-list",
  "turso",
  "uuid",
  "xdg",

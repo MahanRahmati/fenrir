@@ -165,16 +165,7 @@ impl Config {
     return Config::load_from_path(config_path).await;
   }
 
-  pub async fn reset_to_defaults(yes: bool) -> Result<()> {
-    if !yes {
-      let should_reset = crate::input::confirm_with(
-        "Are you sure you want to reset the configuration to default values? (y/n) ",
-      );
-      if !should_reset {
-        println!("Reset cancelled.");
-        return Ok(());
-      }
-    }
+  pub async fn reset_to_defaults() -> Result<()> {
     let default_config = Config::default();
     let config_path = xdg::place_config_file(DEFAULT_CONFIG_NAME)?;
     return Config::save_to_path(default_config, config_path).await;

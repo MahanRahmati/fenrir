@@ -4,10 +4,10 @@ use ratatui::layout::Rect;
 use ratatui::widgets::{Scrollbar, ScrollbarOrientation};
 use tui_widget_list::{ListBuilder, ListState, ListView, ScrollDirection};
 
-use crate::session_manager::session::Session;
-use crate::tool_manager::SUBAGENT_TOOL_NAME;
-use crate::tool_manager::tool::parse_tool_params;
 use crate::tui::message_item::{MessageItem, Role};
+use fenrir_core::session_manager::session::Session;
+use fenrir_core::tool_manager::SUBAGENT_TOOL_NAME;
+use fenrir_core::tool_manager::tool::parse_tool_params;
 
 pub struct MessagesList {
   messages: Vec<MessageItem>,

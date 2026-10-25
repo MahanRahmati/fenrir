@@ -3,9 +3,9 @@ use std::env;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::provider_manager::ChatUsage;
 use crate::tui::spinner::Spinner;
-use crate::utils::usage::format_usage;
+use fenrir_core::provider_manager::ChatUsage;
+use fenrir_core::utils::usage::format_usage;
 
 enum State {
   Idle,
