@@ -502,3 +502,9 @@ impl Tui {
     self.running = false;
   }
 }
+
+impl Default for Tui {
+  fn default() -> Self {
+    return Self::new();
+  }
+}
