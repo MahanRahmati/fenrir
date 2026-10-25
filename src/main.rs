@@ -1,11 +1,9 @@
-mod app;
 mod cli;
-mod input;
-mod tui;
 
 use std::sync::Arc;
 
 use clap::Parser;
+use fenrir_cli::input::confirm_with;
 use fenrir_core::app::App;
 use fenrir_core::config::Config;
 use fenrir_core::database::DB;
@@ -13,7 +11,6 @@ use fenrir_core::logging::{set_print_enabled, setup_logging};
 use tokio::sync::Mutex;
 
 use crate::cli::{Cli, Commands};
-use crate::input::confirm_with;
 
 #[tokio::main]
 async fn main() {
@@ -67,10 +64,10 @@ async fn main() {
         }
       }
     }
-    Some(Commands::Tui) => crate::app::run_tui(&app).await,
+    Some(Commands::Tui) => fenrir_tui::run(&app).await,
     None => {
       set_print_enabled(true);
-      crate::app::run(&app).await
+      fenrir_cli::run(&app).await
     }
   };
 

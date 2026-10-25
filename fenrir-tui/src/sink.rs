@@ -227,7 +227,7 @@ impl EventSink for TuiSink {
   }
 }
 
-pub async fn run_tui(app: &Arc<Mutex<App>>) -> Result<String> {
+pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
   let mut sink = TuiSink {
     tui: Tui::new(),
     terminal: ratatui::init(),
