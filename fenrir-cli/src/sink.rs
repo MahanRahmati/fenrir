@@ -52,7 +52,11 @@ impl EventSink for CliSink {
         }
         self.stdout.flush().ok();
       }
-      AppEvent::ToolCall { name, arguments } => {
+      AppEvent::ToolCall {
+        id: _,
+        name,
+        arguments,
+      } => {
         if self.reasoning_open {
           self.reasoning_open = false;
           if !self.reasoning_ends_with_newline {
@@ -72,7 +76,11 @@ impl EventSink for CliSink {
         println!("[subagent] {}", task_summary(&task));
         self.stdout.flush().ok();
       }
-      AppEvent::ToolResult { result, error } => {
+      AppEvent::ToolResult {
+        id: _,
+        result,
+        error,
+      } => {
         if error {
           println!("[error] {result}");
         } else {

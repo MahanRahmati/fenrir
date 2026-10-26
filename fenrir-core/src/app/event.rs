@@ -19,10 +19,12 @@ pub enum AppEvent {
     reasoning: bool,
   },
   ToolCall {
+    id: String,
     name: String,
     arguments: String,
   },
   ToolResult {
+    id: String,
     result: String,
     error: bool,
   },

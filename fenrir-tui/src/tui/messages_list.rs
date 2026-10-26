@@ -90,8 +90,8 @@ impl MessagesList {
     self.select_last();
   }
 
-  pub fn add_tool_call(&mut self, name: String, arguments: String) {
-    let message = MessageItem::new_tool_call(name, arguments);
+  pub fn add_tool_call(&mut self, id: String, name: String, arguments: String) {
+    let message = MessageItem::new_tool_call(id, name, arguments);
     self.messages.push(message);
     self.select_last();
   }
@@ -102,11 +102,14 @@ impl MessagesList {
     self.select_last();
   }
 
-  pub fn add_tool_result(&mut self, result: String, error: bool) {
-    if let Some(last) = self.messages.last_mut()
-      && last.is_pending_tool()
+  pub fn add_tool_result(&mut self, id: String, result: String, error: bool) {
+    if let Some(call) = self
+      .messages
+      .iter_mut()
+      .rev()
+      .find(|message| message.is_pending_tool_call(&id))
     {
-      last.push_tool_result(result, error);
+      call.push_tool_result(result, error);
     } else {
       let message =
         MessageItem::new(result, Role::ToolResult).with_error(error);
@@ -159,12 +162,16 @@ impl MessagesList {
           continue;
         }
         if msg.role == "assistant" && msg.tool_calls.is_some() {
-          let (name, arguments) = msg
+          let (id, name, arguments) = msg
             .tool_calls
             .as_ref()
             .and_then(|calls| calls.first())
             .map(|call| {
-              (call.function.name.clone(), call.function.arguments.clone())
+              (
+                call.id.clone(),
+                call.function.name.clone(),
+                call.function.arguments.clone(),
+              )
             })
             .unwrap_or_default();
           if name == SUBAGENT_TOOL_NAME {
@@ -186,7 +193,7 @@ impl MessagesList {
             i += 1;
             continue;
           }
-          let mut item = MessageItem::new_tool_call(name, arguments);
+          let mut item = MessageItem::new_tool_call(id, name, arguments);
           if let Some(call_id) = &msg.tool_call_id {
             for (j, result_msg) in messages.iter().enumerate().skip(i + 1) {
               if result_msg.role == "tool"

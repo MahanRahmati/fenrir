@@ -57,6 +57,7 @@ pub struct MessageItem {
   text: String,
   role: Role,
   error: bool,
+  tool_call_id: Option<String>,
   tool_name: Option<String>,
   tool_arguments: Option<String>,
   tool_result: Option<(String, bool)>,
@@ -68,6 +69,7 @@ impl MessageItem {
       text,
       role,
       error: false,
+      tool_call_id: None,
       tool_name: None,
       tool_arguments: None,
       tool_result: None,
@@ -79,11 +81,12 @@ impl MessageItem {
     return self;
   }
 
-  pub fn new_tool_call(name: String, arguments: String) -> Self {
+  pub fn new_tool_call(id: String, name: String, arguments: String) -> Self {
     return Self {
       text: String::new(),
       role: Role::ToolCall,
       error: false,
+      tool_call_id: Some(id),
       tool_name: Some(name),
       tool_arguments: Some(arguments),
       tool_result: None,
@@ -101,8 +104,10 @@ impl MessageItem {
     self.tool_result = Some((result, error));
   }
 
-  pub fn is_pending_tool(&self) -> bool {
-    return self.role == Role::ToolCall && self.tool_result.is_none();
+  pub fn is_pending_tool_call(&self, id: &str) -> bool {
+    return self.role == Role::ToolCall
+      && self.tool_call_id.as_deref() == Some(id)
+      && self.tool_result.is_none();
   }
 
   pub fn to_list_item(&self, width: u16) -> (ListMessage, u16) {

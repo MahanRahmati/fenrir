@@ -378,16 +378,16 @@ impl Tui {
     self.messages_list.add_message(message);
   }
 
-  pub fn add_tool_call(&mut self, name: String, arguments: String) {
-    self.messages_list.add_tool_call(name, arguments);
+  pub fn add_tool_call(&mut self, id: String, name: String, arguments: String) {
+    self.messages_list.add_tool_call(id, name, arguments);
   }
 
   pub fn add_subagent_launch(&mut self, task: String) {
     self.messages_list.add_subagent_launch(task);
   }
 
-  pub fn add_tool_result(&mut self, result: String, error: bool) {
-    self.messages_list.add_tool_result(result, error);
+  pub fn add_tool_result(&mut self, id: String, result: String, error: bool) {
+    self.messages_list.add_tool_result(id, result, error);
   }
 
   pub fn add_summary(&mut self, summary: String) {

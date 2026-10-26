@@ -466,6 +466,7 @@ impl Agent {
 
       if self.config.general.show_tools && !is_subagent && !tool_is_subagent {
         tx.send(AppEvent::ToolCall {
+          id: tool_call.id.clone(),
           name: tool_call.name.clone(),
           arguments: tool_call.arguments.clone(),
         })
@@ -498,6 +499,7 @@ impl Agent {
             .await?;
           if self.config.general.show_tools && !is_subagent {
             tx.send(AppEvent::ToolResult {
+              id: tool_call.id.clone(),
               result: reason,
               error,
             })
@@ -566,6 +568,7 @@ impl Agent {
         && (!tool_is_subagent || error)
       {
         tx.send(AppEvent::ToolResult {
+          id: tool_call.id.clone(),
           result: result_str,
           error,
         })

@@ -70,14 +70,18 @@ impl EventSink for TuiSink {
         }
         self.tui.append_to_last_message(&text);
       }
-      AppEvent::ToolCall { name, arguments } => {
-        self.tui.add_tool_call(name, arguments);
+      AppEvent::ToolCall {
+        id,
+        name,
+        arguments,
+      } => {
+        self.tui.add_tool_call(id, name, arguments);
       }
       AppEvent::SubagentStarted { task } => {
         self.tui.add_subagent_launch(task);
       }
-      AppEvent::ToolResult { result, error } => {
-        self.tui.add_tool_result(result, error);
+      AppEvent::ToolResult { id, result, error } => {
+        self.tui.add_tool_result(id, result, error);
       }
       AppEvent::Processing { processing } => {
         self.tui.set_processing(processing);
