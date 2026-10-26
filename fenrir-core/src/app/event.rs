@@ -23,6 +23,11 @@ pub enum AppEvent {
     name: String,
     arguments: String,
   },
+  ToolApprovalRequest {
+    tool_call_id: String,
+    tool_name: String,
+    message: String,
+  },
   ToolResult {
     id: String,
     result: String,

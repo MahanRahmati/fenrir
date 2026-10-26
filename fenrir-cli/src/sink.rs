@@ -66,16 +66,7 @@ impl EventSink for CliSink {
         println!("[tool] {name}({arguments})");
         self.stdout.flush().ok();
       }
-      AppEvent::SubagentStarted { task } => {
-        if self.reasoning_open {
-          self.reasoning_open = false;
-          if !self.reasoning_ends_with_newline {
-            println!();
-          }
-        }
-        println!("[subagent] {}", task_summary(&task));
-        self.stdout.flush().ok();
-      }
+      AppEvent::ToolApprovalRequest { .. } => {}
       AppEvent::ToolResult {
         id: _,
         result,
@@ -102,6 +93,16 @@ impl EventSink for CliSink {
         if let Some(usage) = usage {
           println!("\n[usage] {usage}",);
         }
+      }
+      AppEvent::SubagentStarted { task } => {
+        if self.reasoning_open {
+          self.reasoning_open = false;
+          if !self.reasoning_ends_with_newline {
+            println!();
+          }
+        }
+        println!("[subagent] {}", task_summary(&task));
+        self.stdout.flush().ok();
       }
       AppEvent::Subagents { .. } => {}
       AppEvent::Compacted { summary } => {

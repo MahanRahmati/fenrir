@@ -76,6 +76,16 @@ impl PreToolHook for ToolApprovalHook {
       message
     };
 
+    context
+      .tx
+      .send(AppEvent::ToolApprovalRequest {
+        tool_call_id: tool_call.id.to_string(),
+        tool_name: tool_call.name.to_string(),
+        message: message.clone(),
+      })
+      .await
+      .ok();
+
     let (reply_tx, reply_rx) = oneshot::channel();
     context
       .tx

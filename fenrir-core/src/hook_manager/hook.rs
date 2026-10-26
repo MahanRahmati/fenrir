@@ -15,6 +15,7 @@ pub enum HookDecision {
 }
 
 pub struct ToolCallContext<'a> {
+  pub id: &'a str,
   pub name: &'a str,
   pub params: &'a ToolParams,
   pub is_read_only: Option<bool>,

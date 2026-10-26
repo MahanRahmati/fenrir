@@ -482,6 +482,7 @@ impl Agent {
         tx,
       };
       let tool_call_context = ToolCallContext {
+        id: &tool_call.id,
         name: &tool_call.name,
         params: &params,
         is_read_only: self.tool_manager.is_read_only(&tool_call.name),
