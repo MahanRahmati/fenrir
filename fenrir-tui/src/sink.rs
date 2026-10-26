@@ -57,7 +57,7 @@ impl TuiSink {
 
 #[async_trait::async_trait]
 impl EventSink for TuiSink {
-  fn on_event(&mut self, event: AppEvent) {
+  async fn on_event(&mut self, event: AppEvent) {
     match event {
       AppEvent::UserMessage { content } => {
         self.tui.add_message(content);
@@ -103,14 +103,14 @@ impl EventSink for TuiSink {
         self.tui.add_message(format!("Error: {message}"));
       }
       AppEvent::ToolConfirmation { message, reply } => {
-        let confirmed = self.confirm(&message);
+        let confirmed = self.confirm(&message).await;
         reply.send(confirmed).ok();
       }
     }
     self.redraw();
   }
 
-  fn confirm(&mut self, message: &str) -> bool {
+  async fn confirm(&mut self, message: &str) -> bool {
     self.tui.open_confirm_popup(message.to_string());
     self.redraw();
     while self.tui.confirm_popup_open() {

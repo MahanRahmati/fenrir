@@ -30,9 +30,11 @@ impl AgentManager {
           Ok(Some(command)) => Some(command),
           Ok(None) => None,
           Err(e) => {
-            sink.on_event(AppEvent::Error {
-              message: e.to_string(),
-            });
+            sink
+              .on_event(AppEvent::Error {
+                message: e.to_string(),
+              })
+              .await;
             continue;
           }
         };
@@ -76,19 +78,23 @@ impl AgentManager {
             }
 
             if command_done && cancel.is_cancelled() {
-              sink.on_event(AppEvent::Processing { processing: false });
+              sink
+                .on_event(AppEvent::Processing { processing: false })
+                .await;
               continue;
             }
 
             match command_result {
               Some(Ok(AppCommandResult::Compacted { summary })) => {
-                sink.on_event(AppEvent::Compacted { summary });
+                sink.on_event(AppEvent::Compacted { summary }).await;
               }
               Some(Ok(_)) => {}
               Some(Err(e)) => {
-                sink.on_event(AppEvent::Error {
-                  message: e.to_string(),
-                });
+                sink
+                  .on_event(AppEvent::Error {
+                    message: e.to_string(),
+                  })
+                  .await;
               }
               None => {}
             }
@@ -166,7 +172,7 @@ impl AgentManager {
               sink.on_model_selection(model);
             }
             AppCommandResult::Compacted { summary } => {
-              sink.on_event(AppEvent::Compacted { summary });
+              sink.on_event(AppEvent::Compacted { summary }).await;
             }
             AppCommandResult::Noop => {}
           }
@@ -194,10 +200,14 @@ impl AgentManager {
             .await?;
         }
 
-        sink.on_event(AppEvent::UserMessage {
-          content: input.clone(),
-        });
-        sink.on_event(AppEvent::Processing { processing: true });
+        sink
+          .on_event(AppEvent::UserMessage {
+            content: input.clone(),
+          })
+          .await;
+        sink
+          .on_event(AppEvent::Processing { processing: true })
+          .await;
 
         let cancel = {
           let app_locked = app.lock().await;
@@ -230,11 +240,11 @@ impl AgentManager {
             biased;
             event = rx.recv() => match event {
               Some(AppEvent::ToolConfirmation { message, reply }) => {
-                let confirmed = sink.confirm(&message);
+                let confirmed = sink.confirm(&message).await;
                 reply.send(confirmed).ok();
               }
               Some(e) => {
-                sink.on_event(e);
+                sink.on_event(e).await;
               }
               None => {
                 chat_done = true;
@@ -242,7 +252,7 @@ impl AgentManager {
             },
             _ = sink.poll_events() => {}
             _ = cancel.cancelled() => {
-              sink.on_event(AppEvent::Processing { processing: false });
+              sink.on_event(AppEvent::Processing { processing: false }).await;
               while let Some(event) = rx.recv().await {
                 if let AppEvent::ToolConfirmation { reply, .. } = event {
                   reply.send(false).ok();
@@ -264,7 +274,7 @@ impl AgentManager {
                 let app_locked = app.lock().await;
                 app_locked.agent_manager.last_usage()
               };
-              sink.on_event(AppEvent::Usage { usage: last_usage });
+              sink.on_event(AppEvent::Usage { usage: last_usage }).await;
               let (compact_tx, mut compact_rx) = mpsc::channel(1);
               let app_compact_clone = app.clone();
               let cancel_clone = cancel.clone();
@@ -283,13 +293,14 @@ impl AgentManager {
                     compact_done = true;
                     match result {
                       Some(Ok(summary)) if !summary.is_empty() => {
-                        sink.on_event(AppEvent::Compacted { summary });
+                        sink.on_event(AppEvent::Compacted { summary }).await;
                       }
                       Some(Err(e))
                         if !cancel.is_cancelled() => {
                           sink.on_event(AppEvent::Error {
                             message: e.to_string(),
-                          });
+                          })
+                          .await;
                         }
                       _ => {}
                     }
@@ -302,14 +313,18 @@ impl AgentManager {
               }
             }
             Ok(Err(e)) => {
-              sink.on_event(AppEvent::Error {
-                message: e.to_string(),
-              });
+              sink
+                .on_event(AppEvent::Error {
+                  message: e.to_string(),
+                })
+                .await;
             }
             Err(e) => {
-              sink.on_event(AppEvent::Error {
-                message: e.to_string(),
-              });
+              sink
+                .on_event(AppEvent::Error {
+                  message: e.to_string(),
+                })
+                .await;
             }
           }
         }

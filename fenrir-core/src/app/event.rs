@@ -59,8 +59,8 @@ pub enum AppEvent {
 
 #[async_trait]
 pub trait EventSink {
-  fn on_event(&mut self, event: AppEvent);
-  fn confirm(&mut self, message: &str) -> bool;
+  async fn on_event(&mut self, event: AppEvent);
+  async fn confirm(&mut self, message: &str) -> bool;
   async fn read_input(&mut self) -> Result<Option<String>>;
   async fn poll_events(&mut self);
   fn on_exit(&mut self);

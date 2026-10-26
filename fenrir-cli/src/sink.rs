@@ -30,7 +30,7 @@ struct CliSink {
 
 #[async_trait::async_trait]
 impl EventSink for CliSink {
-  fn on_event(&mut self, event: AppEvent) {
+  async fn on_event(&mut self, event: AppEvent) {
     match event {
       AppEvent::UserMessage { .. } => {}
       AppEvent::Token { text, reasoning } => {
@@ -119,7 +119,7 @@ impl EventSink for CliSink {
     }
   }
 
-  fn confirm(&mut self, message: &str) -> bool {
+  async fn confirm(&mut self, message: &str) -> bool {
     return confirm_with(&format!("{message} (y/N): "));
   }
 
