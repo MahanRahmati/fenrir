@@ -2,12 +2,16 @@ mod queries;
 mod repository;
 pub mod session;
 mod summary;
+mod tool_approval;
 
 use anyhow::Result;
 use uuid::Uuid;
 
 pub use crate::session_manager::session::Message;
 pub use crate::session_manager::summary::Summary;
+pub use crate::session_manager::tool_approval::{
+  ToolApprovalRequest, ToolApprovalStatus,
+};
 
 use crate::database::DB;
 use crate::session_manager::repository::SessionRepository;
@@ -180,6 +184,33 @@ impl SessionManager {
 
   pub async fn list_sessions(&self) -> Result<Vec<Session>> {
     return self.repository.list().await;
+  }
+
+  pub async fn add_pending_tool_approval(
+    &self,
+    request: &ToolApprovalRequest,
+  ) -> Result<()> {
+    self.repository.insert_tool_approval(request).await?;
+    return Ok(());
+  }
+
+  pub async fn resolve_tool_approval(
+    &self,
+    tool_call_id: &str,
+    status: ToolApprovalStatus,
+  ) -> Result<()> {
+    self
+      .repository
+      .resolve_tool_approval(tool_call_id, status)
+      .await?;
+    return Ok(());
+  }
+
+  pub async fn tool_approval_status(
+    &self,
+    tool_call_id: &str,
+  ) -> Result<Option<ToolApprovalStatus>> {
+    return self.repository.tool_approval_status(tool_call_id).await;
   }
 
   fn get_session_by_id(&self, id: Uuid) -> Option<&Session> {

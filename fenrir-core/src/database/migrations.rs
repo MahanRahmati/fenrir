@@ -21,5 +21,9 @@ pub fn list_migrations() -> Vec<Migration> {
       name: "003_create_summaries".into(),
       sql: include_str!("../migrations/003_create_summaries.sql").into(),
     },
+    Migration {
+      name: "004_create_tool_approvals".into(),
+      sql: include_str!("../migrations/004_create_tool_approvals.sql").into(),
+    },
   ];
 }

@@ -1,10 +1,14 @@
 use anyhow::{Context, Result, bail};
+use chrono::Utc;
 use uuid::Uuid;
 
 use crate::database::DB;
 use crate::session_manager::queries::*;
 use crate::session_manager::session::{Message, Session};
 use crate::session_manager::summary::Summary;
+use crate::session_manager::tool_approval::{
+  ToolApprovalRequest, ToolApprovalStatus,
+};
 
 pub struct SessionRepository {
   db: DB,
@@ -316,5 +320,73 @@ impl SessionRepository {
     }
 
     return Ok(result);
+  }
+
+  pub async fn insert_tool_approval(
+    &self,
+    request: &ToolApprovalRequest,
+  ) -> Result<()> {
+    self
+      .db
+      .execute(
+        INSERT_TOOL_APPROVAL,
+        (
+          request.tool_call_id.as_str(),
+          request.session_id.to_string(),
+          request.tool_name.as_str(),
+          request.message.as_str(),
+          request.created_at,
+        ),
+      )
+      .await
+      .context(format!(
+        "Failed to insert tool approval '{}'",
+        request.tool_call_id
+      ))?;
+    return Ok(());
+  }
+
+  pub async fn resolve_tool_approval(
+    &self,
+    tool_call_id: &str,
+    status: ToolApprovalStatus,
+  ) -> Result<()> {
+    let decided_at = Utc::now().timestamp();
+    self
+      .db
+      .execute(
+        RESOLVE_TOOL_APPROVAL,
+        (status.as_str(), decided_at, tool_call_id),
+      )
+      .await
+      .context(format!("Failed to resolve tool approval '{tool_call_id}'"))?;
+    return Ok(());
+  }
+
+  pub async fn tool_approval_status(
+    &self,
+    tool_call_id: &str,
+  ) -> Result<Option<ToolApprovalStatus>> {
+    let mut rows = self
+      .db
+      .query(LOAD_TOOL_APPROVAL_STATUS, (tool_call_id,))
+      .await
+      .context(format!("Failed to load tool approval '{tool_call_id}'"))?;
+    let Some(row) = rows.next().await? else {
+      return Ok(None);
+    };
+    let status: String = match row.get(0) {
+      Ok(v) => v,
+      Err(_) => {
+        bail!("Invalid tool approval data");
+      }
+    };
+    let status = match ToolApprovalStatus::parse(&status) {
+      Some(v) => v,
+      None => {
+        bail!("Invalid tool approval data");
+      }
+    };
+    return Ok(Some(status));
   }
 }
