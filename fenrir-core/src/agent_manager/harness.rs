@@ -239,10 +239,6 @@ impl AgentManager {
           tokio::select! {
             biased;
             event = rx.recv() => match event {
-              Some(AppEvent::ToolConfirmation { message, reply }) => {
-                let confirmed = sink.confirm(&message).await;
-                reply.send(confirmed).ok();
-              }
               Some(e) => {
                 sink.on_event(e).await;
               }

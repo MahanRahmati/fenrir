@@ -119,10 +119,6 @@ impl EventSink for CliSink {
     }
   }
 
-  async fn confirm(&mut self, message: &str) -> bool {
-    return confirm_with(&format!("{message} (y/N): "));
-  }
-
   async fn read_input(&mut self) -> Result<Option<String>> {
     return read_from_stdin();
   }

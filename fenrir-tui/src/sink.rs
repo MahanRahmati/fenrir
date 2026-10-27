@@ -103,23 +103,19 @@ impl EventSink for TuiSink {
         self.tui.add_message(format!("Error: {message}"));
       }
       AppEvent::ToolConfirmation { message, reply } => {
-        let confirmed = self.confirm(&message).await;
+        self.tui.open_confirm_popup(message.to_string());
+        self.redraw();
+        while self.tui.confirm_popup_open() {
+          if let Ok(Event::Key(key)) = event::read() {
+            self.tui.handle_confirm_event(key.code);
+          }
+          self.redraw();
+        }
+        let confirmed = self.tui.get_confirmation();
         reply.send(confirmed).ok();
       }
     }
     self.redraw();
-  }
-
-  async fn confirm(&mut self, message: &str) -> bool {
-    self.tui.open_confirm_popup(message.to_string());
-    self.redraw();
-    while self.tui.confirm_popup_open() {
-      if let Ok(Event::Key(key)) = event::read() {
-        self.tui.handle_confirm_event(key.code);
-      }
-      self.redraw();
-    }
-    return self.tui.get_confirmation();
   }
 
   async fn read_input(&mut self) -> Result<Option<String>> {
