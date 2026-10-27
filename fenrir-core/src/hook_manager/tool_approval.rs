@@ -1,10 +1,11 @@
-use tokio::sync::oneshot;
+use tokio::sync::broadcast;
 
 use crate::agent_manager::agent::AgentKind;
 use crate::app::AppEvent;
 use crate::hook_manager::hook::{
   HookContext, HookDecision, PreToolHook, ToolCallContext,
 };
+use crate::session_manager::{ToolApprovalRequest, ToolApprovalStatus};
 use crate::utils::path::is_path_within;
 use crate::vlog;
 
@@ -76,27 +77,74 @@ impl PreToolHook for ToolApprovalHook {
       message
     };
 
-    context
+    let tool_call_id = tool_call.id.to_string();
+    let mut decisions = context.approvals.subscribe();
+
+    let request = ToolApprovalRequest::new(
+      tool_call_id.clone(),
+      context.session_id,
+      tool_call.name.to_string(),
+      message.clone(),
+    );
+    if let Err(e) = context
+      .session_manager
+      .add_pending_tool_approval(&request)
+      .await
+    {
+      vlog!("Failed to record tool approval '{tool_call_id}': {e}");
+    }
+
+    let requested = context
       .tx
       .send(AppEvent::ToolApprovalRequest {
-        tool_call_id: tool_call.id.to_string(),
+        tool_call_id: tool_call_id.clone(),
         tool_name: tool_call.name.to_string(),
-        message: message.clone(),
+        message,
       })
       .await
-      .ok();
+      .is_ok();
 
-    let (reply_tx, reply_rx) = oneshot::channel();
+    let status = if !requested {
+      ToolApprovalStatus::Denied
+    } else {
+      let decision = loop {
+        tokio::select! {
+          biased;
+          _ = context.cancel.cancelled() => break None,
+          decision = decisions.recv() => match decision {
+            Ok(decision) if decision.tool_call_id == tool_call_id => {
+              break Some(decision.status);
+            }
+            Ok(_) => {}
+            Err(broadcast::error::RecvError::Lagged(_)) => {}
+            Err(broadcast::error::RecvError::Closed) => break None,
+          },
+        }
+      };
+      match decision {
+        Some(ToolApprovalStatus::Approved) => ToolApprovalStatus::Approved,
+        _ => ToolApprovalStatus::Denied,
+      }
+    };
+
+    if let Err(e) = context
+      .session_manager
+      .resolve_tool_approval(&tool_call_id, status.clone())
+      .await
+    {
+      vlog!("Failed to resolve tool approval '{tool_call_id}': {e}");
+    }
+
     context
       .tx
-      .send(AppEvent::ToolConfirmation {
-        message,
-        reply: reply_tx,
+      .send(AppEvent::ToolApprovalResult {
+        tool_call_id: tool_call_id.clone(),
+        status: status.clone(),
       })
       .await
       .ok();
 
-    if matches!(reply_rx.await, Ok(true)) {
+    if status == ToolApprovalStatus::Approved {
       return HookDecision::Allow;
     }
 

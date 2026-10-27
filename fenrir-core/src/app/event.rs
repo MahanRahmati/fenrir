@@ -1,12 +1,12 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
 use crate::provider_manager::Model;
+use crate::session_manager::ToolApprovalStatus;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 
@@ -27,6 +27,10 @@ pub enum AppEvent {
     tool_call_id: String,
     tool_name: String,
     message: String,
+  },
+  ToolApprovalResult {
+    tool_call_id: String,
+    status: ToolApprovalStatus,
   },
   ToolResult {
     id: String,
@@ -50,10 +54,6 @@ pub enum AppEvent {
   },
   Error {
     message: String,
-  },
-  ToolConfirmation {
-    message: String,
-    reply: oneshot::Sender<bool>,
   },
 }
 

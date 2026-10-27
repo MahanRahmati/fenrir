@@ -7,6 +7,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::app::AppEvent;
+use crate::app::ApprovalChannel;
 use crate::config::Config;
 use crate::persona_manager::Persona;
 use crate::provider_manager::ProviderManager;
@@ -19,6 +20,7 @@ pub struct ToolContext<'a> {
   pub persona: &'a Persona,
   pub provider_manager: &'a Arc<ProviderManager>,
   pub session_manager: &'a mut SessionManager,
+  pub approvals: &'a ApprovalChannel,
   pub tx: &'a Sender<AppEvent>,
   pub cancel: &'a CancellationToken,
   pub session_id: Uuid,

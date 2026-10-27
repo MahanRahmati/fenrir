@@ -15,9 +15,10 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use fenrir_core::agent_manager::AgentManager;
-use fenrir_core::app::{App, AppEvent, EventSink};
+use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink};
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
+use fenrir_core::session_manager::ToolApprovalStatus;
 use fenrir_core::session_manager::session::Session;
 use fenrir_core::slash_commands::SlashCommand;
 
@@ -27,6 +28,7 @@ struct TuiSink {
   tui: Tui,
   terminal: ratatui::DefaultTerminal,
   message_queue: VecDeque<String>,
+  approvals: ApprovalChannel,
 }
 
 impl TuiSink {
@@ -77,7 +79,30 @@ impl EventSink for TuiSink {
       } => {
         self.tui.add_tool_call(id, name, arguments);
       }
-      AppEvent::ToolApprovalRequest { .. } => {}
+      AppEvent::ToolApprovalRequest {
+        tool_call_id,
+        tool_name: _,
+        message,
+      } => {
+        self.tui.open_confirm_popup(message);
+        self.redraw();
+        while self.tui.confirm_popup_open() {
+          if let Ok(Event::Key(key)) = event::read() {
+            self.tui.handle_confirm_event(key.code);
+          }
+          self.redraw();
+        }
+        let status = if self.tui.get_confirmation() {
+          ToolApprovalStatus::Approved
+        } else {
+          ToolApprovalStatus::Denied
+        };
+        self.approvals.decide(&tool_call_id, status);
+      }
+      AppEvent::ToolApprovalResult {
+        tool_call_id: _,
+        status: _,
+      } => {}
       AppEvent::ToolResult { id, result, error } => {
         self.tui.add_tool_result(id, result, error);
       }
@@ -101,18 +126,6 @@ impl EventSink for TuiSink {
       }
       AppEvent::Error { message } => {
         self.tui.add_message(format!("Error: {message}"));
-      }
-      AppEvent::ToolConfirmation { message, reply } => {
-        self.tui.open_confirm_popup(message.to_string());
-        self.redraw();
-        while self.tui.confirm_popup_open() {
-          if let Ok(Event::Key(key)) = event::read() {
-            self.tui.handle_confirm_event(key.code);
-          }
-          self.redraw();
-        }
-        let confirmed = self.tui.get_confirmation();
-        reply.send(confirmed).ok();
       }
     }
     self.redraw();
@@ -229,10 +242,15 @@ impl EventSink for TuiSink {
 }
 
 pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
+  let approvals = {
+    let app_locked = app.lock().await;
+    app_locked.agent_manager.approvals.clone()
+  };
   let mut sink = TuiSink {
     tui: Tui::new(),
     terminal: ratatui::init(),
     message_queue: VecDeque::new(),
+    approvals,
   };
   crossterm::execute!(stdout(), EnableMouseCapture)
     .context("Failed to enable mouse capture")?;

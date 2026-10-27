@@ -29,7 +29,7 @@ impl ToolApprovalRequest {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolApprovalStatus {
   Pending,
   Approved,

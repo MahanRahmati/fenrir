@@ -8,6 +8,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::app::AppEvent;
+use crate::app::ApprovalChannel;
 use crate::config::Config;
 use crate::hook_manager::HookManager;
 use crate::hook_manager::hook::{
@@ -38,6 +39,7 @@ pub struct Agent {
   pub provider_manager: Arc<ProviderManager>,
   pub workflow_manager: WorkflowManager,
   pub hook_manager: HookManager,
+  pub approvals: ApprovalChannel,
   pub last_usage: Option<ChatUsage>,
   pub kind: AgentKind,
 }
@@ -47,6 +49,7 @@ impl Agent {
     config: Config,
     provider_manager: Arc<ProviderManager>,
     parent_session_id: Option<Uuid>,
+    approvals: ApprovalChannel,
   ) -> Self {
     let kind = match parent_session_id {
       Some(_) => AgentKind::Subagent,
@@ -64,6 +67,7 @@ impl Agent {
       provider_manager,
       workflow_manager,
       hook_manager,
+      approvals,
       last_usage: None,
       kind,
     };
@@ -114,6 +118,7 @@ impl Agent {
       context.config.clone(),
       context.provider_manager.clone(),
       Some(parent_session_id),
+      context.approvals.clone(),
     );
     agent.persona_manager.set_persona(context.persona.clone());
 
@@ -480,6 +485,9 @@ impl Agent {
         persona: self.persona_manager.current(),
         agent_kind: self.kind,
         tx,
+        session_manager: &*session_manager,
+        approvals: &self.approvals,
+        cancel,
       };
       let tool_call_context = ToolCallContext {
         id: &tool_call.id,
@@ -521,6 +529,7 @@ impl Agent {
         persona: self.persona_manager.current(),
         provider_manager: &self.provider_manager,
         session_manager: &mut *session_manager,
+        approvals: &self.approvals,
         tx,
         cancel,
         session_id,
@@ -545,6 +554,16 @@ impl Agent {
         name: &tool_call.name,
         arguments: &tool_call.arguments,
         error: &error,
+      };
+      let hook_context = HookContext {
+        session_id,
+        config: &self.config,
+        persona: self.persona_manager.current(),
+        agent_kind: self.kind,
+        tx,
+        session_manager: &*session_manager,
+        approvals: &self.approvals,
+        cancel,
       };
       let hook_failure = self
         .hook_manager

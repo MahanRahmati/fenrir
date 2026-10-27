@@ -1,6 +1,8 @@
+mod approval;
 pub mod command;
 mod event;
 
+pub use approval::{ApprovalChannel, ApprovalDecision};
 pub use event::{AppEvent, EventSink};
 
 use crate::agent_manager::AgentManager;

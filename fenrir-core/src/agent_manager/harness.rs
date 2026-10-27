@@ -249,12 +249,7 @@ impl AgentManager {
             _ = sink.poll_events() => {}
             _ = cancel.cancelled() => {
               sink.on_event(AppEvent::Processing { processing: false }).await;
-              while let Some(event) = rx.recv().await {
-                if let AppEvent::ToolConfirmation { reply, .. } = event {
-                  reply.send(false).ok();
-                }
-              }
-              continue;
+              break;
             }
           }
         }

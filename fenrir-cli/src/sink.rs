@@ -8,9 +8,10 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use fenrir_core::agent_manager::AgentManager;
-use fenrir_core::app::{App, AppEvent, EventSink};
+use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink};
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
+use fenrir_core::session_manager::ToolApprovalStatus;
 use fenrir_core::session_manager::session::Session;
 use fenrir_core::slash_commands::SlashCommand;
 use fenrir_core::tool_manager::SUBAGENT_TOOL_NAME;
@@ -26,6 +27,7 @@ struct CliSink {
   stdout: std::io::Stdout,
   reasoning_open: bool,
   reasoning_ends_with_newline: bool,
+  approvals: ApprovalChannel,
 }
 
 #[async_trait::async_trait]
@@ -66,7 +68,23 @@ impl EventSink for CliSink {
         println!("[tool] {name}({arguments})");
         self.stdout.flush().ok();
       }
-      AppEvent::ToolApprovalRequest { .. } => {}
+      AppEvent::ToolApprovalRequest {
+        tool_call_id,
+        tool_name: _,
+        message,
+      } => {
+        let confirmed = confirm_with(&format!("{message} (y/N): "));
+        let status = if confirmed {
+          ToolApprovalStatus::Approved
+        } else {
+          ToolApprovalStatus::Denied
+        };
+        self.approvals.decide(&tool_call_id, status);
+      }
+      AppEvent::ToolApprovalResult {
+        tool_call_id: _,
+        status: _,
+      } => {}
       AppEvent::ToolResult {
         id: _,
         result,
@@ -111,10 +129,6 @@ impl EventSink for CliSink {
       }
       AppEvent::Error { message } => {
         println!("\nError: {message}");
-      }
-      AppEvent::ToolConfirmation { message, reply } => {
-        let confirmed = confirm_with(&format!("{message} (y/N): "));
-        reply.send(confirmed).ok();
       }
     }
   }
@@ -181,10 +195,15 @@ impl EventSink for CliSink {
 }
 
 pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
+  let approvals = {
+    let app_locked = app.lock().await;
+    app_locked.agent_manager.approvals.clone()
+  };
   let mut sink = CliSink {
     stdout: std::io::stdout(),
     reasoning_open: false,
     reasoning_ends_with_newline: false,
+    approvals,
   };
   return AgentManager::harness_loop(app, &mut sink).await;
 }

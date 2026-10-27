@@ -11,6 +11,7 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
 use crate::app::AppEvent;
+use crate::app::ApprovalChannel;
 use crate::app::command::{AppCommand, AppCommandResult};
 use crate::config::Config;
 use crate::database::DB;
@@ -25,18 +26,26 @@ pub struct AgentManager {
   pub provider_manager: Arc<ProviderManager>,
   pub config: Config,
   pub current: Agent,
+  pub approvals: ApprovalChannel,
 }
 
 impl AgentManager {
   pub fn new(config: Config, db: DB) -> Self {
     let session_manager = SessionManager::new(db);
     let provider_manager = Arc::new(ProviderManager::new(config.clone()));
-    let current = Agent::new(config.clone(), provider_manager.clone(), None);
+    let approvals = ApprovalChannel::new();
+    let current = Agent::new(
+      config.clone(),
+      provider_manager.clone(),
+      None,
+      approvals.clone(),
+    );
     return AgentManager {
       session_manager,
       provider_manager,
       config,
       current,
+      approvals,
     };
   }
 
