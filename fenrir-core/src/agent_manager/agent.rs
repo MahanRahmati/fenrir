@@ -21,6 +21,7 @@ use crate::provider_manager::{ChatUsage, ProviderManager, ToolCall};
 use crate::session_manager::SessionManager;
 use crate::tool_manager::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::ToolManager;
+use crate::tool_manager::runs_subagent;
 use crate::tool_manager::tool::{ToolContext, parse_tool_params};
 use crate::vlog;
 use crate::workflow_manager::WorkflowManager;
@@ -504,9 +505,10 @@ impl Agent {
       }
 
       let params = parse_tool_params(&tool_call.arguments);
-      let tool_is_subagent = tool_call.name == SUBAGENT_TOOL_NAME;
+      let runs_subagent = runs_subagent(&tool_call.name);
+      let is_subagent_tool = tool_call.name == SUBAGENT_TOOL_NAME;
 
-      if self.config.general.show_tools && !is_subagent && !tool_is_subagent {
+      if self.config.general.show_tools && !is_subagent && !is_subagent_tool {
         tx.send(AppEvent::ToolCall {
           id: tool_call.id.clone(),
           name: tool_call.name.clone(),
@@ -556,7 +558,7 @@ impl Agent {
         }
       }
 
-      if self.config.general.show_tools && !is_subagent && tool_is_subagent {
+      if self.config.general.show_tools && !is_subagent && is_subagent_tool {
         let task = params.get("task").cloned().unwrap_or_default();
         tx.send(AppEvent::SubagentStarted { task }).await.ok();
       }
@@ -572,7 +574,7 @@ impl Agent {
           cancel,
           session_id,
         };
-        if tool_is_subagent {
+        if runs_subagent {
           Some(
             self
               .tool_manager
@@ -643,7 +645,7 @@ impl Agent {
 
       if self.config.general.show_tools
         && !is_subagent
-        && (!tool_is_subagent || error)
+        && (!is_subagent_tool || error)
       {
         tx.send(AppEvent::ToolResult {
           id: tool_call.id.clone(),

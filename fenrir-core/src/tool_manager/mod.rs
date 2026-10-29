@@ -6,6 +6,7 @@ mod ddg;
 pub mod edit_file;
 mod find_file;
 mod find_text;
+mod goal_check;
 mod helpers;
 mod list_directories;
 mod music;
@@ -34,6 +35,8 @@ use crate::tool_manager::ddg::DdgTool;
 use crate::tool_manager::edit_file::EditFileTool;
 use crate::tool_manager::find_file::FindFileTool;
 use crate::tool_manager::find_text::FindTextTool;
+use crate::tool_manager::goal_check::GOAL_CHECK_TOOL_NAME;
+use crate::tool_manager::goal_check::GoalCheckTool;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
 use crate::tool_manager::music::MusicTool;
 use crate::tool_manager::notify::NotifyTool;
@@ -105,8 +108,12 @@ impl ToolManager {
     if config.permissions.ddg {
       tools.push(Box::new(DdgTool::new()));
     }
-    if matches!(agent_kind, AgentKind::Primary) && config.subagent.enabled {
+    let is_primary_agent = matches!(agent_kind, AgentKind::Primary);
+    if is_primary_agent && config.subagent.enabled {
       tools.push(Box::new(SubagentTool));
+    }
+    if is_primary_agent && config.permissions.goal_check {
+      tools.push(Box::new(GoalCheckTool));
     }
     return Self {
       tools,
@@ -131,15 +138,20 @@ impl ToolManager {
   ) -> Result<String> {
     for tool in &self.tools {
       if tool.name() == name {
-        if name == SUBAGENT_TOOL_NAME {
-          return Box::pin(SubagentTool::run(params, context)).await;
-        }
-        match time::timeout(self.tool_timeout, tool.execute(params)).await {
-          Ok(result) => return result,
-          Err(_) => {
-            bail!("Tool '{name}' timed out");
+        return match name {
+          SUBAGENT_TOOL_NAME => {
+            Box::pin(SubagentTool::run(params, context)).await
           }
-        }
+          GOAL_CHECK_TOOL_NAME => {
+            Box::pin(GoalCheckTool::run(params, context)).await
+          }
+          _ => {
+            match time::timeout(self.tool_timeout, tool.execute(params)).await {
+              Ok(result) => result,
+              Err(_) => bail!("Tool '{name}' timed out"),
+            }
+          }
+        };
       }
     }
     bail!("Could not find tool '{name}'");
@@ -162,4 +174,8 @@ impl ToolManager {
   pub fn is_read_only(&self, name: &str) -> Option<bool> {
     return self.find_tool(name).map(|t| t.is_read_only());
   }
+}
+
+pub fn runs_subagent(name: &str) -> bool {
+  return name == SUBAGENT_TOOL_NAME || name == GOAL_CHECK_TOOL_NAME;
 }

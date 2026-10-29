@@ -82,6 +82,7 @@ pub struct PermissionsConfig {
   pub music: bool,
   pub browser: bool,
   pub ddg: bool,
+  pub goal_check: bool,
 }
 
 impl Default for PermissionsConfig {
@@ -103,6 +104,7 @@ impl Default for PermissionsConfig {
       music: true,
       browser: true,
       ddg: true,
+      goal_check: true,
     };
   }
 }
