@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 use std::io::Write;
-use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -194,16 +192,12 @@ impl EventSink for CliSink {
   fn set_cancel_token(&mut self, _token: CancellationToken) {}
 }
 
-pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
-  let approvals = {
-    let app_locked = app.lock().await;
-    app_locked.agent_manager.approvals.clone()
-  };
+pub async fn run(app: &mut App) -> Result<String> {
   let mut sink = CliSink {
     stdout: std::io::stdout(),
     reasoning_open: false,
     reasoning_ends_with_newline: false,
-    approvals,
+    approvals: app.agent_manager.approvals.clone(),
   };
   return AgentManager::harness_loop(app, &mut sink).await;
 }

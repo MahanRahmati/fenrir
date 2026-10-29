@@ -1,14 +1,11 @@
 mod cli;
 
-use std::sync::Arc;
-
 use clap::Parser;
 use fenrir_cli::input::confirm_with;
 use fenrir_core::app::App;
 use fenrir_core::config::Config;
 use fenrir_core::database::DB;
 use fenrir_core::logging::{set_print_enabled, setup_logging};
-use tokio::sync::Mutex;
 
 use crate::cli::{Cli, Commands};
 
@@ -40,7 +37,7 @@ async fn main() {
     }
   };
 
-  let app = Arc::new(Mutex::new(App::new(config, db)));
+  let mut app = App::new(config, db);
 
   let result = match cli.command {
     Some(Commands::ResetConfig { yes }) => {
@@ -64,10 +61,10 @@ async fn main() {
         }
       }
     }
-    Some(Commands::Tui) => fenrir_tui::run(&app).await,
+    Some(Commands::Tui) => fenrir_tui::run(&mut app).await,
     None => {
       set_print_enabled(true);
-      fenrir_cli::run(&app).await
+      fenrir_cli::run(&mut app).await
     }
   };
 

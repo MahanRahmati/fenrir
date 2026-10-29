@@ -17,6 +17,11 @@ use crate::database::DB;
 use crate::session_manager::repository::SessionRepository;
 use crate::session_manager::session::Session;
 
+const CANCELLED_TOOL_RESULT: &str = concat!(
+  "Tool call cancelled by the user before completion. ",
+  "Do not retry unless the user asks."
+);
+
 pub struct SessionManager {
   sessions: Vec<Session>,
   current_session: Option<Uuid>,
@@ -107,6 +112,21 @@ impl SessionManager {
         session
           .add_tool_result(tool_call_id, &format!("Tool result: {result}"));
       })
+      .await?;
+    return Ok(());
+  }
+
+  pub async fn add_cancelled_tool_result_to_session(
+    &mut self,
+    session_id: Uuid,
+    tool_call_id: &str,
+  ) -> Result<()> {
+    self
+      .add_tool_result_to_session(
+        session_id,
+        tool_call_id,
+        CANCELLED_TOOL_RESULT,
+      )
       .await?;
     return Ok(());
   }

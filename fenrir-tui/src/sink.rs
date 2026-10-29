@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 use std::io::stdout;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -10,7 +9,6 @@ use ratatui::crossterm::event::{
   KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
   PushKeyboardEnhancementFlags,
 };
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -241,16 +239,12 @@ impl EventSink for TuiSink {
   }
 }
 
-pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
-  let approvals = {
-    let app_locked = app.lock().await;
-    app_locked.agent_manager.approvals.clone()
-  };
+pub async fn run(app: &mut App) -> Result<String> {
   let mut sink = TuiSink {
     tui: Tui::new(),
     terminal: ratatui::init(),
     message_queue: VecDeque::new(),
-    approvals,
+    approvals: app.agent_manager.approvals.clone(),
   };
   crossterm::execute!(stdout(), EnableMouseCapture)
     .context("Failed to enable mouse capture")?;
@@ -262,22 +256,16 @@ pub async fn run(app: &Arc<Mutex<App>>) -> Result<String> {
   )
   .context("Failed to enable keyboard enhancement flags")?;
 
-  let persona_name = {
-    let app_locked = app.lock().await;
-    app_locked
-      .agent_manager
-      .current
-      .persona_manager
-      .current()
-      .name()
-      .to_string()
-  };
+  let persona_name = app
+    .agent_manager
+    .current
+    .persona_manager
+    .current()
+    .name()
+    .to_string();
   sink.tui.set_persona(&persona_name);
 
-  let model = {
-    let app_locked = app.lock().await;
-    app_locked.agent_manager.provider_manager.active_model()
-  };
+  let model = app.agent_manager.provider_manager.active_model();
   if let Some(model) = model {
     sink.tui.set_model(&model.label());
   }

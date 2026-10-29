@@ -232,6 +232,9 @@ impl Agent {
     let mut assistant_content = String::new();
 
     loop {
+      if cancel.is_cancelled() {
+        break;
+      }
       let session = session_manager
         .get_current_session()
         .context("No active session")?;
@@ -242,8 +245,13 @@ impl Agent {
         .tool_manager
         .get_tools_specs(self.persona_manager.current().allowed_tools());
 
-      let mut stream =
-        self.provider_manager.chat_stream(messages, &tools).await?;
+      let mut stream = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => break,
+        stream = self.provider_manager.chat_stream(messages, &tools) => {
+          stream?
+        }
+      };
 
       let mut content_buffer = String::new();
       let mut reasoning_buffer = String::new();
@@ -375,7 +383,13 @@ impl Agent {
         .tool_manager
         .get_tools_specs(self.persona_manager.current().allowed_tools());
 
-      let response = self.provider_manager.chat(messages, &tools).await?;
+      let response = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => break,
+        response = self.provider_manager.chat(messages, &tools) => {
+          response?
+        }
+      };
 
       if let Some(usage) = response.usage {
         self.last_usage = Some(usage);
@@ -466,6 +480,13 @@ impl Agent {
         )
         .await?;
 
+      if cancel.is_cancelled() {
+        session_manager
+          .add_cancelled_tool_result_to_session(session_id, &tool_call.id)
+          .await?;
+        break;
+      }
+
       let params = parse_tool_params(&tool_call.arguments);
       let tool_is_subagent = tool_call.name == SUBAGENT_TOOL_NAME;
 
@@ -524,20 +545,41 @@ impl Agent {
         tx.send(AppEvent::SubagentStarted { task }).await.ok();
       }
 
-      let mut context = ToolContext {
-        config: &self.config,
-        persona: self.persona_manager.current(),
-        provider_manager: &self.provider_manager,
-        session_manager: &mut *session_manager,
-        approvals: &self.approvals,
-        tx,
-        cancel,
-        session_id,
+      let outcome = {
+        let mut context = ToolContext {
+          config: &self.config,
+          persona: self.persona_manager.current(),
+          provider_manager: &self.provider_manager,
+          session_manager: &mut *session_manager,
+          approvals: &self.approvals,
+          tx,
+          cancel,
+          session_id,
+        };
+        if tool_is_subagent {
+          Some(
+            self
+              .tool_manager
+              .execute_tool(&tool_call.name, params, &mut context)
+              .await,
+          )
+        } else {
+          tokio::select! {
+            biased;
+            _ = cancel.cancelled() => None,
+            result = self
+              .tool_manager
+              .execute_tool(&tool_call.name, params, &mut context) => Some(result),
+          }
+        }
       };
-      let result = self
-        .tool_manager
-        .execute_tool(&tool_call.name, params, &mut context)
-        .await;
+
+      let Some(result) = outcome else {
+        session_manager
+          .add_cancelled_tool_result_to_session(session_id, &tool_call.id)
+          .await?;
+        break;
+      };
 
       let (mut result_str, error) = match result {
         Ok(r) => {
