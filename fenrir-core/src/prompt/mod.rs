@@ -1,9 +1,14 @@
 use crate::config::Config;
 use crate::persona_manager::Persona;
+use crate::tool_manager::{
+  EDIT_FILE_TOOL_NAME, GOAL_CHECK_TOOL_NAME, SUBAGENT_TOOL_NAME,
+  WRITE_FILE_TOOL_NAME,
+};
 use crate::utils::datetime::get_current_datetime;
 
 const TOOLS: &str = "Use tools when appropriate.";
 const EDIT: &str = "Before editing files, read them with `append_loc=true` for accurate line numbers. Prefer many small edits over one large one.";
+const GOAL: &str = "When the user gives a goal, do not try to finish it yourself. Delegate it with `subagent`, including the goal and its acceptance criteria. When the subagent returns, you must call `goal_check` with the goal before reporting anything. If the judge reports `Not achieved` or lists gaps, rewrite the goal to include them and delegate again with `subagent`. Repeat until the judge confirms the goal is achieved. Only then report to the user.";
 const VERIFY: &str = "After making changes, verify they work.";
 const CWD_RESTRICTED: &str = "Tools are restricted to the current working directory. Always use paths within the current directory; paths outside the current working directory are blocked.";
 const CONCISE: &str = "Be concise and direct.";
@@ -23,14 +28,28 @@ impl Prompt {
     for instruction in persona.instructions() {
       guidelines.push(instruction);
     }
+    let can_edit = persona.allowed_tools().allows(EDIT_FILE_TOOL_NAME);
+    let can_write =
+      can_edit || persona.allowed_tools().allows(WRITE_FILE_TOOL_NAME);
+
     guidelines.push(TOOLS);
-    if config.permissions.read_file && config.permissions.edit_file {
+    if config.permissions.read_file && config.permissions.edit_file && can_edit
+    {
       guidelines.push(EDIT);
     }
-    if config.general.restrict_write_tools_to_cwd {
+    if config.general.restrict_write_tools_to_cwd && can_write {
       guidelines.push(CWD_RESTRICTED);
     }
-    guidelines.push(VERIFY);
+    if can_write {
+      guidelines.push(VERIFY);
+    }
+    if config.subagent.enabled
+      && config.permissions.goal_check
+      && persona.allowed_tools().allows(SUBAGENT_TOOL_NAME)
+      && persona.allowed_tools().allows(GOAL_CHECK_TOOL_NAME)
+    {
+      guidelines.push(GOAL);
+    }
     guidelines.push(CONCISE);
     guidelines.push(PATHS);
     guidelines.push(MENTIONS);

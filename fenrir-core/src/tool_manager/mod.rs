@@ -32,10 +32,11 @@ use crate::tool_manager::browser::BrowserTool;
 use crate::tool_manager::control_keyboard::ControlKeyboardTool;
 use crate::tool_manager::datetime::DateTimeTool;
 use crate::tool_manager::ddg::DdgTool;
+pub use crate::tool_manager::edit_file::EDIT_FILE_TOOL_NAME;
 use crate::tool_manager::edit_file::EditFileTool;
 use crate::tool_manager::find_file::FindFileTool;
 use crate::tool_manager::find_text::FindTextTool;
-use crate::tool_manager::goal_check::GOAL_CHECK_TOOL_NAME;
+pub use crate::tool_manager::goal_check::GOAL_CHECK_TOOL_NAME;
 use crate::tool_manager::goal_check::GoalCheckTool;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
 use crate::tool_manager::music::MusicTool;
@@ -49,6 +50,7 @@ pub use crate::tool_manager::subagent::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::subagent::SubagentTool;
 pub use crate::tool_manager::subagent::task_summary;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams, ToolSpec};
+pub use crate::tool_manager::write_file::WRITE_FILE_TOOL_NAME;
 use crate::tool_manager::write_file::WriteFileTool;
 
 pub struct ToolManager {

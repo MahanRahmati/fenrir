@@ -15,7 +15,7 @@ impl Tool for SubagentTool {
   }
 
   fn description(&self) -> &str {
-    return "Run a task in a subagent that works on its own and returns a report. Include all relevant context, constraints, and the expected output.";
+    return "Run a task in a subagent that works on its own with the same tools as you and returns a report. Include all relevant context, constraints, and the expected output.";
   }
 
   fn parameters(&self) -> serde_json::Value {
