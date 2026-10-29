@@ -232,11 +232,18 @@ impl Agent {
     is_subagent: bool,
   ) -> Result<String> {
     let mut assistant_content = String::new();
+    let max_iterations = self.config.subagent.max_iterations;
+    let mut turns = 0;
 
     loop {
       if cancel.is_cancelled() {
         break;
       }
+      if is_subagent && turns >= max_iterations {
+        assistant_content.push_str(&subagent_turn_limit_note(max_iterations));
+        break;
+      }
+      turns += 1;
       let session = session_manager
         .get_current_session()
         .context("No active session")?;
@@ -370,11 +377,18 @@ impl Agent {
     is_subagent: bool,
   ) -> Result<String> {
     let mut assistant_content = String::new();
+    let max_iterations = self.config.subagent.max_iterations;
+    let mut turns = 0;
 
     loop {
       if cancel.is_cancelled() {
         break;
       }
+      if is_subagent && turns >= max_iterations {
+        assistant_content.push_str(&subagent_turn_limit_note(max_iterations));
+        break;
+      }
+      turns += 1;
       let session = session_manager
         .get_current_session()
         .context("No active session")?;
@@ -642,4 +656,10 @@ impl Agent {
     }
     return Ok(());
   }
+}
+
+fn subagent_turn_limit_note(max_iterations: usize) -> String {
+  return format!(
+    "\n\n[Subagent stopped after reaching its limit of {max_iterations} turns. Its report is partial and may omit remaining work.]"
+  );
 }

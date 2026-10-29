@@ -145,11 +145,15 @@ impl Default for CompactionConfig {
 #[serde(default)]
 pub struct SubagentConfig {
   pub enabled: bool,
+  pub max_iterations: usize,
 }
 
 impl Default for SubagentConfig {
   fn default() -> Self {
-    return Self { enabled: true };
+    return Self {
+      enabled: true,
+      max_iterations: 100,
+    };
   }
 }
 
