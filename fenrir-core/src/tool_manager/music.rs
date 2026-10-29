@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 
 use crate::tool_manager::helpers::{get_optional_param, get_param};
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
 pub struct MusicTool;
@@ -53,7 +53,11 @@ impl Tool for MusicTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let action = get_param::<String>(&params, "music", "action")?;
 
     if action != "status" {

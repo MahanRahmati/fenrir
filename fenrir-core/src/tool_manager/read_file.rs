@@ -3,7 +3,7 @@ use anyhow::{Context, Result, bail};
 use crate::files::operations::read_to_string;
 use crate::tool_manager::cache::ToolCache;
 use crate::tool_manager::helpers::*;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::hash;
 use crate::utils::path::resolve_path;
 
@@ -75,7 +75,11 @@ impl Tool for ReadFileTool {
     self.cache.clear();
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let path = get_param::<String>(&params, "read_file", "path")?;
 
     let content = read_to_string(&path)

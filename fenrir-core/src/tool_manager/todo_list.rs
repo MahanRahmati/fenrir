@@ -174,30 +174,6 @@ impl TodoListTool {
     }
     return Ok(Self::render(&list));
   }
-
-  pub async fn run(
-    params: ToolParams,
-    context: &mut ToolContext<'_>,
-  ) -> Result<String> {
-    let raw = get_param::<String>(&params, TODO_LIST_TOOL_NAME, "todos")?;
-    if raw.trim() == "show" {
-      return Self::show(context.session_id).await;
-    }
-    let title =
-      get_optional_param::<String>(&params, TODO_LIST_TOOL_NAME, "title")
-        .unwrap_or_default();
-    let items = Self::parse_todos(&raw)?;
-    let list = Self::validate(&title, &items)?;
-    let path = Self::todos_path(context.session_id).await?;
-    let existing = read_to_string(&path).await.ok();
-    if let Some(content) = existing
-      && Self::parse_markdown(&content) == list
-    {
-      return Ok("Todo list unchanged since last update.".to_string());
-    }
-    Self::save(&path, &list).await?;
-    return Ok(Self::render(&list));
-  }
 }
 
 #[async_trait::async_trait]
@@ -231,7 +207,28 @@ impl Tool for TodoListTool {
     return true;
   }
 
-  async fn execute(&self, _params: ToolParams) -> Result<String> {
-    bail!("The todo_list tool requires an execution context");
+  async fn execute(
+    &self,
+    params: ToolParams,
+    context: &mut ToolContext<'_>,
+  ) -> Result<String> {
+    let raw = get_param::<String>(&params, TODO_LIST_TOOL_NAME, "todos")?;
+    if raw.trim() == "show" {
+      return Self::show(context.session_id).await;
+    }
+    let title =
+      get_optional_param::<String>(&params, TODO_LIST_TOOL_NAME, "title")
+        .unwrap_or_default();
+    let items = Self::parse_todos(&raw)?;
+    let list = Self::validate(&title, &items)?;
+    let path = Self::todos_path(context.session_id).await?;
+    let existing = read_to_string(&path).await.ok();
+    if let Some(content) = existing
+      && Self::parse_markdown(&content) == list
+    {
+      return Ok("Todo list unchanged since last update.".to_string());
+    }
+    Self::save(&path, &list).await?;
+    return Ok(Self::render(&list));
   }
 }

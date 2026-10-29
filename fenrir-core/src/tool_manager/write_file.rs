@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 
 use crate::files::operations::{create_directory_all, write_file};
 use crate::tool_manager::helpers::*;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 pub const WRITE_FILE_TOOL_NAME: &str = "write_file";
 
@@ -35,7 +35,11 @@ impl Tool for WriteFileTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let path = get_param::<String>(&params, WRITE_FILE_TOOL_NAME, "path")?;
     let content =
       get_param::<String>(&params, WRITE_FILE_TOOL_NAME, "content")?;

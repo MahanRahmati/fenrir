@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 
 use crate::tool_manager::cache::ToolCache;
 use crate::tool_manager::helpers::get_param;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
 pub struct DdgTool {
@@ -45,7 +45,11 @@ impl Tool for DdgTool {
     self.cache.clear();
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let keyword = get_param::<String>(&params, "ddg", "keyword")?;
 
     if let Some(cached) = self.cache.get(&keyword) {

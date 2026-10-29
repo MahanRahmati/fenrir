@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::files::operations::{read_to_string, write_file};
 use crate::tool_manager::helpers::*;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 pub const EDIT_FILE_TOOL_NAME: &str = "edit_file";
 
@@ -35,7 +35,11 @@ impl Tool for EditFileTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let path = get_param::<String>(&params, EDIT_FILE_TOOL_NAME, "path")?;
     let start_line =
       get_param::<usize>(&params, EDIT_FILE_TOOL_NAME, "start_line")?;

@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow};
 
 use crate::capability::keyboard;
 use crate::tool_manager::helpers::get_param;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 pub struct ControlKeyboardTool;
 
@@ -36,7 +36,11 @@ impl Tool for ControlKeyboardTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let action = get_param::<String>(&params, "control_keyboard", "action")?;
     return match action.as_str() {
       "type" => {

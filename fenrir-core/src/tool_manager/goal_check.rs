@@ -33,13 +33,8 @@ impl Tool for GoalCheckTool {
     return true;
   }
 
-  async fn execute(&self, _params: ToolParams) -> Result<String> {
-    bail!("The goal_check tool requires an execution context");
-  }
-}
-
-impl GoalCheckTool {
-  pub async fn run(
+  async fn execute(
+    &self,
     params: ToolParams,
     context: &mut ToolContext<'_>,
   ) -> Result<String> {

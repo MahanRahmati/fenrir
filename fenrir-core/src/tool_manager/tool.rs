@@ -44,7 +44,11 @@ pub trait Tool: Send + Sync {
       "required": [],
     });
   }
-  async fn execute(&self, params: ToolParams) -> Result<String>;
+  async fn execute(
+    &self,
+    params: ToolParams,
+    context: &mut ToolContext<'_>,
+  ) -> Result<String>;
   fn is_read_only(&self) -> bool;
   fn reset_cache(&self) {}
   fn to_tool_spec(&self) -> ToolSpec {

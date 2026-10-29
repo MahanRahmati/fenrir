@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
 use crate::agent_manager::agent::Agent;
 use crate::tool_manager::helpers::*;
@@ -32,13 +32,8 @@ impl Tool for SubagentTool {
     return false;
   }
 
-  async fn execute(&self, _params: ToolParams) -> Result<String> {
-    bail!("The subagent tool requires an execution context");
-  }
-}
-
-impl SubagentTool {
-  pub async fn run(
+  async fn execute(
+    &self,
     params: ToolParams,
     context: &mut ToolContext<'_>,
   ) -> Result<String> {

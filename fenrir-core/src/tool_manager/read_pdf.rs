@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::capability::pdf;
 use crate::tool_manager::helpers::*;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 pub struct ReadPdfTool;
 
@@ -31,7 +31,11 @@ impl Tool for ReadPdfTool {
     return true;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let path = get_param::<String>(&params, "read_pdf", "path")?;
     let path = path.trim_start_matches('@').to_string();
     let page = get_param::<u32>(&params, "read_pdf", "page")?;

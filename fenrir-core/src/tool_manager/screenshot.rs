@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 
 use crate::capability::screenshot;
 use crate::tool_manager::helpers::get_optional_param;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 pub struct ScreenshotTool;
 
@@ -31,7 +31,11 @@ impl Tool for ScreenshotTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let path = get_optional_param::<String>(&params, "screenshot", "path");
     let delay = get_optional_param::<u64>(&params, "screenshot", "delay");
     let destination = screenshot::screenshot(path, delay)

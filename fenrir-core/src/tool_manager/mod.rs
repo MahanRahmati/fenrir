@@ -150,17 +150,15 @@ impl ToolManager {
     for tool in &self.tools {
       if tool.name() == name {
         return match name {
-          SUBAGENT_TOOL_NAME => {
-            Box::pin(SubagentTool::run(params, context)).await
-          }
-          GOAL_CHECK_TOOL_NAME => {
-            Box::pin(GoalCheckTool::run(params, context)).await
-          }
-          TODO_LIST_TOOL_NAME => {
-            Box::pin(TodoListTool::run(params, context)).await
-          }
+          SUBAGENT_TOOL_NAME => tool.execute(params, context).await,
+          GOAL_CHECK_TOOL_NAME => tool.execute(params, context).await,
           _ => {
-            match time::timeout(self.tool_timeout, tool.execute(params)).await {
+            match time::timeout(
+              self.tool_timeout,
+              tool.execute(params, context),
+            )
+            .await
+            {
               Ok(result) => result,
               Err(_) => bail!("Tool '{name}' timed out"),
             }

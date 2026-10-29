@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 
 use crate::tool_manager::helpers::*;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
 pub struct FindFileTool;
@@ -46,7 +46,11 @@ impl Tool for FindFileTool {
     return true;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let path = get_param::<String>(&params, "find_file", "path")?;
     let include = get_optional_param::<String>(&params, "find_file", "include")
       .unwrap_or(DEFAULT_INCLUDE.to_string());

@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::datetime::get_current_datetime;
 
 pub struct DateTimeTool;
@@ -19,7 +19,11 @@ impl Tool for DateTimeTool {
     return true;
   }
 
-  async fn execute(&self, _params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    _params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     return Ok(get_current_datetime());
   }
 }

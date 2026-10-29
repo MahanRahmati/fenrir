@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow};
 
 use crate::capability::browser;
 use crate::tool_manager::helpers::get_param;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 pub struct BrowserTool;
 
@@ -37,7 +37,11 @@ impl Tool for BrowserTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let action = get_param::<String>(&params, "browser", "action")?;
 
     return match action.as_str() {

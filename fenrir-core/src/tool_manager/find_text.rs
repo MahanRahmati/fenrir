@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 
 use crate::tool_manager::helpers::*;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
 pub struct FindTextTool;
@@ -38,7 +38,11 @@ impl Tool for FindTextTool {
     return true;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let pattern = get_param::<String>(&params, "find_text", "pattern")?;
     let path = get_optional_param::<String>(&params, "find_text", "path")
       .unwrap_or(DEFAULT_PATH.to_string());

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::files::operations;
 use crate::tool_manager::helpers::*;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 const DEFAULT_PATH: &str = ".";
 
@@ -34,7 +34,11 @@ impl Tool for ListDirectoriesTool {
     return true;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let path =
       get_optional_param::<String>(&params, "list_directories", "path")
         .unwrap_or(DEFAULT_PATH.to_string());

@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 
 use crate::files::operations::{remove_file, validate_file_exists};
 use crate::tool_manager::helpers::*;
-use crate::tool_manager::tool::{Tool, ToolParams};
+use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 pub struct RemoveFileTool;
 
@@ -30,7 +30,11 @@ impl Tool for RemoveFileTool {
     return false;
   }
 
-  async fn execute(&self, params: ToolParams) -> Result<String> {
+  async fn execute(
+    &self,
+    params: ToolParams,
+    _context: &mut ToolContext<'_>,
+  ) -> Result<String> {
     let path = get_param::<String>(&params, "remove_file", "path")?;
 
     validate_file_exists(&path)
