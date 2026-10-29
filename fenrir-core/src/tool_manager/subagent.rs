@@ -43,7 +43,8 @@ impl SubagentTool {
     context: &mut ToolContext<'_>,
   ) -> Result<String> {
     let task = get_param::<String>(&params, SUBAGENT_TOOL_NAME, "task")?;
-    return Agent::run_subagent(context, &task)
+    let persona = context.persona.clone();
+    return Agent::run_subagent(context, &persona, &task)
       .await
       .context("Failed to run subagent");
   }

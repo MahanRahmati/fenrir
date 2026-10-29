@@ -15,7 +15,7 @@ use crate::hook_manager::hook::{
   HookContext, HookDecision, ToolCallContext, ToolResultContext,
 };
 use crate::mentions::strip_mentions;
-use crate::persona_manager::PersonaManager;
+use crate::persona_manager::{Persona, PersonaManager};
 use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, ProviderManager, ToolCall};
 use crate::session_manager::SessionManager;
@@ -75,6 +75,7 @@ impl Agent {
 
   pub async fn run_subagent(
     context: &mut ToolContext<'_>,
+    persona: &Persona,
     task: &str,
   ) -> Result<String> {
     let task = task.trim();
@@ -82,7 +83,7 @@ impl Agent {
       bail!("Task cannot be empty");
     }
     context.tx.send(AppEvent::Subagents { delta: 1 }).await.ok();
-    let result = Self::run_subagent_inner(context, task).await;
+    let result = Self::run_subagent_inner(context, persona, task).await;
     context
       .tx
       .send(AppEvent::Subagents { delta: -1 })
@@ -93,6 +94,7 @@ impl Agent {
 
   async fn run_subagent_inner(
     context: &mut ToolContext<'_>,
+    persona: &Persona,
     task: &str,
   ) -> Result<String> {
     let parent_session_id = context.session_id;
@@ -104,7 +106,7 @@ impl Agent {
       "Started subagent session {session_id} (parent {parent_session_id}): {task}"
     );
 
-    let prompt = Prompt::new(context.config, context.persona);
+    let prompt = Prompt::new(context.config, persona);
     context
       .session_manager
       .add_system_message_to_session(session_id, prompt.get_system_prompt())
@@ -120,7 +122,7 @@ impl Agent {
       Some(parent_session_id),
       context.approvals.clone(),
     );
-    agent.persona_manager.set_persona(context.persona.clone());
+    agent.persona_manager.set_persona(persona.clone());
 
     let result = agent
       .process_chat(context.session_manager, context.tx, context.cancel)
