@@ -114,7 +114,10 @@ impl ToolManager {
     if is_primary_agent && config.subagent.enabled {
       tools.push(Box::new(SubagentTool));
     }
-    if is_primary_agent && config.permissions.goal_check {
+    if is_primary_agent
+      && config.subagent.enabled
+      && config.permissions.goal_check
+    {
       tools.push(Box::new(GoalCheckTool));
     }
     return Self {
