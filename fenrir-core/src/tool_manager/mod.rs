@@ -3,7 +3,7 @@ mod cache;
 mod control_keyboard;
 mod datetime;
 mod ddg;
-pub mod edit_file;
+mod edit_file;
 mod find_file;
 mod find_text;
 mod goal_check;
@@ -17,8 +17,9 @@ mod read_pdf;
 mod remove_file;
 mod screenshot;
 mod subagent;
+mod todo_list;
 pub mod tool;
-pub mod write_file;
+mod write_file;
 
 use std::time::Duration;
 
@@ -49,6 +50,8 @@ use crate::tool_manager::screenshot::ScreenshotTool;
 pub use crate::tool_manager::subagent::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::subagent::SubagentTool;
 pub use crate::tool_manager::subagent::task_summary;
+pub use crate::tool_manager::todo_list::TODO_LIST_TOOL_NAME;
+use crate::tool_manager::todo_list::TodoListTool;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams, ToolSpec};
 pub use crate::tool_manager::write_file::WRITE_FILE_TOOL_NAME;
 use crate::tool_manager::write_file::WriteFileTool;
@@ -110,6 +113,9 @@ impl ToolManager {
     if config.permissions.ddg {
       tools.push(Box::new(DdgTool::new()));
     }
+    if config.permissions.todo_list {
+      tools.push(Box::new(TodoListTool));
+    }
     let is_primary_agent = matches!(agent_kind, AgentKind::Primary);
     if is_primary_agent && config.subagent.enabled {
       tools.push(Box::new(SubagentTool));
@@ -149,6 +155,9 @@ impl ToolManager {
           }
           GOAL_CHECK_TOOL_NAME => {
             Box::pin(GoalCheckTool::run(params, context)).await
+          }
+          TODO_LIST_TOOL_NAME => {
+            Box::pin(TodoListTool::run(params, context)).await
           }
           _ => {
             match time::timeout(self.tool_timeout, tool.execute(params)).await {

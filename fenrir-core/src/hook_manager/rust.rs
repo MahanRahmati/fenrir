@@ -4,8 +4,8 @@ use std::time::Duration;
 use crate::files::operations;
 use crate::hook_manager::helpers::{self, tool_path};
 use crate::hook_manager::hook::{HookContext, PostToolHook, ToolResultContext};
-use crate::tool_manager::edit_file::EDIT_FILE_TOOL_NAME;
-use crate::tool_manager::write_file::WRITE_FILE_TOOL_NAME;
+use crate::tool_manager::EDIT_FILE_TOOL_NAME;
+use crate::tool_manager::WRITE_FILE_TOOL_NAME;
 use crate::utils::path::is_path_within;
 
 pub struct RustHook;

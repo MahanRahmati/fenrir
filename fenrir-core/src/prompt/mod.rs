@@ -2,13 +2,14 @@ use crate::config::Config;
 use crate::persona_manager::Persona;
 use crate::tool_manager::{
   EDIT_FILE_TOOL_NAME, GOAL_CHECK_TOOL_NAME, SUBAGENT_TOOL_NAME,
-  WRITE_FILE_TOOL_NAME,
+  TODO_LIST_TOOL_NAME, WRITE_FILE_TOOL_NAME,
 };
 use crate::utils::datetime::get_current_datetime;
 
 const TOOLS: &str = "Use tools when appropriate.";
 const EDIT: &str = "Before editing files, read them with `append_loc=true` for accurate line numbers. Prefer many small edits over one large one.";
 const GOAL: &str = "When the user gives a goal, do not try to finish it yourself. Delegate it with `subagent`, including the goal and its acceptance criteria. When the subagent returns, you must call `goal_check` with the goal before reporting anything. If the judge reports `Not achieved` or lists gaps, rewrite the goal to include them and delegate again with `subagent`. Repeat until the judge confirms the goal is achieved. Only then report to the user.";
+const TODO_LIST: &str = "For complex multi-step work, maintain a todo list with `todo_list`: keep exactly one item in_progress at a time, mark items completed as you go, and update the list after each step.";
 const VERIFY: &str = "After making changes, verify they work.";
 const CWD_RESTRICTED: &str = "Tools are restricted to the current working directory. Always use paths within the current directory; paths outside the current working directory are blocked.";
 const CONCISE: &str = "Be concise and direct.";
@@ -49,6 +50,11 @@ impl Prompt {
       && persona.allowed_tools().allows(GOAL_CHECK_TOOL_NAME)
     {
       guidelines.push(GOAL);
+    }
+    if config.permissions.todo_list
+      && persona.allowed_tools().allows(TODO_LIST_TOOL_NAME)
+    {
+      guidelines.push(TODO_LIST);
     }
     guidelines.push(CONCISE);
     guidelines.push(PATHS);

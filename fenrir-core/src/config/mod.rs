@@ -83,6 +83,7 @@ pub struct PermissionsConfig {
   pub browser: bool,
   pub ddg: bool,
   pub goal_check: bool,
+  pub todo_list: bool,
 }
 
 impl Default for PermissionsConfig {
@@ -105,6 +106,7 @@ impl Default for PermissionsConfig {
       browser: true,
       ddg: true,
       goal_check: true,
+      todo_list: true,
     };
   }
 }
