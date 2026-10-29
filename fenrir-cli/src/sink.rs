@@ -137,16 +137,16 @@ impl EventSink for CliSink {
 
   async fn poll_events(&mut self) {}
 
-  fn on_exit(&mut self) {}
+  async fn on_exit(&mut self) {}
 
-  fn on_help(&mut self, commands: Vec<SlashCommand>) {
+  async fn on_help(&mut self, commands: Vec<SlashCommand>) {
     println!("Available commands:");
     for cmd in commands {
       println!("  {}: {}", cmd.name(), cmd.description());
     }
   }
 
-  fn on_sessions(
+  async fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
     current: Option<Uuid>,
@@ -155,7 +155,7 @@ impl EventSink for CliSink {
     return Ok(session_id);
   }
 
-  fn on_session_selection(&mut self, session: Session) {
+  async fn on_session_selection(&mut self, session: Session) {
     println!(
       "--- {} ---",
       session.title.as_deref().unwrap_or("Untitled Session")
@@ -163,7 +163,7 @@ impl EventSink for CliSink {
     print_session_messages(&session);
   }
 
-  fn on_personas(
+  async fn on_personas(
     &mut self,
     personas: Vec<Persona>,
     current: String,
@@ -172,11 +172,11 @@ impl EventSink for CliSink {
     return Ok(persona_name);
   }
 
-  fn on_persona_selection(&mut self, name: String) {
+  async fn on_persona_selection(&mut self, name: String) {
     println!("Persona set to: {name}");
   }
 
-  fn on_models(
+  async fn on_models(
     &mut self,
     models: Vec<Model>,
     current: Option<Model>,
@@ -185,11 +185,11 @@ impl EventSink for CliSink {
     return Ok(model);
   }
 
-  fn on_model_selection(&mut self, model: Model) {
+  async fn on_model_selection(&mut self, model: Model) {
     println!("Model set to: {}", model.label());
   }
 
-  fn set_cancel_token(&mut self, _token: CancellationToken) {}
+  async fn set_cancel_token(&mut self, _token: CancellationToken) {}
 }
 
 pub async fn run(app: &mut App) -> Result<String> {

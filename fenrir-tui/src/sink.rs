@@ -155,16 +155,16 @@ impl EventSink for TuiSink {
     self.redraw();
   }
 
-  fn on_exit(&mut self) {
+  async fn on_exit(&mut self) {
     self.tui.quit();
   }
 
-  fn on_help(&mut self, commands: Vec<SlashCommand>) {
+  async fn on_help(&mut self, commands: Vec<SlashCommand>) {
     self.tui.open_help_popup(commands);
     self.redraw();
   }
 
-  fn on_sessions(
+  async fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
     current: Option<Uuid>,
@@ -181,13 +181,13 @@ impl EventSink for TuiSink {
     return Ok(session_id);
   }
 
-  fn on_session_selection(&mut self, session: Session) {
+  async fn on_session_selection(&mut self, session: Session) {
     self.clear_message_queue();
     self.tui.update_messages(Some(&session));
     self.redraw();
   }
 
-  fn on_personas(
+  async fn on_personas(
     &mut self,
     personas: Vec<Persona>,
     current: String,
@@ -205,14 +205,14 @@ impl EventSink for TuiSink {
     return Ok(name);
   }
 
-  fn on_persona_selection(&mut self, name: String) {
+  async fn on_persona_selection(&mut self, name: String) {
     self.clear_message_queue();
     self.tui.set_persona(&name);
     self.tui.update_messages(None);
     self.redraw();
   }
 
-  fn on_models(
+  async fn on_models(
     &mut self,
     models: Vec<Model>,
     current: Option<Model>,
@@ -229,12 +229,12 @@ impl EventSink for TuiSink {
     return Ok(model);
   }
 
-  fn on_model_selection(&mut self, model: Model) {
+  async fn on_model_selection(&mut self, model: Model) {
     self.tui.set_model(&model.label());
     self.redraw();
   }
 
-  fn set_cancel_token(&mut self, token: CancellationToken) {
+  async fn set_cancel_token(&mut self, token: CancellationToken) {
     self.tui.set_cancel_token(token);
   }
 }

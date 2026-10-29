@@ -46,7 +46,7 @@ impl AgentManager {
 
       if let Some(command) = command {
         let cancel = app.shutdown.child_token();
-        sink.set_cancel_token(cancel.clone());
+        sink.set_cancel_token(cancel.clone()).await;
 
         if matches!(&command, AppCommand::Compact) {
           run_compact(app, sink, &cancel).await;
@@ -56,14 +56,15 @@ impl AgentManager {
         let result = app.agent_manager.handle_command(command, &cancel).await;
         match result? {
           AppCommandResult::Exit => {
-            sink.on_exit();
+            sink.on_exit().await;
             break;
           }
           AppCommandResult::Help(slash_commands) => {
-            sink.on_help(slash_commands);
+            sink.on_help(slash_commands).await;
           }
           AppCommandResult::Sessions { sessions, current } => {
-            if let Some(session_id) = sink.on_sessions(sessions, current)? {
+            let selected = sink.on_sessions(sessions, current).await?;
+            if let Some(session_id) = selected {
               let result = app
                 .agent_manager
                 .handle_command(
@@ -72,15 +73,15 @@ impl AgentManager {
                 )
                 .await?;
               if let AppCommandResult::Session(session) = result {
-                sink.on_session_selection(session);
+                sink.on_session_selection(session).await;
               }
             }
           }
           AppCommandResult::Session(session) => {
-            sink.on_session_selection(session);
+            sink.on_session_selection(session).await;
           }
           AppCommandResult::Personas { personas, current } => {
-            if let Some(name) = sink.on_personas(personas, current)? {
+            if let Some(name) = sink.on_personas(personas, current).await? {
               app
                 .agent_manager
                 .handle_command(
@@ -88,25 +89,25 @@ impl AgentManager {
                   &cancel,
                 )
                 .await?;
-              sink.on_persona_selection(name);
+              sink.on_persona_selection(name).await;
             }
           }
           AppCommandResult::Persona(name) => {
-            sink.on_persona_selection(name);
+            sink.on_persona_selection(name).await;
           }
           AppCommandResult::Models { models, current } => {
-            if let Some(model) = sink.on_models(models, current)? {
+            if let Some(model) = sink.on_models(models, current).await? {
               let result = app
                 .agent_manager
                 .handle_command(AppCommand::SelectModel { model }, &cancel)
                 .await?;
               if let AppCommandResult::Model(model) = result {
-                sink.on_model_selection(model);
+                sink.on_model_selection(model).await;
               }
             }
           }
           AppCommandResult::Model(model) => {
-            sink.on_model_selection(model);
+            sink.on_model_selection(model).await;
           }
           AppCommandResult::Compacted { summary } => {
             sink.on_event(AppEvent::Compacted { summary }).await;
@@ -144,7 +145,7 @@ impl AgentManager {
         .await;
 
       let cancel = app.shutdown.child_token();
-      sink.set_cancel_token(cancel.clone());
+      sink.set_cancel_token(cancel.clone()).await;
 
       let Some(result) = run_chat(app, sink, &cancel).await else {
         continue;

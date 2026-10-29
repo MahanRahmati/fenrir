@@ -62,25 +62,25 @@ pub trait EventSink {
   async fn on_event(&mut self, event: AppEvent);
   async fn read_input(&mut self) -> Result<Option<String>>;
   async fn poll_events(&mut self);
-  fn on_exit(&mut self);
-  fn on_help(&mut self, commands: Vec<SlashCommand>);
-  fn on_sessions(
+  async fn on_exit(&mut self);
+  async fn on_help(&mut self, commands: Vec<SlashCommand>);
+  async fn on_sessions(
     &mut self,
     sessions: Vec<Session>,
     current: Option<Uuid>,
   ) -> Result<Option<Uuid>>;
-  fn on_session_selection(&mut self, session: Session);
-  fn on_personas(
+  async fn on_session_selection(&mut self, session: Session);
+  async fn on_personas(
     &mut self,
     personas: Vec<Persona>,
     current: String,
   ) -> Result<Option<String>>;
-  fn on_persona_selection(&mut self, name: String);
-  fn on_models(
+  async fn on_persona_selection(&mut self, name: String);
+  async fn on_models(
     &mut self,
     models: Vec<Model>,
     current: Option<Model>,
   ) -> Result<Option<Model>>;
-  fn on_model_selection(&mut self, model: Model);
-  fn set_cancel_token(&mut self, token: CancellationToken);
+  async fn on_model_selection(&mut self, model: Model);
+  async fn set_cancel_token(&mut self, token: CancellationToken);
 }
