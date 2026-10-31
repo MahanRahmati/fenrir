@@ -12,7 +12,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```text
 //! // In main.rs, set verbose from CLI args:
 //! set_verbose(cli.verbose);
 //!
@@ -161,8 +161,10 @@ pub fn write_to_log_file(msg: String) {
 /// # Examples
 ///
 /// ```rust
+/// use fenrir_core::vlog;
+///
 /// vlog!("Hello World");
-/// vlog!("Hello {}", world);
+/// vlog!("Hello {}", "world");
 /// ```
 #[macro_export]
 macro_rules! vlog {
