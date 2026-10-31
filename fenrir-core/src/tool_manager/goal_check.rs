@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 
-use crate::agent_manager::agent::Agent;
 use crate::persona_manager::JUDGE_PERSONA;
+use crate::session_manager::session::Session;
 use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
@@ -45,7 +45,7 @@ impl Tool for GoalCheckTool {
     }
     let task =
       format!("Determine whether this goal is fully achieved:\n\n{goal}");
-    let report = Agent::run_subagent(context, &JUDGE_PERSONA, &task)
+    let report = Session::run_subagent(context, &JUDGE_PERSONA, &task)
       .await
       .context("Failed to check goal")?;
     return Ok(report);

@@ -1,6 +1,5 @@
 //! Core harness for Fenrir.
 
-pub mod agent_manager;
 pub mod app;
 mod capability;
 pub mod config;

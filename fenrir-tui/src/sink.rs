@@ -12,7 +12,6 @@ use ratatui::crossterm::event::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use fenrir_core::agent_manager::AgentManager;
 use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink};
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
@@ -26,7 +25,7 @@ struct TuiSink {
   tui: Tui,
   terminal: ratatui::DefaultTerminal,
   message_queue: VecDeque<String>,
-  approvals: ApprovalChannel,
+  approvals: Option<ApprovalChannel>,
 }
 
 impl TuiSink {
@@ -95,7 +94,9 @@ impl EventSink for TuiSink {
         } else {
           ToolApprovalStatus::Denied
         };
-        self.approvals.decide(&tool_call_id, status);
+        if let Some(channel) = &self.approvals {
+          channel.decide(&tool_call_id, status);
+        }
       }
       AppEvent::ToolApprovalResult {
         tool_call_id: _,
@@ -181,9 +182,15 @@ impl EventSink for TuiSink {
     return Ok(session_id);
   }
 
-  async fn on_session_selection(&mut self, session: Session) {
+  async fn on_session_selection(&mut self, session: &Session) {
     self.clear_message_queue();
-    self.tui.update_messages(Some(&session));
+    self
+      .tui
+      .set_persona(session.persona_manager.current().name());
+    if let Some(model) = &session.model {
+      self.tui.set_model(&model.label());
+    }
+    self.tui.update_messages(Some(session));
     self.redraw();
   }
 
@@ -234,6 +241,10 @@ impl EventSink for TuiSink {
     self.redraw();
   }
 
+  async fn set_approval_channel(&mut self, channel: Option<ApprovalChannel>) {
+    self.approvals = channel;
+  }
+
   async fn set_cancel_token(&mut self, token: CancellationToken) {
     self.tui.set_cancel_token(token);
   }
@@ -244,7 +255,7 @@ pub async fn run(app: &mut App) -> Result<String> {
     tui: Tui::new(),
     terminal: ratatui::init(),
     message_queue: VecDeque::new(),
-    approvals: app.agent_manager.approvals.clone(),
+    approvals: None,
   };
   crossterm::execute!(stdout(), EnableMouseCapture)
     .context("Failed to enable mouse capture")?;
@@ -256,16 +267,10 @@ pub async fn run(app: &mut App) -> Result<String> {
   )
   .context("Failed to enable keyboard enhancement flags")?;
 
-  let persona_name = app
-    .agent_manager
-    .current
-    .persona_manager
-    .current()
-    .name()
-    .to_string();
+  let persona_name = app.sessions.persona_name(None);
   sink.tui.set_persona(&persona_name);
 
-  let model = app.agent_manager.provider_manager.active_model();
+  let model = app.sessions.current_model(None);
   if let Some(model) = model {
     sink.tui.set_model(&model.label());
   }
@@ -275,7 +280,7 @@ pub async fn run(app: &mut App) -> Result<String> {
     .draw(|frame| sink.tui.draw(frame))
     .context("Failed to draw the TUI")?;
 
-  let result = AgentManager::harness_loop(app, &mut sink).await;
+  let result = app.harness_loop(&mut sink).await;
 
   crossterm::execute!(stdout(), DisableMouseCapture)
     .context("Failed to disable mouse capture")?;

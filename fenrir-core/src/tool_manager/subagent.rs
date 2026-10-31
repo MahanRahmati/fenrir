@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use crate::agent_manager::agent::Agent;
+use crate::session_manager::session::Session;
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
@@ -39,7 +39,7 @@ impl Tool for SubagentTool {
   ) -> Result<String> {
     let task = get_param::<String>(&params, SUBAGENT_TOOL_NAME, "task")?;
     let persona = context.persona.clone();
-    return Agent::run_subagent(context, &persona, &task)
+    return Session::run_subagent(context, &persona, &task)
       .await
       .context("Failed to run subagent");
   }

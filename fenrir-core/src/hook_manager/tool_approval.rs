@@ -1,6 +1,5 @@
 use tokio::sync::broadcast;
 
-use crate::agent_manager::agent::AgentKind;
 use crate::app::AppEvent;
 use crate::hook_manager::hook::{
   HookContext, HookDecision, PreToolHook, ToolCallContext,
@@ -71,7 +70,7 @@ impl PreToolHook for ToolApprovalHook {
 
     let message =
       format!("Tool \"{}\" wants to access: {}", tool_call.name, path);
-    let message = if matches!(context.agent_kind, AgentKind::Subagent) {
+    let message = if context.is_subagent {
       format!("[subagent] {message}")
     } else {
       message
@@ -86,11 +85,7 @@ impl PreToolHook for ToolApprovalHook {
       tool_call.name.to_string(),
       message.clone(),
     );
-    if let Err(e) = context
-      .session_manager
-      .add_pending_tool_approval(&request)
-      .await
-    {
+    if let Err(e) = context.repository.insert_tool_approval(&request).await {
       vlog!("Failed to record tool approval '{tool_call_id}': {e}");
     }
 
@@ -128,7 +123,7 @@ impl PreToolHook for ToolApprovalHook {
     };
 
     if let Err(e) = context
-      .session_manager
+      .repository
       .resolve_tool_approval(&tool_call_id, status.clone())
       .await
     {

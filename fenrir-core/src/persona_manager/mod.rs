@@ -31,7 +31,7 @@ impl PersonaManager {
     return &self.current_persona;
   }
 
-  pub fn list(&self) -> Vec<Persona> {
+  pub fn list() -> Vec<Persona> {
     return [
       DEFAULT_PERSONA,
       RESEARCHER_PERSONA,
@@ -45,21 +45,21 @@ impl PersonaManager {
     .collect();
   }
 
-  pub fn set(&mut self, name: &str) -> Result<()> {
-    let personas = self.list();
-    let Some(persona) = personas.iter().find(|p| p.name() == name) else {
+  pub fn find(name: &str) -> Result<Persona> {
+    let personas = Self::list();
+    let Some(persona) = personas.into_iter().find(|p| p.name() == name) else {
       bail!("Unknown persona: {name}");
     };
-    self.current_persona = persona.clone();
+    return Ok(persona);
+  }
+
+  pub fn set(&mut self, name: &str) -> Result<()> {
+    self.current_persona = Self::find(name)?;
     return Ok(());
   }
 
   pub fn set_persona(&mut self, persona: Persona) {
     self.current_persona = persona;
-  }
-
-  pub fn reset(&mut self) {
-    self.current_persona = DEFAULT_PERSONA;
   }
 }
 

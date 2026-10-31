@@ -1,253 +1,222 @@
+mod compaction;
+mod harness;
 mod queries;
-mod repository;
+pub mod repository;
 pub mod session;
 mod summary;
 mod tool_approval;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use tokio::sync::mpsc::Sender;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::app::{AppEvent, ApprovalChannel};
+use crate::config::Config;
+use crate::database::DB;
+use crate::persona_manager::{Persona, PersonaManager};
+use crate::provider_manager::{ChatUsage, Model, ProviderManager};
+pub use crate::session_manager::repository::SessionRepository;
 pub use crate::session_manager::session::Message;
+use crate::session_manager::session::Session;
 pub use crate::session_manager::summary::Summary;
 pub use crate::session_manager::tool_approval::{
   ToolApprovalRequest, ToolApprovalStatus,
 };
 
-use crate::database::DB;
-use crate::session_manager::repository::SessionRepository;
-use crate::session_manager::session::Session;
-
-const CANCELLED_TOOL_RESULT: &str = concat!(
-  "Tool call cancelled by the user before completion. ",
-  "Do not retry unless the user asks."
-);
-
 pub struct SessionManager {
   sessions: Vec<Session>,
-  current_session: Option<Uuid>,
+  providers: ProviderManager,
+  config: Config,
   repository: SessionRepository,
+  model: Option<Model>,
+  next_persona: Option<Persona>,
 }
 
 impl SessionManager {
-  pub fn new(db: DB) -> Self {
+  pub fn new(config: Config, db: DB) -> Self {
+    let providers = ProviderManager::new(config.clone());
+    let model = providers.default_model();
     return Self {
       sessions: Vec::new(),
-      current_session: None,
+      providers,
+      config,
       repository: SessionRepository::new(db),
+      model,
+      next_persona: None,
     };
   }
 
-  pub async fn create_session(
-    &mut self,
-    parent_id: Option<Uuid>,
-  ) -> Result<Uuid> {
-    let session = Session::new(parent_id);
+  pub fn get_providers(&self) -> &ProviderManager {
+    return &self.providers;
+  }
+
+  pub fn persona_name(&self, session_id: Option<Uuid>) -> String {
+    return session_id
+      .and_then(|id| self.session(id))
+      .map(|session| session.persona_manager.current().name().to_string())
+      .unwrap_or_else(|| self.next_persona_or_default().name().to_string());
+  }
+
+  pub fn current_model(&self, session_id: Option<Uuid>) -> Option<Model> {
+    return session_id
+      .and_then(|id| self.session(id))
+      .and_then(|session| session.model.clone())
+      .or_else(|| self.model.clone());
+  }
+
+  pub async fn create_session(&mut self) -> Result<Uuid> {
+    let mut session = Session::new(
+      None,
+      self.model.clone(),
+      &self.config,
+      ApprovalChannel::new(),
+    );
+    session
+      .persona_manager
+      .set_persona(self.next_persona_or_default());
     self.repository.insert_session(&session).await?;
     let id = session.id;
     self.sessions.push(session);
-    self.current_session = Some(id);
     return Ok(id);
   }
 
-  pub async fn add_system_message_to_session(
-    &mut self,
-    session_id: Uuid,
-    content: &str,
-  ) -> Result<()> {
-    self
-      .add_message_to_session(session_id, |session| {
-        session.add_system_message(content);
-      })
-      .await?;
-    return Ok(());
-  }
-
-  pub async fn add_user_message_to_session(
-    &mut self,
-    session_id: Uuid,
-    content: &str,
-  ) -> Result<()> {
-    self
-      .add_message_to_session(session_id, |session| {
-        session.add_user_message(content);
-      })
-      .await?;
-    return Ok(());
-  }
-
-  pub async fn add_assistant_message_to_session(
-    &mut self,
-    session_id: Uuid,
-    content: &str,
-  ) -> Result<()> {
-    self
-      .add_message_to_session(session_id, |session| {
-        session.add_assistant_message(content);
-      })
-      .await?;
-    return Ok(());
-  }
-
-  pub async fn add_reasoning_message_to_session(
-    &mut self,
-    session_id: Uuid,
-    content: &str,
-  ) -> Result<()> {
-    self
-      .add_message_to_session(session_id, |session| {
-        session.add_reasoning_message(content);
-      })
-      .await?;
-    return Ok(());
-  }
-
-  pub async fn add_tool_result_to_session(
-    &mut self,
-    session_id: Uuid,
-    tool_call_id: &str,
-    result: &str,
-  ) -> Result<()> {
-    self
-      .add_message_to_session(session_id, |session| {
-        session
-          .add_tool_result(tool_call_id, &format!("Tool result: {result}"));
-      })
-      .await?;
-    return Ok(());
-  }
-
-  pub async fn add_cancelled_tool_result_to_session(
-    &mut self,
-    session_id: Uuid,
-    tool_call_id: &str,
-  ) -> Result<()> {
-    self
-      .add_tool_result_to_session(
-        session_id,
-        tool_call_id,
-        CANCELLED_TOOL_RESULT,
-      )
-      .await?;
-    return Ok(());
-  }
-
-  pub async fn add_tool_call_to_session(
-    &mut self,
-    session_id: Uuid,
-    tool_call_id: &str,
-    tool_name: &str,
-    arguments: &str,
-  ) -> Result<()> {
-    self
-      .add_message_to_session(session_id, |session| {
-        session.add_tool_call(tool_call_id, tool_name, arguments);
-      })
-      .await?;
-    return Ok(());
-  }
-
-  async fn add_message_to_session<F>(
-    &mut self,
-    session_id: Uuid,
-    f: F,
-  ) -> Result<()>
-  where
-    F: FnOnce(&mut Session),
-  {
-    if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
-    {
-      f(session);
-      let new_msg = session.messages.last();
-      if let Some(msg) = new_msg {
-        self.repository.insert_message(session.id, msg).await?;
-      }
+  pub async fn load_session(&mut self, id: Uuid) -> Result<()> {
+    if let Some(session) = self.session_mut(id) {
+      session.tool_manager.reset_cache();
+      return Ok(());
     }
-    return Ok(());
-  }
-
-  pub async fn add_summary_to_session(
-    &mut self,
-    session_id: Uuid,
-    content: &str,
-    covers_message_id: Uuid,
-  ) -> Result<()> {
-    if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
-    {
-      session.add_summary(content, covers_message_id);
-      let new_summary = session.summaries.last();
-      if let Some(summary) = new_summary {
-        self.repository.insert_summary(session.id, summary).await?;
-      }
-    }
-    return Ok(());
-  }
-
-  pub async fn update_session_title(
-    &mut self,
-    session_id: Uuid,
-    title: &str,
-  ) -> Result<()> {
-    if let Some(session) = self.sessions.iter_mut().find(|s| s.id == session_id)
-    {
-      session.title = Some(title.to_string());
-      self.repository.update_title(session_id, title).await?;
-    }
-    return Ok(());
-  }
-
-  pub async fn load_session_from_db(&mut self, id: Uuid) -> Result<()> {
-    let session = self.repository.load(id).await?;
+    let model = self.model.clone();
+    let config = &self.config;
+    let session = self
+      .repository
+      .load(id, |row| {
+        Session::from_row(row, config, model.clone(), ApprovalChannel::new())
+      })
+      .await?;
     self.sessions.push(session);
-    self.current_session = Some(id);
     return Ok(());
   }
 
   pub async fn list_sessions(&self) -> Result<Vec<Session>> {
-    return self.repository.list().await;
-  }
-
-  pub async fn add_pending_tool_approval(
-    &self,
-    request: &ToolApprovalRequest,
-  ) -> Result<()> {
-    self.repository.insert_tool_approval(request).await?;
-    return Ok(());
-  }
-
-  pub async fn resolve_tool_approval(
-    &self,
-    tool_call_id: &str,
-    status: ToolApprovalStatus,
-  ) -> Result<()> {
-    self
+    let model = self.model.clone();
+    let config = &self.config;
+    return self
       .repository
-      .resolve_tool_approval(tool_call_id, status)
-      .await?;
-    return Ok(());
+      .list(|row| {
+        Session::from_row(row, config, model.clone(), ApprovalChannel::new())
+      })
+      .await;
   }
 
-  pub async fn tool_approval_status(
-    &self,
-    tool_call_id: &str,
-  ) -> Result<Option<ToolApprovalStatus>> {
-    return self.repository.tool_approval_status(tool_call_id).await;
+  pub async fn ensure_system_message(&mut self, id: Uuid) -> Result<()> {
+    let index = self.index_of(id)?;
+    let session = &mut self.sessions[index];
+    return session
+      .ensure_system_message(&self.config, &self.repository)
+      .await;
   }
 
-  fn get_session_by_id(&self, id: Uuid) -> Option<&Session> {
+  pub async fn add_user_message(
+    &mut self,
+    id: Uuid,
+    content: &str,
+  ) -> Result<()> {
+    let index = self.index_of(id)?;
+    let session = &mut self.sessions[index];
+    session.add_user_message(content);
+    return session.persist_last_message(&self.repository).await;
+  }
+
+  pub async fn run_chat(
+    &mut self,
+    id: Uuid,
+    tx: &Sender<AppEvent>,
+    cancel: &CancellationToken,
+  ) -> Result<String> {
+    let index = self.index_of(id)?;
+    let session = &mut self.sessions[index];
+    return session
+      .harness_loop(&self.config, &self.providers, &self.repository, tx, cancel)
+      .await;
+  }
+
+  pub async fn maybe_compact(
+    &mut self,
+    id: Uuid,
+    cancel: &CancellationToken,
+  ) -> Result<String> {
+    let index = self.index_of(id)?;
+    let session = &mut self.sessions[index];
+    return session
+      .maybe_compact(&self.config, &self.providers, &self.repository, cancel)
+      .await;
+  }
+
+  pub async fn compact(
+    &mut self,
+    id: Uuid,
+    cancel: &CancellationToken,
+  ) -> Result<String> {
+    let index = self.index_of(id)?;
+    let session = &mut self.sessions[index];
+    return session
+      .compact(&self.providers, &self.repository, cancel)
+      .await;
+  }
+
+  pub fn last_usage(&self, id: Uuid) -> Option<ChatUsage> {
+    return self.session(id).and_then(|session| session.last_usage);
+  }
+
+  pub fn session(&self, id: Uuid) -> Option<&Session> {
     return self.sessions.iter().find(|session| session.id == id);
   }
 
-  pub fn get_current_session(&self) -> Option<&Session> {
+  pub fn session_mut(&mut self, id: Uuid) -> Option<&mut Session> {
+    return self.sessions.iter_mut().find(|session| session.id == id);
+  }
+
+  pub fn set_model(&mut self, session_id: Option<Uuid>, model: Model) {
+    if let Some(id) = session_id
+      && let Some(session) = self.session_mut(id)
+    {
+      session.model = Some(model.clone());
+    }
+    self.model = Some(model);
+  }
+
+  pub fn set_persona(
+    &mut self,
+    session_id: Option<Uuid>,
+    name: &str,
+  ) -> Result<()> {
+    if let Some(id) = session_id
+      && let Some(session) = self.session_mut(id)
+    {
+      session.persona_manager.set(name)?;
+    } else {
+      self.next_persona = Some(PersonaManager::find(name)?);
+    }
+    return Ok(());
+  }
+
+  pub fn reset_persona(&mut self) {
+    self.next_persona = None;
+  }
+
+  fn next_persona_or_default(&self) -> Persona {
     return self
-      .current_session
-      .and_then(|id| self.get_session_by_id(id));
+      .next_persona
+      .clone()
+      .unwrap_or_else(|| PersonaManager::new().current().clone());
   }
 
-  pub fn clear_current_session(&mut self) {
-    self.current_session = None;
-  }
-
-  pub fn set_current_session(&mut self, id: Uuid) {
-    self.current_session = Some(id);
+  fn index_of(&self, id: Uuid) -> Result<usize> {
+    return self
+      .sessions
+      .iter()
+      .position(|session| session.id == id)
+      .context(format!("Session '{id}' not found"));
   }
 }

@@ -10,6 +10,16 @@ use crate::session_manager::tool_approval::{
   ToolApprovalRequest, ToolApprovalStatus,
 };
 
+pub(crate) struct SessionRow {
+  pub(crate) id: Uuid,
+  pub(crate) parent_id: Option<Uuid>,
+  pub(crate) title: Option<String>,
+  pub(crate) created_at: i64,
+  pub(crate) last_interaction: i64,
+  pub(crate) messages: Vec<Message>,
+  pub(crate) summaries: Vec<Summary>,
+}
+
 pub struct SessionRepository {
   db: DB,
 }
@@ -101,7 +111,10 @@ impl SessionRepository {
     return Ok(());
   }
 
-  pub async fn load(&self, id: Uuid) -> Result<Session> {
+  pub(crate) async fn load<F>(&self, id: Uuid, build: F) -> Result<Session>
+  where
+    F: FnOnce(SessionRow) -> Session,
+  {
     let mut session_row = self
       .db
       .query(LOAD_SESSION, (id.to_string(),))
@@ -256,7 +269,7 @@ impl SessionRepository {
       summaries.push(summary);
     }
 
-    let session = Session {
+    let row = SessionRow {
       id: session_id,
       parent_id,
       title,
@@ -266,10 +279,13 @@ impl SessionRepository {
       summaries,
     };
 
-    return Ok(session);
+    return Ok(build(row));
   }
 
-  pub async fn list(&self) -> Result<Vec<Session>> {
+  pub(crate) async fn list<F>(&self, build: F) -> Result<Vec<Session>>
+  where
+    F: Fn(SessionRow) -> Session,
+  {
     let mut rows = self
       .db
       .query(LIST_SESSIONS, ())
@@ -306,7 +322,7 @@ impl SessionRepository {
         Err(_) => continue,
       };
 
-      let session = Session {
+      let session = SessionRow {
         id,
         parent_id,
         title,
@@ -316,7 +332,7 @@ impl SessionRepository {
         summaries: Vec::new(),
       };
 
-      result.push(session);
+      result.push(build(session));
     }
 
     return Ok(result);
@@ -361,32 +377,5 @@ impl SessionRepository {
       .await
       .context(format!("Failed to resolve tool approval '{tool_call_id}'"))?;
     return Ok(());
-  }
-
-  pub async fn tool_approval_status(
-    &self,
-    tool_call_id: &str,
-  ) -> Result<Option<ToolApprovalStatus>> {
-    let mut rows = self
-      .db
-      .query(LOAD_TOOL_APPROVAL_STATUS, (tool_call_id,))
-      .await
-      .context(format!("Failed to load tool approval '{tool_call_id}'"))?;
-    let Some(row) = rows.next().await? else {
-      return Ok(None);
-    };
-    let status: String = match row.get(0) {
-      Ok(v) => v,
-      Err(_) => {
-        bail!("Invalid tool approval data");
-      }
-    };
-    let status = match ToolApprovalStatus::parse(&status) {
-      Some(v) => v,
-      None => {
-        bail!("Invalid tool approval data");
-      }
-    };
-    return Ok(Some(status));
   }
 }

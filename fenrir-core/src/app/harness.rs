@@ -6,23 +6,36 @@ use anyhow::{Context, Result};
 use tokio::sync::mpsc;
 use tokio::time::{MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
-use crate::agent_manager::AgentManager;
 use crate::app::App;
 use crate::app::AppEvent;
+use crate::app::ApprovalChannel;
 use crate::app::EventSink;
 use crate::app::command::{AppCommand, AppCommandResult};
+use crate::persona_manager::PersonaManager;
+use crate::slash_commands::SlashCommand;
 use crate::vlog;
 
 const UI_TICK: Duration = Duration::from_millis(16);
 
-impl AgentManager {
+impl App {
+  fn approval_channel(
+    &self,
+    session_id: Option<Uuid>,
+  ) -> Option<ApprovalChannel> {
+    return session_id
+      .and_then(|id| self.sessions.session(id))
+      .map(|session| session.approval_channel().clone());
+  }
+
   pub async fn harness_loop(
-    app: &mut App,
+    &mut self,
     sink: &mut impl EventSink,
   ) -> Result<String> {
+    let mut current_session_id: Option<Uuid> = None;
     loop {
-      if app.shutdown.is_cancelled() {
+      if self.shutdown.is_cancelled() {
         vlog!("Shutdown signal received, exiting harness loop...");
         break;
       }
@@ -45,16 +58,29 @@ impl AgentManager {
       };
 
       if let Some(command) = command {
-        let cancel = app.shutdown.child_token();
+        let cancel = self.shutdown.child_token();
         sink.set_cancel_token(cancel.clone()).await;
 
         if matches!(&command, AppCommand::Compact) {
-          run_compact(app, sink, &cancel).await;
+          match current_session_id {
+            Some(session_id) => {
+              run_compact(self, sink, session_id, &cancel).await;
+            }
+            None => {
+              sink
+                .on_event(AppEvent::Error {
+                  message: "No session selected".to_string(),
+                })
+                .await;
+            }
+          }
           continue;
         }
 
-        let result = app.agent_manager.handle_command(command, &cancel).await;
-        match result? {
+        let result = self
+          .handle_command(command, &mut current_session_id, &cancel)
+          .await?;
+        match result {
           AppCommandResult::Exit => {
             sink.on_exit().await;
             break;
@@ -62,48 +88,47 @@ impl AgentManager {
           AppCommandResult::Help(slash_commands) => {
             sink.on_help(slash_commands).await;
           }
-          AppCommandResult::Sessions { sessions, current } => {
-            let selected = sink.on_sessions(sessions, current).await?;
+          AppCommandResult::Sessions { sessions } => {
+            let selected =
+              sink.on_sessions(sessions, current_session_id).await?;
             if let Some(session_id) = selected {
-              let result = app
-                .agent_manager
-                .handle_command(
-                  AppCommand::LoadSession { id: session_id },
-                  &cancel,
-                )
-                .await?;
-              if let AppCommandResult::Session(session) = result {
-                sink.on_session_selection(session).await;
-              }
+              self.sessions.load_session(session_id).await?;
+              current_session_id = Some(session_id);
+              let session = self
+                .sessions
+                .session(session_id)
+                .context("No active session")?;
+              sink.on_session_selection(session).await;
             }
           }
-          AppCommandResult::Session(session) => {
+          AppCommandResult::Session(session_id) => {
+            let session = self
+              .sessions
+              .session(session_id)
+              .context("No active session")?;
             sink.on_session_selection(session).await;
           }
-          AppCommandResult::Personas { personas, current } => {
-            if let Some(name) = sink.on_personas(personas, current).await? {
-              app
-                .agent_manager
-                .handle_command(
-                  AppCommand::SelectPersona { name: name.clone() },
-                  &cancel,
-                )
-                .await?;
+          AppCommandResult::Personas {
+            personas,
+            current_persona_name,
+          } => {
+            if let Some(name) =
+              sink.on_personas(personas, current_persona_name).await?
+            {
+              self.sessions.set_persona(current_session_id, &name)?;
               sink.on_persona_selection(name).await;
             }
           }
           AppCommandResult::Persona(name) => {
             sink.on_persona_selection(name).await;
           }
-          AppCommandResult::Models { models, current } => {
-            if let Some(model) = sink.on_models(models, current).await? {
-              let result = app
-                .agent_manager
-                .handle_command(AppCommand::SelectModel { model }, &cancel)
-                .await?;
-              if let AppCommandResult::Model(model) = result {
-                sink.on_model_selection(model).await;
-              }
+          AppCommandResult::Models {
+            models,
+            current_model,
+          } => {
+            if let Some(model) = sink.on_models(models, current_model).await? {
+              self.sessions.set_model(current_session_id, model.clone());
+              sink.on_model_selection(model).await;
             }
           }
           AppCommandResult::Model(model) => {
@@ -114,26 +139,27 @@ impl AgentManager {
           }
           AppCommandResult::Noop => {}
         }
+        sink
+          .set_approval_channel(self.approval_channel(current_session_id))
+          .await;
         continue;
       }
 
-      app
-        .agent_manager
-        .ensure_session_with_system_message()
-        .await?;
+      let session_id = match current_session_id {
+        Some(session_id) => session_id,
+        None => {
+          let session_id = self.sessions.create_session().await?;
+          vlog!("Created session with ID: {session_id}");
+          current_session_id = Some(session_id);
+          session_id
+        }
+      };
 
-      let session_id = app
-        .agent_manager
-        .session_manager
-        .get_current_session()
-        .map(|s| s.id)
-        .context("No active session")?;
-
-      app
-        .agent_manager
-        .session_manager
-        .add_user_message_to_session(session_id, &input)
-        .await?;
+      self.sessions.ensure_system_message(session_id).await?;
+      self.sessions.add_user_message(session_id, &input).await?;
+      sink
+        .set_approval_channel(self.approval_channel(Some(session_id)))
+        .await;
 
       sink
         .on_event(AppEvent::UserMessage {
@@ -144,18 +170,18 @@ impl AgentManager {
         .on_event(AppEvent::Processing { processing: true })
         .await;
 
-      let cancel = app.shutdown.child_token();
+      let cancel = self.shutdown.child_token();
       sink.set_cancel_token(cancel.clone()).await;
 
-      let Some(result) = run_chat(app, sink, &cancel).await else {
+      let Some(result) = run_chat(self, sink, session_id, &cancel).await else {
         continue;
       };
 
       match result {
         Ok(_) => {
-          let last_usage = app.agent_manager.last_usage();
+          let last_usage = self.sessions.last_usage(session_id);
           sink.on_event(AppEvent::Usage { usage: last_usage }).await;
-          run_compaction(app, sink, &cancel).await;
+          run_compaction(self, sink, session_id, &cancel).await;
         }
         Err(e) => {
           sink
@@ -168,15 +194,76 @@ impl AgentManager {
     }
     return Ok(String::new());
   }
+
+  async fn handle_command(
+    &mut self,
+    command: AppCommand,
+    current_session_id: &mut Option<Uuid>,
+    cancel: &CancellationToken,
+  ) -> Result<AppCommandResult> {
+    let has_session = current_session_id.is_some();
+    return match command {
+      AppCommand::Exit => Ok(AppCommandResult::Exit),
+      AppCommand::Help => Ok(AppCommandResult::Help(
+        SlashCommand::available_commands(has_session),
+      )),
+      AppCommand::ListSessions => {
+        let sessions = self.sessions.list_sessions().await?;
+        return Ok(AppCommandResult::Sessions { sessions });
+      }
+      AppCommand::LoadSession { id } => {
+        self.sessions.load_session(id).await?;
+        *current_session_id = Some(id);
+        return Ok(AppCommandResult::Session(id));
+      }
+      AppCommand::ListPersonas => {
+        let personas = PersonaManager::list();
+        let current_persona_name =
+          self.sessions.persona_name(*current_session_id);
+        return Ok(AppCommandResult::Personas {
+          personas,
+          current_persona_name,
+        });
+      }
+      AppCommand::SelectPersona { name } => {
+        self.sessions.set_persona(*current_session_id, &name)?;
+        return Ok(AppCommandResult::Noop);
+      }
+      AppCommand::ListModels => {
+        let models = self.sessions.get_providers().list_models();
+        let current_model = self.sessions.current_model(*current_session_id);
+        return Ok(AppCommandResult::Models {
+          models,
+          current_model,
+        });
+      }
+      AppCommand::SelectModel { model } => {
+        self.sessions.set_model(*current_session_id, model.clone());
+        return Ok(AppCommandResult::Model(model));
+      }
+      AppCommand::Compact => {
+        let id = current_session_id.context("No session selected")?;
+        let summary = self.sessions.compact(id, cancel).await?;
+        return Ok(AppCommandResult::Compacted { summary });
+      }
+      AppCommand::New => {
+        *current_session_id = None;
+        self.sessions.reset_persona();
+        let name = self.sessions.persona_name(None);
+        return Ok(AppCommandResult::Persona(name));
+      }
+    };
+  }
 }
 
 async fn run_chat(
   app: &mut App,
   sink: &mut impl EventSink,
+  session_id: Uuid,
   cancel: &CancellationToken,
 ) -> Option<Result<String>> {
   let (tx, mut rx) = mpsc::channel::<AppEvent>(256);
-  let chat = app.agent_manager.process_chat(&tx, cancel);
+  let chat = app.sessions.run_chat(session_id, &tx, cancel);
   tokio::pin!(chat);
 
   let mut ticker = ui_ticker();
@@ -235,9 +322,10 @@ async fn drain_cancelled_turn<F>(
 async fn run_compaction(
   app: &mut App,
   sink: &mut impl EventSink,
+  session_id: Uuid,
   cancel: &CancellationToken,
 ) {
-  let compact = app.agent_manager.maybe_compact(cancel);
+  let compact = app.sessions.maybe_compact(session_id, cancel);
   tokio::pin!(compact);
 
   let mut ticker = ui_ticker();
@@ -273,11 +361,10 @@ async fn run_compaction(
 async fn run_compact(
   app: &mut App,
   sink: &mut impl EventSink,
+  session_id: Uuid,
   cancel: &CancellationToken,
 ) {
-  let command = app
-    .agent_manager
-    .handle_command(AppCommand::Compact, cancel);
+  let command = app.sessions.compact(session_id, cancel);
   tokio::pin!(command);
 
   let mut ticker = ui_ticker();
@@ -306,10 +393,9 @@ async fn run_compact(
   }
 
   match result {
-    Some(Ok(AppCommandResult::Compacted { summary })) => {
+    Some(Ok(summary)) => {
       sink.on_event(AppEvent::Compacted { summary }).await;
     }
-    Some(Ok(_)) => {}
     Some(Err(e)) => {
       sink
         .on_event(AppEvent::Error {

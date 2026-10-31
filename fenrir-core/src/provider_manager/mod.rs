@@ -1,9 +1,7 @@
 mod provider;
 mod providers;
 
-use std::sync::Mutex;
-
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 use crate::config::Config;
 pub use crate::provider_manager::provider::ChatUsage;
@@ -17,7 +15,7 @@ use crate::vlog;
 
 pub struct ProviderManager {
   providers: Vec<Box<dyn Provider>>,
-  active_model: Mutex<Option<Model>>,
+  default_model: Option<Model>,
 }
 
 impl ProviderManager {
@@ -27,10 +25,10 @@ impl ProviderManager {
       providers.push(Box::new(provider));
     }
 
-    let active_model = resolve_active_model(&config, &providers);
+    let default_model = resolve_default_model(&config, &providers);
     return Self {
       providers,
-      active_model: Mutex::new(active_model),
+      default_model,
     };
   }
 
@@ -42,69 +40,82 @@ impl ProviderManager {
     return models;
   }
 
-  pub fn active_model(&self) -> Option<Model> {
-    return self.active_model.lock().unwrap().clone();
+  pub fn default_model(&self) -> Option<Model> {
+    return self.default_model.clone();
   }
 
-  pub fn set_active_model(&self, model: &Model) {
-    *self.active_model.lock().unwrap() = Some(model.clone());
-    vlog!(
-      "Switched active model to '{}/{}'",
-      model.provider,
-      model.name
-    );
-  }
-
-  fn resolve(&self) -> Result<(Model, &dyn Provider)> {
-    let Some(model) = self.active_model() else {
-      bail!("No active model configured");
-    };
+  fn get_provider(&self, name: &str) -> Result<&dyn Provider> {
     let Some(provider) = self
       .providers
       .iter()
-      .find(|p| p.name() == model.provider)
+      .find(|p| p.name() == name)
       .map(|p| p.as_ref())
     else {
-      bail!("No active provider configured");
+      bail!("No provider configured for '{name}'");
     };
-    return Ok((model, provider));
+    return Ok(provider);
   }
 
   pub async fn chat(
     &self,
+    model: &Model,
     messages: &[Message],
     tools: &[ToolSpec],
   ) -> Result<ChatResponse> {
-    let (model, provider) = self.resolve()?;
-    return provider.chat(messages, tools, &model.name).await;
+    return self
+      .get_provider(&model.provider)?
+      .chat(messages, tools, &model.name)
+      .await
+      .context("Chat request failed");
   }
 
   pub async fn chat_stream(
     &self,
+    model: &Model,
     messages: &[Message],
     tools: &[ToolSpec],
   ) -> Result<ChatStream> {
-    let (model, provider) = self.resolve()?;
-    return provider.chat_stream(messages, tools, &model.name).await;
+    return self
+      .get_provider(&model.provider)?
+      .chat_stream(messages, tools, &model.name)
+      .await
+      .context("Chat stream request failed");
   }
 }
 
-fn resolve_active_model(
+fn resolve_default_model(
   config: &Config,
   providers: &[Box<dyn Provider>],
 ) -> Option<Model> {
-  let model_str = config.general.model.as_ref()?;
-  let (provider_name, model_name) = model_str.split_once('/')?;
+  if let Some(model_str) = config.general.model.as_ref() {
+    if let Some((provider_name, model_name)) = model_str.split_once('/') {
+      if let Some(model) = providers
+        .iter()
+        .find(|p| p.name() == provider_name)
+        .and_then(|p| {
+          p.list_models().into_iter().find(|m| m.name == model_name)
+        })
+      {
+        vlog!("Selected provider '{provider_name}' model '{model_name}'");
+        return Some(model);
+      }
+      vlog!("Failed to select provider '{provider_name}' model '{model_name}'");
+    } else {
+      vlog!(
+        "Invalid configured model '{model_str}': expected '<provider>/<model>'"
+      );
+    }
+  }
 
   let model = providers
     .iter()
-    .find(|p| p.name() == provider_name)
-    .and_then(|p| p.list_models().into_iter().find(|m| m.name == model_name));
-
-  if model.is_some() {
-    vlog!("Selected provider '{provider_name}' model '{model_name}'");
-  } else {
-    vlog!("Failed to select provider '{provider_name}' model '{model_name}'");
+    .find_map(|p| p.list_models().into_iter().next());
+  if let Some(model) = &model {
+    vlog!(
+      "Using default provider '{}' model '{}'",
+      model.provider,
+      model.name
+    );
   }
   return model;
 }

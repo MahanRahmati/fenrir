@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::app::ApprovalChannel;
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
 use crate::provider_manager::Model;
@@ -69,7 +70,7 @@ pub trait EventSink {
     sessions: Vec<Session>,
     current: Option<Uuid>,
   ) -> Result<Option<Uuid>>;
-  async fn on_session_selection(&mut self, session: Session);
+  async fn on_session_selection(&mut self, session: &Session);
   async fn on_personas(
     &mut self,
     personas: Vec<Persona>,
@@ -82,5 +83,6 @@ pub trait EventSink {
     current: Option<Model>,
   ) -> Result<Option<Model>>;
   async fn on_model_selection(&mut self, model: Model);
+  async fn set_approval_channel(&mut self, channel: Option<ApprovalChannel>);
   async fn set_cancel_token(&mut self, token: CancellationToken);
 }

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use anyhow::Result;
 use tokio::sync::mpsc::Sender;
@@ -10,16 +9,17 @@ use crate::app::AppEvent;
 use crate::app::ApprovalChannel;
 use crate::config::Config;
 use crate::persona_manager::Persona;
-use crate::provider_manager::ProviderManager;
-use crate::session_manager::SessionManager;
+use crate::provider_manager::{Model, ProviderManager};
+use crate::session_manager::SessionRepository;
 
 pub type ToolParams = HashMap<String, String>;
 
 pub struct ToolContext<'a> {
   pub config: &'a Config,
   pub persona: &'a Persona,
-  pub provider_manager: &'a Arc<ProviderManager>,
-  pub session_manager: &'a mut SessionManager,
+  pub model: &'a Model,
+  pub provider_manager: &'a ProviderManager,
+  pub repository: &'a SessionRepository,
   pub approvals: &'a ApprovalChannel,
   pub tx: &'a Sender<AppEvent>,
   pub cancel: &'a CancellationToken,

@@ -1,8 +1,18 @@
+use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::app::ApprovalChannel;
+use crate::config::Config;
+use crate::hook_manager::HookManager;
+use crate::persona_manager::PersonaManager;
+use crate::prompt::Prompt;
+use crate::provider_manager::{ChatUsage, Model};
+use crate::session_manager::repository::{SessionRepository, SessionRow};
 use crate::session_manager::summary::Summary;
+use crate::tool_manager::ToolManager;
+use crate::workflow_manager::WorkflowManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
@@ -33,23 +43,32 @@ pub struct ToolFunction {
   pub arguments: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
   pub id: Uuid,
-  #[serde(skip_serializing_if = "Option::is_none")]
   pub parent_id: Option<Uuid>,
-  #[serde(skip_serializing_if = "Option::is_none")]
   pub title: Option<String>,
   pub created_at: i64,
   pub last_interaction: i64,
   pub messages: Vec<Message>,
   pub summaries: Vec<Summary>,
+  pub model: Option<Model>,
+  pub tool_manager: ToolManager,
+  pub persona_manager: PersonaManager,
+  pub workflow_manager: WorkflowManager,
+  pub hook_manager: HookManager,
+  approvals: ApprovalChannel,
+  pub last_usage: Option<ChatUsage>,
 }
 
 impl Session {
-  pub fn new(parent_id: Option<Uuid>) -> Self {
+  pub fn new(
+    parent_id: Option<Uuid>,
+    model: Option<Model>,
+    config: &Config,
+    approvals: ApprovalChannel,
+  ) -> Self {
     let now = Utc::now().timestamp();
-    return Self {
+    let row = SessionRow {
       id: Uuid::now_v7(),
       parent_id,
       title: None,
@@ -58,6 +77,69 @@ impl Session {
       messages: Vec::new(),
       summaries: Vec::new(),
     };
+    return Self::from_row(row, config, model, approvals);
+  }
+
+  pub(crate) fn from_row(
+    row: SessionRow,
+    config: &Config,
+    model: Option<Model>,
+    approvals: ApprovalChannel,
+  ) -> Self {
+    let is_subagent = row.parent_id.is_some();
+    let tool_manager = ToolManager::new(config, is_subagent);
+    let persona_manager = PersonaManager::new();
+    let workflow_manager = WorkflowManager::new(config.clone());
+    let hook_manager = HookManager::new(config);
+    return Self {
+      id: row.id,
+      parent_id: row.parent_id,
+      title: row.title,
+      created_at: row.created_at,
+      last_interaction: row.last_interaction,
+      messages: row.messages,
+      summaries: row.summaries,
+      model,
+      tool_manager,
+      persona_manager,
+      workflow_manager,
+      hook_manager,
+      approvals,
+      last_usage: None,
+    };
+  }
+
+  pub fn is_subagent(&self) -> bool {
+    return self.parent_id.is_some();
+  }
+
+  pub fn approval_channel(&self) -> &ApprovalChannel {
+    return &self.approvals;
+  }
+
+  pub async fn ensure_system_message(
+    &mut self,
+    config: &Config,
+    repository: &SessionRepository,
+  ) -> Result<()> {
+    if self.messages.iter().any(|message| message.role == "system") {
+      return Ok(());
+    }
+    let prompt = Prompt::new(config, self.persona_manager.current());
+    self.add_system_message(prompt.get_system_prompt());
+    self.persist_last_message(repository).await?;
+    return Ok(());
+  }
+
+  pub async fn persist_last_message(
+    &self,
+    repository: &SessionRepository,
+  ) -> Result<()> {
+    let Some(message) = self.messages.last() else {
+      return Ok(());
+    };
+    repository.insert_message(self.id, message).await?;
+    return Ok(());
   }
 
   pub fn add_system_message(&mut self, content: &str) {
@@ -78,6 +160,10 @@ impl Session {
 
   pub fn add_tool_result(&mut self, tool_call_id: &str, content: &str) {
     self.add_message("tool", content, Some(tool_call_id.to_string()), None);
+  }
+
+  pub fn add_tool_result_message(&mut self, tool_call_id: &str, content: &str) {
+    self.add_tool_result(tool_call_id, &format!("Tool result: {content}"));
   }
 
   pub fn add_tool_call(
@@ -140,26 +226,31 @@ impl Session {
     if let Some(latest) = self.summaries.last() {
       let mut chat_context = Vec::new();
 
-      let system_message = self.messages.iter().find(|m| m.role == "system");
-      if let Some(system_message) = system_message {
-        chat_context.push(system_message.clone());
+      let mut system_content = self
+        .messages
+        .iter()
+        .find(|m| m.role == "system")
+        .map(|m| m.content.clone())
+        .unwrap_or_default();
+      if !system_content.is_empty() {
+        system_content.push_str("\n\n");
       }
+      system_content.push_str(&latest.content);
+
+      chat_context.push(Message {
+        id: Uuid::now_v7(),
+        msg_type: None,
+        role: "system".to_string(),
+        content: system_content,
+        tool_call_id: None,
+        tool_calls: None,
+        timestamp: latest.created_at,
+      });
 
       let first_user_message = self.messages.iter().find(|m| m.role == "user");
       if let Some(first_user_message) = first_user_message {
         chat_context.push(first_user_message.clone());
       }
-
-      let summary = Message {
-        id: Uuid::now_v7(),
-        msg_type: None,
-        role: "system".to_string(),
-        content: latest.content.clone(),
-        tool_call_id: None,
-        tool_calls: None,
-        timestamp: latest.created_at,
-      };
-      chat_context.push(summary);
 
       for msg in &self.messages {
         if msg.id > latest.covers_message_id {

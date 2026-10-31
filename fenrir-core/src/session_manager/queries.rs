@@ -11,5 +11,3 @@ pub const INSERT_TOOL_APPROVAL: &str =
   include_str!("queries/insert_tool_approval.sql");
 pub const RESOLVE_TOOL_APPROVAL: &str =
   include_str!("queries/resolve_tool_approval.sql");
-pub const LOAD_TOOL_APPROVAL_STATUS: &str =
-  include_str!("queries/load_tool_approval_status.sql");

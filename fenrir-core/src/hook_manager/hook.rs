@@ -2,12 +2,11 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::agent_manager::agent::AgentKind;
 use crate::app::AppEvent;
 use crate::app::ApprovalChannel;
 use crate::config::Config;
 use crate::persona_manager::Persona;
-use crate::session_manager::SessionManager;
+use crate::session_manager::SessionRepository;
 use crate::tool_manager::tool::ToolParams;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,9 +33,9 @@ pub struct HookContext<'a> {
   pub session_id: Uuid,
   pub config: &'a Config,
   pub persona: &'a Persona,
-  pub agent_kind: AgentKind,
+  pub is_subagent: bool,
   pub tx: &'a Sender<AppEvent>,
-  pub session_manager: &'a SessionManager,
+  pub repository: &'a SessionRepository,
   pub approvals: &'a ApprovalChannel,
   pub cancel: &'a CancellationToken,
 }

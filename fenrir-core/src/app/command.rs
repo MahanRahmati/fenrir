@@ -25,18 +25,17 @@ pub enum AppCommandResult {
   Help(Vec<SlashCommand>),
   Sessions {
     sessions: Vec<Session>,
-    current: Option<Uuid>,
   },
-  Session(Session),
+  Session(Uuid),
   Personas {
     personas: Vec<Persona>,
-    current: String,
+    current_persona_name: String,
   },
   Persona(String),
   Model(Model),
   Models {
     models: Vec<Model>,
-    current: Option<Model>,
+    current_model: Option<Model>,
   },
   Compacted {
     summary: String,

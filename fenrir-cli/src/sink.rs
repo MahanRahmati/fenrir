@@ -5,7 +5,6 @@ use anyhow::Result;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use fenrir_core::agent_manager::AgentManager;
 use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink};
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
@@ -25,7 +24,7 @@ struct CliSink {
   stdout: std::io::Stdout,
   reasoning_open: bool,
   reasoning_ends_with_newline: bool,
-  approvals: ApprovalChannel,
+  approvals: Option<ApprovalChannel>,
 }
 
 #[async_trait::async_trait]
@@ -77,7 +76,9 @@ impl EventSink for CliSink {
         } else {
           ToolApprovalStatus::Denied
         };
-        self.approvals.decide(&tool_call_id, status);
+        if let Some(channel) = &self.approvals {
+          channel.decide(&tool_call_id, status);
+        }
       }
       AppEvent::ToolApprovalResult {
         tool_call_id: _,
@@ -155,12 +156,12 @@ impl EventSink for CliSink {
     return Ok(session_id);
   }
 
-  async fn on_session_selection(&mut self, session: Session) {
+  async fn on_session_selection(&mut self, session: &Session) {
     println!(
       "--- {} ---",
       session.title.as_deref().unwrap_or("Untitled Session")
     );
-    print_session_messages(&session);
+    print_session_messages(session);
   }
 
   async fn on_personas(
@@ -189,6 +190,10 @@ impl EventSink for CliSink {
     println!("Model set to: {}", model.label());
   }
 
+  async fn set_approval_channel(&mut self, channel: Option<ApprovalChannel>) {
+    self.approvals = channel;
+  }
+
   async fn set_cancel_token(&mut self, _token: CancellationToken) {}
 }
 
@@ -197,9 +202,9 @@ pub async fn run(app: &mut App) -> Result<String> {
     stdout: std::io::stdout(),
     reasoning_open: false,
     reasoning_ends_with_newline: false,
-    approvals: app.agent_manager.approvals.clone(),
+    approvals: None,
   };
-  return AgentManager::harness_loop(app, &mut sink).await;
+  return app.harness_loop(&mut sink).await;
 }
 
 fn print_indexed_list(lines: &[String]) {

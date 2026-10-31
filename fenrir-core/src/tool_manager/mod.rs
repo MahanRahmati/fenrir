@@ -26,7 +26,6 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use tokio::time;
 
-use crate::agent_manager::agent::AgentKind;
 use crate::config::Config;
 use crate::persona_manager::ToolAccess;
 use crate::tool_manager::browser::BrowserTool;
@@ -62,7 +61,7 @@ pub struct ToolManager {
 }
 
 impl ToolManager {
-  pub fn new(config: &Config, agent_kind: &AgentKind) -> Self {
+  pub fn new(config: &Config, is_subagent: bool) -> Self {
     let tool_timeout = Duration::from_secs(config.general.tool_timeout_seconds);
     let mut tools: Vec<Box<dyn Tool>> = Vec::new();
     if config.permissions.datetime {
@@ -116,13 +115,10 @@ impl ToolManager {
     if config.permissions.todo_list {
       tools.push(Box::new(TodoListTool));
     }
-    let is_primary_agent = matches!(agent_kind, AgentKind::Primary);
-    if is_primary_agent && config.subagent.enabled {
+    if !is_subagent && config.subagent.enabled {
       tools.push(Box::new(SubagentTool));
     }
-    if is_primary_agent
-      && config.subagent.enabled
-      && config.permissions.goal_check
+    if !is_subagent && config.subagent.enabled && config.permissions.goal_check
     {
       tools.push(Box::new(GoalCheckTool));
     }

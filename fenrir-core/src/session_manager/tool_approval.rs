@@ -44,13 +44,4 @@ impl ToolApprovalStatus {
       ToolApprovalStatus::Denied => "denied",
     };
   }
-
-  pub fn parse(value: &str) -> Option<Self> {
-    return match value {
-      "pending" => Some(ToolApprovalStatus::Pending),
-      "approved" => Some(ToolApprovalStatus::Approved),
-      "denied" => Some(ToolApprovalStatus::Denied),
-      _ => None,
-    };
-  }
 }

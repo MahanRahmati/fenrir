@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use uuid::Uuid;
@@ -7,7 +5,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::persona_manager::COMPACTION_PERSONA;
 use crate::prompt::Prompt;
-use crate::provider_manager::ProviderManager;
+use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::{Message, Summary};
 use crate::vlog;
 
@@ -20,20 +18,27 @@ pub struct CompactionWorkflow;
 
 impl CompactionWorkflow {
   pub async fn execute(
-    provider: Arc<ProviderManager>,
-    config: Config,
+    provider: &ProviderManager,
+    config: &Config,
+    model: &Model,
     params: CompactionParams,
   ) -> Result<String> {
-    let prompt = Prompt::new(&config, &COMPACTION_PERSONA);
+    let prompt = Prompt::new(config, &COMPACTION_PERSONA);
     let now = Utc::now().timestamp();
     let max_chars = config.compaction.tool_result_max_chars;
+
+    let mut system_prompt = prompt.get_system_prompt().to_string();
+    if let Some(ref summary) = params.last_summary {
+      system_prompt.push_str("\n\nPrevious summary:\n");
+      system_prompt.push_str(&summary.content);
+    }
 
     let mut messages = Vec::new();
     messages.push(Message {
       id: Uuid::now_v7(),
       msg_type: None,
       role: "system".to_string(),
-      content: prompt.get_system_prompt().to_string(),
+      content: system_prompt,
       tool_call_id: None,
       tool_calls: None,
       timestamp: now,
@@ -42,6 +47,7 @@ impl CompactionWorkflow {
     let serialized: Vec<Message> = params
       .messages
       .iter()
+      .filter(|msg| msg.role != "system")
       .filter_map(|msg| {
         let content = msg.serialize_for_compaction(max_chars);
         if content.is_empty() {
@@ -65,16 +71,6 @@ impl CompactionWorkflow {
         messages.push(msg.clone());
       }
 
-      messages.push(Message {
-        id: Uuid::now_v7(),
-        msg_type: None,
-        role: "system".to_string(),
-        content: summary.content.clone(),
-        tool_call_id: None,
-        tool_calls: None,
-        timestamp: summary.created_at,
-      });
-
       for msg in &serialized {
         if msg.id > summary.covers_message_id {
           messages.push(msg.clone());
@@ -87,7 +83,7 @@ impl CompactionWorkflow {
     }
 
     let response = provider
-      .chat(&messages, &[])
+      .chat(model, &messages, &[])
       .await
       .context("Failed to execute compaction workflow")?;
 

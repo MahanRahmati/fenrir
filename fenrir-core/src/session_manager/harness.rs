@@ -1,191 +1,70 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 use crate::app::AppEvent;
-use crate::app::ApprovalChannel;
 use crate::config::Config;
-use crate::hook_manager::HookManager;
 use crate::hook_manager::hook::{
   HookContext, HookDecision, ToolCallContext, ToolResultContext,
 };
 use crate::mentions::strip_mentions;
-use crate::persona_manager::{Persona, PersonaManager};
-use crate::prompt::Prompt;
-use crate::provider_manager::{ChatUsage, ProviderManager, ToolCall};
-use crate::session_manager::SessionManager;
+use crate::persona_manager::Persona;
+use crate::provider_manager::{ChatUsage, Model, ProviderManager, ToolCall};
+use crate::session_manager::SessionRepository;
+use crate::session_manager::session::Session;
 use crate::tool_manager::SUBAGENT_TOOL_NAME;
-use crate::tool_manager::ToolManager;
 use crate::tool_manager::runs_subagent;
 use crate::tool_manager::tool::{ToolContext, parse_tool_params};
 use crate::vlog;
-use crate::workflow_manager::WorkflowManager;
 use crate::workflow_manager::title::TitleParams;
 
-#[derive(Debug, Clone, Copy)]
-pub enum AgentKind {
-  Primary,
-  Subagent,
-}
-
-pub struct Agent {
-  pub config: Config,
-  pub tool_manager: ToolManager,
-  pub persona_manager: PersonaManager,
-  pub provider_manager: Arc<ProviderManager>,
-  pub workflow_manager: WorkflowManager,
-  pub hook_manager: HookManager,
-  pub approvals: ApprovalChannel,
-  pub last_usage: Option<ChatUsage>,
-  pub kind: AgentKind,
-}
-
-impl Agent {
-  pub fn new(
-    config: Config,
-    provider_manager: Arc<ProviderManager>,
-    parent_session_id: Option<Uuid>,
-    approvals: ApprovalChannel,
-  ) -> Self {
-    let kind = match parent_session_id {
-      Some(_) => AgentKind::Subagent,
-      None => AgentKind::Primary,
-    };
-    let tool_manager = ToolManager::new(&config, &kind);
-    let persona_manager = PersonaManager::new();
-    let workflow_manager =
-      WorkflowManager::new(config.clone(), provider_manager.clone());
-    let hook_manager = HookManager::new(&config);
-    return Agent {
-      config,
-      tool_manager,
-      persona_manager,
-      provider_manager,
-      workflow_manager,
-      hook_manager,
-      approvals,
-      last_usage: None,
-      kind,
-    };
-  }
-
-  pub async fn run_subagent(
-    context: &mut ToolContext<'_>,
-    persona: &Persona,
-    task: &str,
-  ) -> Result<String> {
-    let task = task.trim();
-    if task.is_empty() {
-      bail!("Task cannot be empty");
-    }
-    context.tx.send(AppEvent::Subagents { delta: 1 }).await.ok();
-    let result = Self::run_subagent_inner(context, persona, task).await;
-    context
-      .tx
-      .send(AppEvent::Subagents { delta: -1 })
-      .await
-      .ok();
-    return result;
-  }
-
-  async fn run_subagent_inner(
-    context: &mut ToolContext<'_>,
-    persona: &Persona,
-    task: &str,
-  ) -> Result<String> {
-    let parent_session_id = context.session_id;
-    let session_id = context
-      .session_manager
-      .create_session(Some(parent_session_id))
-      .await?;
-    vlog!(
-      "Started subagent session {session_id} (parent {parent_session_id}): {task}"
-    );
-
-    let prompt = Prompt::new(context.config, persona);
-    context
-      .session_manager
-      .add_system_message_to_session(session_id, prompt.get_system_prompt())
-      .await?;
-    context
-      .session_manager
-      .add_user_message_to_session(session_id, task)
-      .await?;
-
-    let mut agent = Self::new(
-      context.config.clone(),
-      context.provider_manager.clone(),
-      Some(parent_session_id),
-      context.approvals.clone(),
-    );
-    agent.persona_manager.set_persona(persona.clone());
-
-    let result = agent
-      .process_chat(context.session_manager, context.tx, context.cancel)
-      .await;
-
-    context
-      .session_manager
-      .set_current_session(parent_session_id);
-
-    let report = result?.trim().to_string();
-    if report.is_empty() {
-      if context.cancel.is_cancelled() {
-        vlog!("Subagent session {session_id} was cancelled.");
-        return Ok(
-          "The subagent was cancelled before producing a report.".to_string(),
-        );
-      }
-      vlog!("Subagent session {session_id} finished without a report.");
-      return Ok(
-        "The subagent finished without producing a report.".to_string(),
-      );
-    }
-    vlog!("Subagent session {session_id} finished.");
-    return Ok(report);
-  }
-
-  pub async fn process_chat(
+impl Session {
+  pub async fn harness_loop(
     &mut self,
-    session_manager: &mut SessionManager,
+    config: &Config,
+    providers: &ProviderManager,
+    repository: &SessionRepository,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
   ) -> Result<String> {
     if cancel.is_cancelled() {
       return Ok(String::new());
     }
-    let is_subagent = matches!(self.kind, AgentKind::Subagent);
-    if !is_subagent {
+    let Some(model) = self.model.clone() else {
+      bail!("No model selected");
+    };
+    if !self.is_subagent() {
       self
-        .generate_title_from_workflow(session_manager, cancel)
+        .generate_title(providers, repository, &model, cancel)
         .await?;
     }
-    if self.config.general.stream {
+    if config.general.stream {
       return self
-        .process_chat_stream(session_manager, tx, cancel, is_subagent)
+        .process_chat_stream(config, providers, repository, &model, tx, cancel)
         .await;
     }
     return self
-      .process_chat_non_streaming(session_manager, tx, cancel, is_subagent)
+      .process_chat_non_streaming(
+        config, providers, repository, &model, tx, cancel,
+      )
       .await;
   }
 
-  async fn generate_title_from_workflow(
+  async fn generate_title(
     &mut self,
-    session_manager: &mut SessionManager,
+    providers: &ProviderManager,
+    repository: &SessionRepository,
+    model: &Model,
     cancel: &CancellationToken,
   ) -> Result<()> {
-    let session = match session_manager.get_current_session() {
-      Some(session) if session.title.is_none() => session.clone(),
-      _ => return Ok(()),
-    };
+    if self.title.is_some() {
+      return Ok(());
+    }
 
-    let first_message = session
+    let first_message = self
       .messages
       .iter()
       .find(|m| m.role == "user")
@@ -206,7 +85,9 @@ impl Agent {
         vlog!("Session title generation cancelled.");
         return Ok(());
       }
-      result = self.workflow_manager.generate_title(params) => result,
+      result = self
+        .workflow_manager
+        .generate_title(providers, model, params) => result,
     } {
       Ok(title) => title,
       Err(e) => {
@@ -219,21 +100,23 @@ impl Agent {
       return Ok(());
     }
 
-    session_manager
-      .update_session_title(session.id, &title)
-      .await?;
+    self.title = Some(title.clone());
+    repository.update_title(self.id, &title).await?;
     return Ok(());
   }
 
   async fn process_chat_stream(
     &mut self,
-    session_manager: &mut SessionManager,
+    config: &Config,
+    providers: &ProviderManager,
+    repository: &SessionRepository,
+    model: &Model,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
-    is_subagent: bool,
   ) -> Result<String> {
+    let is_subagent = self.is_subagent();
     let mut assistant_content = String::new();
-    let max_iterations = self.config.subagent.max_iterations;
+    let max_iterations = config.subagent.max_iterations;
     let mut turns = 0;
 
     loop {
@@ -245,12 +128,8 @@ impl Agent {
         break;
       }
       turns += 1;
-      let session = session_manager
-        .get_current_session()
-        .context("No active session")?;
-      let session_id = session.id;
 
-      let messages = &session.build_chat_context();
+      let messages = self.build_chat_context();
       let tools = self
         .tool_manager
         .get_tools_specs(self.persona_manager.current().allowed_tools());
@@ -258,7 +137,7 @@ impl Agent {
       let mut stream = tokio::select! {
         biased;
         _ = cancel.cancelled() => break,
-        stream = self.provider_manager.chat_stream(messages, &tools) => {
+        stream = providers.chat_stream(model, &messages, &tools) => {
           stream?
         }
       };
@@ -299,7 +178,7 @@ impl Agent {
 
         if let Some(text) = delta.reasoning {
           reasoning_buffer.push_str(&text);
-          if self.config.general.show_reasoning && !is_subagent {
+          if config.general.show_reasoning && !is_subagent {
             tx.send(AppEvent::Token {
               text,
               reasoning: true,
@@ -338,15 +217,13 @@ impl Agent {
         assistant_content.push_str(&content_buffer);
       }
 
-      if self.config.general.show_reasoning && !reasoning_buffer.is_empty() {
-        session_manager
-          .add_reasoning_message_to_session(session_id, &reasoning_buffer)
-          .await?;
+      if config.general.show_reasoning && !reasoning_buffer.is_empty() {
+        self.add_reasoning_message(&reasoning_buffer);
+        self.persist_last_message(repository).await?;
       }
       if !content_buffer.is_empty() || tool_call_builders.is_empty() {
-        session_manager
-          .add_assistant_message_to_session(session_id, &content_buffer)
-          .await?;
+        self.add_assistant_message(&content_buffer);
+        self.persist_last_message(repository).await?;
       }
 
       if tool_call_builders.is_empty() {
@@ -357,12 +234,12 @@ impl Agent {
         tool_call_builders.into_values().collect();
       self
         .execute_tool_calls(
-          session_manager,
-          session_id,
+          config,
+          providers,
+          repository,
           &tool_calls,
           tx,
           cancel,
-          is_subagent,
         )
         .await?;
     }
@@ -372,13 +249,16 @@ impl Agent {
 
   async fn process_chat_non_streaming(
     &mut self,
-    session_manager: &mut SessionManager,
+    config: &Config,
+    providers: &ProviderManager,
+    repository: &SessionRepository,
+    model: &Model,
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
-    is_subagent: bool,
   ) -> Result<String> {
+    let is_subagent = self.is_subagent();
     let mut assistant_content = String::new();
-    let max_iterations = self.config.subagent.max_iterations;
+    let max_iterations = config.subagent.max_iterations;
     let mut turns = 0;
 
     loop {
@@ -390,12 +270,8 @@ impl Agent {
         break;
       }
       turns += 1;
-      let session = session_manager
-        .get_current_session()
-        .context("No active session")?;
-      let session_id = session.id;
 
-      let messages = &session.build_chat_context();
+      let messages = self.build_chat_context();
       let tools = self
         .tool_manager
         .get_tools_specs(self.persona_manager.current().allowed_tools());
@@ -403,7 +279,7 @@ impl Agent {
       let response = tokio::select! {
         biased;
         _ = cancel.cancelled() => break,
-        response = self.provider_manager.chat(messages, &tools) => {
+        response = providers.chat(model, &messages, &tools) => {
           response?
         }
       };
@@ -412,7 +288,7 @@ impl Agent {
         self.last_usage = Some(usage);
       }
 
-      if self.config.general.show_reasoning
+      if config.general.show_reasoning
         && !is_subagent
         && let Some(ref reasoning) = response.reasoning
       {
@@ -436,18 +312,16 @@ impl Agent {
         assistant_content.push_str(content);
       }
 
-      if self.config.general.show_reasoning
+      if config.general.show_reasoning
         && let Some(ref reasoning) = response.reasoning
         && !reasoning.is_empty()
       {
-        session_manager
-          .add_reasoning_message_to_session(session_id, reasoning)
-          .await?;
+        self.add_reasoning_message(reasoning);
+        self.persist_last_message(repository).await?;
       }
       if let Some(ref content) = response.content {
-        session_manager
-          .add_assistant_message_to_session(session_id, content)
-          .await?;
+        self.add_assistant_message(content);
+        self.persist_last_message(repository).await?;
       }
 
       if response.tool_calls.is_empty() {
@@ -456,12 +330,12 @@ impl Agent {
 
       self
         .execute_tool_calls(
-          session_manager,
-          session_id,
+          config,
+          providers,
+          repository,
           &response.tool_calls,
           tx,
           cancel,
-          is_subagent,
         )
         .await?;
     }
@@ -471,13 +345,17 @@ impl Agent {
 
   async fn execute_tool_calls(
     &mut self,
-    session_manager: &mut SessionManager,
-    session_id: Uuid,
+    config: &Config,
+    providers: &ProviderManager,
+    repository: &SessionRepository,
     tool_calls: &[ToolCall],
     tx: &Sender<AppEvent>,
     cancel: &CancellationToken,
-    is_subagent: bool,
   ) -> Result<()> {
+    let Some(model) = self.model.clone() else {
+      bail!("No model selected");
+    };
+    let is_subagent = self.is_subagent();
     for tool_call in tool_calls {
       if cancel.is_cancelled() {
         break;
@@ -488,19 +366,12 @@ impl Agent {
         tool_call.arguments
       );
 
-      session_manager
-        .add_tool_call_to_session(
-          session_id,
-          &tool_call.id,
-          &tool_call.name,
-          &tool_call.arguments,
-        )
-        .await?;
+      self.add_tool_call(&tool_call.id, &tool_call.name, &tool_call.arguments);
+      self.persist_last_message(repository).await?;
 
       if cancel.is_cancelled() {
-        session_manager
-          .add_cancelled_tool_result_to_session(session_id, &tool_call.id)
-          .await?;
+        self.add_cancelled_tool_result(&tool_call.id);
+        self.persist_last_message(repository).await?;
         break;
       }
 
@@ -508,7 +379,7 @@ impl Agent {
       let runs_subagent = runs_subagent(&tool_call.name);
       let is_subagent_tool = tool_call.name == SUBAGENT_TOOL_NAME;
 
-      if self.config.general.show_tools && !is_subagent && !is_subagent_tool {
+      if config.general.show_tools && !is_subagent && !is_subagent_tool {
         tx.send(AppEvent::ToolCall {
           id: tool_call.id.clone(),
           name: tool_call.name.clone(),
@@ -519,13 +390,13 @@ impl Agent {
       }
 
       let hook_context = HookContext {
-        session_id,
-        config: &self.config,
+        session_id: self.id,
+        config,
         persona: self.persona_manager.current(),
-        agent_kind: self.kind,
+        is_subagent,
         tx,
-        session_manager: &*session_manager,
-        approvals: &self.approvals,
+        repository,
+        approvals: self.approval_channel(),
         cancel,
       };
       let tool_call_context = ToolCallContext {
@@ -542,10 +413,9 @@ impl Agent {
       match decision {
         HookDecision::Continue | HookDecision::Allow => {}
         HookDecision::Deny { reason, error } => {
-          session_manager
-            .add_tool_result_to_session(session_id, &tool_call.id, &reason)
-            .await?;
-          if self.config.general.show_tools && !is_subagent {
+          self.add_tool_result_message(&tool_call.id, &reason);
+          self.persist_last_message(repository).await?;
+          if config.general.show_tools && !is_subagent {
             tx.send(AppEvent::ToolResult {
               id: tool_call.id.clone(),
               result: reason,
@@ -558,21 +428,22 @@ impl Agent {
         }
       }
 
-      if self.config.general.show_tools && !is_subagent && is_subagent_tool {
+      if config.general.show_tools && !is_subagent && is_subagent_tool {
         let task = params.get("task").cloned().unwrap_or_default();
         tx.send(AppEvent::SubagentStarted { task }).await.ok();
       }
 
       let outcome = {
         let mut context = ToolContext {
-          config: &self.config,
+          config,
           persona: self.persona_manager.current(),
-          provider_manager: &self.provider_manager,
-          session_manager: &mut *session_manager,
-          approvals: &self.approvals,
+          model: &model,
+          provider_manager: providers,
+          repository,
+          approvals: self.approval_channel(),
           tx,
           cancel,
-          session_id,
+          session_id: self.id,
         };
         if runs_subagent {
           Some(
@@ -593,9 +464,8 @@ impl Agent {
       };
 
       let Some(result) = outcome else {
-        session_manager
-          .add_cancelled_tool_result_to_session(session_id, &tool_call.id)
-          .await?;
+        self.add_cancelled_tool_result(&tool_call.id);
+        self.persist_last_message(repository).await?;
         break;
       };
 
@@ -616,13 +486,13 @@ impl Agent {
         error: &error,
       };
       let hook_context = HookContext {
-        session_id,
-        config: &self.config,
+        session_id: self.id,
+        config,
         persona: self.persona_manager.current(),
-        agent_kind: self.kind,
+        is_subagent,
         tx,
-        session_manager: &*session_manager,
-        approvals: &self.approvals,
+        repository,
+        approvals: self.approval_channel(),
         cancel,
       };
       let hook_failure = self
@@ -639,11 +509,10 @@ impl Agent {
         result_str.push_str(&hook_failure);
       }
 
-      session_manager
-        .add_tool_result_to_session(session_id, &tool_call.id, &result_str)
-        .await?;
+      self.add_tool_result_message(&tool_call.id, &result_str);
+      self.persist_last_message(repository).await?;
 
-      if self.config.general.show_tools
+      if config.general.show_tools
         && !is_subagent
         && (!is_subagent_tool || error)
       {
@@ -658,6 +527,81 @@ impl Agent {
     }
     return Ok(());
   }
+
+  fn add_cancelled_tool_result(&mut self, tool_call_id: &str) {
+    self.add_tool_result_message(tool_call_id, CANCELLED_TOOL_RESULT);
+  }
+
+  pub async fn run_subagent(
+    context: &ToolContext<'_>,
+    persona: &Persona,
+    task: &str,
+  ) -> Result<String> {
+    let task = task.trim();
+    if task.is_empty() {
+      bail!("Task cannot be empty");
+    }
+    context.tx.send(AppEvent::Subagents { delta: 1 }).await.ok();
+    let result = Self::run_subagent_inner(context, persona, task).await;
+    context
+      .tx
+      .send(AppEvent::Subagents { delta: -1 })
+      .await
+      .ok();
+    return result;
+  }
+
+  async fn run_subagent_inner(
+    context: &ToolContext<'_>,
+    persona: &Persona,
+    task: &str,
+  ) -> Result<String> {
+    let parent_session_id = context.session_id;
+    let mut session = Session::new(
+      Some(parent_session_id),
+      Some(context.model.clone()),
+      context.config,
+      context.approvals.clone(),
+    );
+    session.persona_manager.set_persona(persona.clone());
+    context.repository.insert_session(&session).await?;
+    let session_id = session.id;
+    vlog!(
+      "Started subagent session {session_id} (parent {parent_session_id}): {task}"
+    );
+
+    session
+      .ensure_system_message(context.config, context.repository)
+      .await?;
+    session.add_user_message(task);
+    session.persist_last_message(context.repository).await?;
+
+    let result = session
+      .harness_loop(
+        context.config,
+        context.provider_manager,
+        context.repository,
+        context.tx,
+        context.cancel,
+      )
+      .await;
+
+    let report = result?.trim().to_string();
+    if report.is_empty() {
+      if context.cancel.is_cancelled() {
+        vlog!("Subagent session {session_id} was cancelled.");
+        return Ok(
+          "The subagent was cancelled before producing a report.".to_string(),
+        );
+      }
+      vlog!("Subagent session {session_id} finished without a report.");
+      return Ok(
+        "The subagent finished without producing a report.".to_string(),
+      );
+    }
+    vlog!("Subagent session {session_id} finished.");
+    return Ok(report);
+  }
 }
 
 fn subagent_turn_limit_note(max_iterations: usize) -> String {
@@ -665,3 +609,5 @@ fn subagent_turn_limit_note(max_iterations: usize) -> String {
     "\n\n[Subagent stopped after reaching its limit of {max_iterations} turns. Its report is partial and may omit remaining work.]"
   );
 }
+
+const CANCELLED_TOOL_RESULT: &str = "Tool call cancelled by the user before completion. Do not retry unless the user asks.";

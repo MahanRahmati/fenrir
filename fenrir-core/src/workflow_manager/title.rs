@@ -1,12 +1,10 @@
-use std::sync::Arc;
-
 use anyhow::{Context, Result};
 use uuid::Uuid;
 
 use crate::config::Config;
 use crate::persona_manager::TITLES_PERSONA;
 use crate::prompt::Prompt;
-use crate::provider_manager::ProviderManager;
+use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::Message;
 use crate::vlog;
 
@@ -18,15 +16,16 @@ pub struct TitleWorkflow;
 
 impl TitleWorkflow {
   pub async fn execute(
-    provider: Arc<ProviderManager>,
-    config: Config,
+    provider: &ProviderManager,
+    config: &Config,
+    model: &Model,
     params: TitleParams,
   ) -> Result<String> {
     if params.message.is_empty() {
       return Ok(String::new());
     }
 
-    let prompt = Prompt::new(&config, &TITLES_PERSONA);
+    let prompt = Prompt::new(config, &TITLES_PERSONA);
     let now = chrono::Utc::now().timestamp();
     let messages = vec![
       Message {
@@ -50,7 +49,7 @@ impl TitleWorkflow {
     ];
 
     let response = provider
-      .chat(&messages, &[])
+      .chat(model, &messages, &[])
       .await
       .context("Failed to execute title workflow")?;
 
