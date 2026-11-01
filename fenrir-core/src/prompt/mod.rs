@@ -21,7 +21,7 @@ pub struct Prompt {
 }
 
 impl Prompt {
-  pub fn new(config: &Config, persona: &Persona) -> Self {
+  pub fn new(config: &Config, persona: &Persona, cwd: &String) -> Self {
     let mut parts: Vec<String> = Vec::new();
     parts.push(persona.identity().to_string());
 
@@ -67,13 +67,13 @@ impl Prompt {
       .join("\n");
     parts.push(format!("Guidelines:\n{guidelines_list}"));
 
-    let cwd = std::env::current_dir()
-      .map(|d| d.display().to_string())
-      .unwrap_or_else(|_| "unknown".to_string());
+    let cwd = if cwd.trim().is_empty() {
+      String::new()
+    } else {
+      format!("Current working directory: {cwd}\n")
+    };
     let date_time = get_current_datetime();
-    parts.push(format!(
-      "Environment:\nCurrent working directory: {cwd}\n{date_time}"
-    ));
+    parts.push(format!("Environment:\n{cwd}{date_time}"));
 
     let system_prompt = parts.join("\n\n");
     return Self { system_prompt };

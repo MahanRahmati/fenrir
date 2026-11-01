@@ -398,6 +398,7 @@ impl Session {
         repository,
         approvals: self.approval_channel(),
         cancel,
+        cwd: &self.cwd,
       };
       let tool_call_context = ToolCallContext {
         id: &tool_call.id,
@@ -444,6 +445,7 @@ impl Session {
           tx,
           cancel,
           session_id: self.id,
+          cwd: &self.cwd,
         };
         if runs_subagent {
           Some(
@@ -494,6 +496,7 @@ impl Session {
         repository,
         approvals: self.approval_channel(),
         cancel,
+        cwd: &self.cwd,
       };
       let hook_failure = self
         .hook_manager
@@ -562,6 +565,7 @@ impl Session {
       Some(context.model.clone()),
       context.config,
       context.approvals.clone(),
+      context.cwd,
     );
     session.persona_manager.set_persona(persona.clone());
     context.repository.insert_session(&session).await?;

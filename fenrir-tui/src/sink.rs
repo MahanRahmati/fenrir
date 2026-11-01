@@ -254,8 +254,11 @@ impl EventSink for TuiSink {
 }
 
 pub async fn run(app: &mut App) -> Result<String> {
+  let cwd = std::env::current_dir()
+    .map(|p| p.display().to_string())
+    .unwrap_or_default();
   let mut sink = TuiSink {
-    tui: Tui::new(),
+    tui: Tui::new(&cwd),
     terminal: ratatui::init(),
     message_queue: VecDeque::new(),
     approvals: None,
@@ -283,7 +286,7 @@ pub async fn run(app: &mut App) -> Result<String> {
     .draw(|frame| sink.tui.draw(frame))
     .context("Failed to draw the TUI")?;
 
-  let result = app.harness_loop(&mut sink).await;
+  let result = app.harness_loop(&mut sink, &cwd).await;
 
   crossterm::execute!(stdout(), DisableMouseCapture)
     .context("Failed to disable mouse capture")?;

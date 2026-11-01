@@ -38,6 +38,7 @@ pub struct HookContext<'a> {
   pub repository: &'a SessionRepository,
   pub approvals: &'a ApprovalChannel,
   pub cancel: &'a CancellationToken,
+  pub cwd: &'a String,
 }
 
 #[async_trait::async_trait]

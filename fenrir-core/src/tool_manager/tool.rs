@@ -24,6 +24,7 @@ pub struct ToolContext<'a> {
   pub tx: &'a Sender<AppEvent>,
   pub cancel: &'a CancellationToken,
   pub session_id: Uuid,
+  pub cwd: &'a String,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

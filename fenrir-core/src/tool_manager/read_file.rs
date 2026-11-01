@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::{Context, Result, bail};
 
 use crate::files::operations::read_to_string;
@@ -25,8 +27,8 @@ impl ReadFileTool {
     };
   }
 
-  fn read_empty(&self, path: &str, hash: u64) -> Result<String> {
-    let key = cache_key(path);
+  fn read_empty(&self, path: &str, hash: u64, cwd: &Path) -> Result<String> {
+    let key = cache_key(path, cwd);
     if let Some(entry) = self.cache.get(&key)
       && entry.hash == hash
     {
@@ -78,9 +80,10 @@ impl Tool for ReadFileTool {
   async fn execute(
     &self,
     params: ToolParams,
-    _context: &mut ToolContext<'_>,
+    context: &mut ToolContext<'_>,
   ) -> Result<String> {
     let path = get_param::<String>(&params, "read_file", "path")?;
+    let cwd = Path::new(&context.cwd);
 
     let content = read_to_string(&path)
       .await
@@ -100,7 +103,7 @@ impl Tool for ReadFileTool {
         .map(|v: usize| v.saturating_sub(1));
 
     if total_lines == 0 {
-      return self.read_empty(&path, hash);
+      return self.read_empty(&path, hash, cwd);
     }
 
     let start = start_line.min(total_lines - 1);
@@ -116,7 +119,7 @@ impl Tool for ReadFileTool {
       );
     }
 
-    let key = cache_key(&path);
+    let key = cache_key(&path, cwd);
     if let Some(entry) = self.cache.get(&key)
       && entry.hash == hash
       && entry.start == start + 1
@@ -154,7 +157,6 @@ impl Tool for ReadFileTool {
   }
 }
 
-fn cache_key(path: &str) -> String {
-  let cwd = std::env::current_dir().unwrap_or_default();
-  return resolve_path(path, &cwd).to_string_lossy().to_string();
+fn cache_key(path: &str, cwd: &Path) -> String {
+  return resolve_path(path, cwd).to_string_lossy().to_string();
 }

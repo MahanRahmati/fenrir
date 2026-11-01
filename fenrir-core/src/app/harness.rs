@@ -32,6 +32,7 @@ impl App {
   pub async fn harness_loop(
     &mut self,
     sink: &mut impl EventSink,
+    cwd: &str,
   ) -> Result<String> {
     let mut current_session_id: Option<Uuid> = None;
     loop {
@@ -78,7 +79,7 @@ impl App {
         }
 
         let result = self
-          .handle_command(command, &mut current_session_id, &cancel)
+          .handle_command(command, &mut current_session_id, &cancel, cwd)
           .await?;
         match result {
           AppCommandResult::Exit => {
@@ -92,7 +93,7 @@ impl App {
             let selected =
               sink.on_sessions(sessions, current_session_id).await?;
             if let Some(session_id) = selected {
-              self.sessions.load_session(session_id).await?;
+              self.sessions.load_session(session_id, cwd).await?;
               current_session_id = Some(session_id);
               let session = self
                 .sessions
@@ -148,7 +149,7 @@ impl App {
       let session_id = match current_session_id {
         Some(session_id) => session_id,
         None => {
-          let session_id = self.sessions.create_session().await?;
+          let session_id = self.sessions.create_session(cwd).await?;
           vlog!("Created session with ID: {session_id}");
           current_session_id = Some(session_id);
           session_id
@@ -212,6 +213,7 @@ impl App {
     command: AppCommand,
     current_session_id: &mut Option<Uuid>,
     cancel: &CancellationToken,
+    cwd: &str,
   ) -> Result<AppCommandResult> {
     let has_session = current_session_id.is_some();
     return match command {
@@ -220,11 +222,11 @@ impl App {
         SlashCommand::available_commands(has_session),
       )),
       AppCommand::ListSessions => {
-        let sessions = self.sessions.list_sessions().await?;
+        let sessions = self.sessions.list_sessions(cwd).await?;
         return Ok(AppCommandResult::Sessions { sessions });
       }
       AppCommand::LoadSession { id } => {
-        self.sessions.load_session(id).await?;
+        self.sessions.load_session(id, cwd).await?;
         *current_session_id = Some(id);
         return Ok(AppCommandResult::Session(id));
       }

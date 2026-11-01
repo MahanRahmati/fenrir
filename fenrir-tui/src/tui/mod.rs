@@ -59,7 +59,7 @@ pub struct Tui {
 }
 
 impl Tui {
-  pub fn new() -> Self {
+  pub fn new(cwd: &str) -> Self {
     return Self {
       input: Input::new(),
       messages_list: MessagesList::new(),
@@ -71,7 +71,7 @@ impl Tui {
       models_popup: ModelsPopup::new(),
       confirm_popup: ConfirmPopup::new(),
       completion_popup: CompletionPopup::new(),
-      statusline: StatusLine::new(),
+      statusline: StatusLine::new(cwd),
       cancel_token: None,
       last_escape_time: None,
     };
@@ -504,11 +504,5 @@ impl Tui {
 
   pub fn quit(&mut self) {
     self.running = false;
-  }
-}
-
-impl Default for Tui {
-  fn default() -> Self {
-    return Self::new();
   }
 }

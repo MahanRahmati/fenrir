@@ -58,6 +58,7 @@ pub struct Session {
   pub hook_manager: HookManager,
   approvals: ApprovalChannel,
   pub last_usage: Option<ChatUsage>,
+  pub cwd: String,
 }
 
 impl Session {
@@ -66,6 +67,7 @@ impl Session {
     model: Option<Model>,
     config: &Config,
     approvals: ApprovalChannel,
+    cwd: &str,
   ) -> Self {
     let now = Utc::now().timestamp();
     let row = SessionRow {
@@ -77,7 +79,7 @@ impl Session {
       messages: Vec::new(),
       summaries: Vec::new(),
     };
-    return Self::from_row(row, config, model, approvals);
+    return Self::from_row(row, config, model, approvals, cwd);
   }
 
   pub(crate) fn from_row(
@@ -85,11 +87,12 @@ impl Session {
     config: &Config,
     model: Option<Model>,
     approvals: ApprovalChannel,
+    cwd: &str,
   ) -> Self {
     let is_subagent = row.parent_id.is_some();
     let tool_manager = ToolManager::new(config, is_subagent);
     let persona_manager = PersonaManager::new();
-    let workflow_manager = WorkflowManager::new(config.clone());
+    let workflow_manager = WorkflowManager::new(config, cwd);
     let hook_manager = HookManager::new(config);
     return Self {
       id: row.id,
@@ -106,6 +109,7 @@ impl Session {
       hook_manager,
       approvals,
       last_usage: None,
+      cwd: cwd.to_owned(),
     };
   }
 
@@ -125,7 +129,7 @@ impl Session {
     if self.messages.iter().any(|message| message.role == "system") {
       return Ok(());
     }
-    let prompt = Prompt::new(config, self.persona_manager.current());
+    let prompt = Prompt::new(config, self.persona_manager.current(), &self.cwd);
     self.add_system_message(prompt.get_system_prompt());
     self.persist_last_message(repository).await?;
     return Ok(());

@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tokio::sync::broadcast;
 
 use crate::app::AppEvent;
@@ -49,10 +51,8 @@ impl PreToolHook for ToolApprovalHook {
       return HookDecision::Allow;
     };
 
-    let cwd = match std::env::current_dir() {
-      Ok(dir) => dir.canonicalize().unwrap_or(dir),
-      Err(_) => return HookDecision::Allow,
-    };
+    let cwd = Path::new(&context.cwd);
+    let cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
 
     if is_path_within(path, &cwd) {
       return HookDecision::Allow;

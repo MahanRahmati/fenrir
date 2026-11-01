@@ -22,8 +22,9 @@ impl CompactionWorkflow {
     config: &Config,
     model: &Model,
     params: CompactionParams,
+    cwd: &String,
   ) -> Result<String> {
-    let prompt = Prompt::new(config, &COMPACTION_PERSONA);
+    let prompt = Prompt::new(config, &COMPACTION_PERSONA, cwd);
     let now = Utc::now().timestamp();
     let max_chars = config.compaction.tool_result_max_chars;
 

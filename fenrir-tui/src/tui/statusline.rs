@@ -22,13 +22,10 @@ pub struct StatusLine {
 }
 
 impl StatusLine {
-  pub fn new() -> Self {
-    let cwd = std::env::current_dir()
-      .map(|p| p.display().to_string())
-      .unwrap_or_default();
+  pub fn new(cwd: &str) -> Self {
     let version = env!("CARGO_PKG_VERSION");
     return Self {
-      cwd,
+      cwd: cwd.to_owned(),
       version,
       usage: None,
       context_window: None,

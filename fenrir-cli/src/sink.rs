@@ -201,13 +201,16 @@ impl EventSink for CliSink {
 }
 
 pub async fn run(app: &mut App) -> Result<String> {
+  let cwd = std::env::current_dir()
+    .map(|p| p.display().to_string())
+    .unwrap_or_default();
   let mut sink = CliSink {
     stdout: std::io::stdout(),
     reasoning_open: false,
     reasoning_ends_with_newline: false,
     approvals: None,
   };
-  return app.harness_loop(&mut sink).await;
+  return app.harness_loop(&mut sink, &cwd).await;
 }
 
 fn print_indexed_list(lines: &[String]) {

@@ -65,12 +65,13 @@ impl SessionManager {
       .or_else(|| self.model.clone());
   }
 
-  pub async fn create_session(&mut self) -> Result<Uuid> {
+  pub async fn create_session(&mut self, cwd: &str) -> Result<Uuid> {
     let mut session = Session::new(
       None,
       self.model.clone(),
       &self.config,
       ApprovalChannel::new(),
+      cwd,
     );
     session
       .persona_manager
@@ -81,7 +82,7 @@ impl SessionManager {
     return Ok(id);
   }
 
-  pub async fn load_session(&mut self, id: Uuid) -> Result<()> {
+  pub async fn load_session(&mut self, id: Uuid, cwd: &str) -> Result<()> {
     if let Some(session) = self.session_mut(id) {
       session.tool_manager.reset_cache();
       return Ok(());
@@ -91,20 +92,32 @@ impl SessionManager {
     let session = self
       .repository
       .load(id, |row| {
-        Session::from_row(row, config, model.clone(), ApprovalChannel::new())
+        Session::from_row(
+          row,
+          config,
+          model.clone(),
+          ApprovalChannel::new(),
+          cwd,
+        )
       })
       .await?;
     self.sessions.push(session);
     return Ok(());
   }
 
-  pub async fn list_sessions(&self) -> Result<Vec<Session>> {
+  pub async fn list_sessions(&self, cwd: &str) -> Result<Vec<Session>> {
     let model = self.model.clone();
     let config = &self.config;
     return self
       .repository
       .list(|row| {
-        Session::from_row(row, config, model.clone(), ApprovalChannel::new())
+        Session::from_row(
+          row,
+          config,
+          model.clone(),
+          ApprovalChannel::new(),
+          cwd,
+        )
       })
       .await;
   }

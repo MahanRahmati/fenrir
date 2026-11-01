@@ -20,12 +20,13 @@ impl TitleWorkflow {
     config: &Config,
     model: &Model,
     params: TitleParams,
+    cwd: &String,
   ) -> Result<String> {
     if params.message.is_empty() {
       return Ok(String::new());
     }
 
-    let prompt = Prompt::new(config, &TITLES_PERSONA);
+    let prompt = Prompt::new(config, &TITLES_PERSONA, cwd);
     let now = chrono::Utc::now().timestamp();
     let messages = vec![
       Message {
