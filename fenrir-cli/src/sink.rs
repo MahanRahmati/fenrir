@@ -105,8 +105,11 @@ impl EventSink for CliSink {
           self.stdout.flush().ok();
         }
       }
-      AppEvent::Usage { usage } => {
-        let usage = usage.and_then(|u| format_usage(u.prompt_tokens));
+      AppEvent::Usage {
+        usage,
+        context_window: _,
+      } => {
+        let usage = usage.and_then(|u| format_usage(u.prompt_tokens, None));
         if let Some(usage) = usage {
           println!("\n[usage] {usage}",);
         }

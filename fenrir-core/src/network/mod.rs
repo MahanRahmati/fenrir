@@ -21,6 +21,43 @@ impl HttpClient {
     return HttpClient { base_url, client };
   }
 
+  pub async fn get<T>(
+    &self,
+    endpoint: &str,
+    headers: Option<HashMap<String, String>>,
+  ) -> Result<T>
+  where
+    T: serde::de::DeserializeOwned,
+  {
+    let full_url = self.url_builder(endpoint);
+    vlog!("Sending GET request to: {}", full_url);
+
+    let request_builder = self.client.get(&full_url);
+    let request_builder = Self::apply_headers(request_builder, headers);
+
+    let response = request_builder
+      .send()
+      .await
+      .context(format!("Failed to send request to '{full_url}'"))?;
+
+    if !response.status().is_success() {
+      let status = response.status().as_str().to_string();
+      let body_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::from("Failed to read response body"));
+      vlog!("Service returned error {}: {}", status, body_text);
+      bail!("Service returned {status}: {body_text}");
+    }
+
+    let parsed_response = response
+      .json::<T>()
+      .await
+      .context("Failed to decode response")?;
+
+    return Ok(parsed_response);
+  }
+
   pub async fn post<T, B>(
     &self,
     body: &B,

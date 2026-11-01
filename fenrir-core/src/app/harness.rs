@@ -180,7 +180,19 @@ impl App {
       match result {
         Ok(_) => {
           let last_usage = self.sessions.last_usage(session_id);
-          sink.on_event(AppEvent::Usage { usage: last_usage }).await;
+          let context_window =
+            match self.sessions.current_model(Some(session_id)) {
+              Some(model) => {
+                self.sessions.get_providers().context_window(&model).await
+              }
+              None => None,
+            };
+          sink
+            .on_event(AppEvent::Usage {
+              usage: last_usage,
+              context_window,
+            })
+            .await;
           run_compaction(self, sink, session_id, &cancel).await;
         }
         Err(e) => {

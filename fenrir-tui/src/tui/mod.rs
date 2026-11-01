@@ -77,8 +77,12 @@ impl Tui {
     };
   }
 
-  pub fn set_usage(&mut self, usage: Option<ChatUsage>) {
-    self.statusline.set_usage(usage);
+  pub fn set_usage(
+    &mut self,
+    usage: Option<ChatUsage>,
+    context_window: Option<u64>,
+  ) {
+    self.statusline.set_usage(usage, context_window);
   }
 
   pub fn set_processing(&mut self, processing: bool) {

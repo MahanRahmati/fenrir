@@ -16,6 +16,7 @@ pub struct StatusLine {
   cwd: String,
   version: &'static str,
   usage: Option<ChatUsage>,
+  context_window: Option<u64>,
   subagents: usize,
   state: State,
 }
@@ -30,13 +31,19 @@ impl StatusLine {
       cwd,
       version,
       usage: None,
+      context_window: None,
       subagents: 0,
       state: State::Idle,
     };
   }
 
-  pub fn set_usage(&mut self, usage: Option<ChatUsage>) {
+  pub fn set_usage(
+    &mut self,
+    usage: Option<ChatUsage>,
+    context_window: Option<u64>,
+  ) {
     self.usage = usage;
+    self.context_window = context_window;
   }
 
   pub fn update_subagents(&mut self, delta: i32) {
@@ -78,7 +85,9 @@ impl StatusLine {
   }
 
   fn right_label(&self) -> String {
-    let usage_display = self.usage.and_then(|u| format_usage(u.prompt_tokens));
+    let usage_display = self
+      .usage
+      .and_then(|u| format_usage(u.prompt_tokens, self.context_window));
     let version_display = format!("v{}", self.version);
     let mut right_label = String::new();
     if self.subagents > 0 {

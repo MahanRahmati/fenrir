@@ -44,6 +44,23 @@ impl ProviderManager {
     return self.default_model.clone();
   }
 
+  pub async fn context_window(&self, model: &Model) -> Option<u64> {
+    let provider = match self.get_provider(&model.provider) {
+      Ok(provider) => provider,
+      Err(e) => {
+        vlog!("Failed to resolve provider for context window: {e}");
+        return None;
+      }
+    };
+    return match provider.context_window(&model.name).await {
+      Ok(context_window) => context_window,
+      Err(e) => {
+        vlog!("Failed to fetch context window: {e}");
+        None
+      }
+    };
+  }
+
   fn get_provider(&self, name: &str) -> Result<&dyn Provider> {
     let Some(provider) = self
       .providers

@@ -62,6 +62,7 @@ pub type ChatStream =
 pub trait Provider: Send + Sync {
   fn name(&self) -> &str;
   fn list_models(&self) -> Vec<Model>;
+  async fn context_window(&self, model: &str) -> Result<Option<u64>>;
   async fn chat(
     &self,
     messages: &[Message],

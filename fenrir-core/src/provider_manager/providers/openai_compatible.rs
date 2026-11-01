@@ -160,6 +160,22 @@ struct StreamFunction {
   arguments: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ModelsResponse {
+  data: Vec<ModelEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelEntry {
+  id: String,
+  meta: Option<ModelMeta>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelMeta {
+  n_ctx: Option<u64>,
+}
+
 #[derive(Clone)]
 pub struct OpenAICompatibleProvider {
   name: String,
@@ -413,6 +429,23 @@ impl Provider for OpenAICompatibleProvider {
 
   fn list_models(&self) -> Vec<Model> {
     return self.models.clone();
+  }
+
+  async fn context_window(&self, model: &str) -> Result<Option<u64>> {
+    let headers = self.build_headers();
+    let response: ModelsResponse = self
+      .client
+      .get("/v1/models", headers)
+      .await
+      .context("Failed to fetch models")?;
+    let context_window = response
+      .data
+      .into_iter()
+      .find(|entry| entry.id == model)
+      .and_then(|entry| entry.meta)
+      .and_then(|meta| meta.n_ctx)
+      .filter(|n_ctx| *n_ctx > 0);
+    return Ok(context_window);
   }
 
   async fn chat(

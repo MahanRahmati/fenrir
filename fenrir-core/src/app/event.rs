@@ -43,6 +43,7 @@ pub enum AppEvent {
   },
   Usage {
     usage: Option<ChatUsage>,
+    context_window: Option<u64>,
   },
   SubagentStarted {
     task: String,
