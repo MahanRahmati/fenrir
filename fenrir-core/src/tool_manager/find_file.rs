@@ -11,7 +11,7 @@ const DEFAULT_MAX_RESULTS: usize = 50;
 
 fn normalize_glob(pattern: &str) -> String {
   if !pattern.contains('/') {
-    return format!("**/{pattern}");
+    return pattern.to_string();
   }
   if !pattern.starts_with("**/") && !pattern.starts_with('/') {
     return format!("**/{pattern}");
@@ -60,20 +60,21 @@ impl Tool for FindFileTool {
         .unwrap_or(DEFAULT_MAX_RESULTS);
 
     let include_pattern = normalize_glob(&include);
+    let full_path = include_pattern.contains('/');
 
     let max_results_str = max_results.to_string();
     let exclude_ref = exclude.as_deref();
 
-    let mut args: Vec<&str> = vec![
-      "--type",
-      "f",
-      "--glob",
-      include_pattern.as_str(),
-      "--base-directory",
-      path.as_str(),
-      "--max-results",
-      max_results_str.as_str(),
-    ];
+    let mut args: Vec<&str> = vec!["--type", "f"];
+    if full_path {
+      args.push("--full-path");
+    }
+    args.push("--glob");
+    args.push(include_pattern.as_str());
+    args.push("--base-directory");
+    args.push(path.as_str());
+    args.push("--max-results");
+    args.push(max_results_str.as_str());
 
     if let Some(exclude) = exclude_ref {
       args.push("--exclude");
