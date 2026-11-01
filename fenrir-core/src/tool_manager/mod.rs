@@ -19,6 +19,7 @@ mod screenshot;
 mod subagent;
 mod todo_list;
 pub mod tool;
+mod weather;
 mod write_file;
 
 use std::time::Duration;
@@ -52,6 +53,7 @@ pub use crate::tool_manager::subagent::task_summary;
 pub use crate::tool_manager::todo_list::TODO_LIST_TOOL_NAME;
 use crate::tool_manager::todo_list::TodoListTool;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams, ToolSpec};
+use crate::tool_manager::weather::WeatherTool;
 pub use crate::tool_manager::write_file::WRITE_FILE_TOOL_NAME;
 use crate::tool_manager::write_file::WriteFileTool;
 
@@ -114,6 +116,9 @@ impl ToolManager {
     }
     if config.permissions.todo_list {
       tools.push(Box::new(TodoListTool));
+    }
+    if config.permissions.weather {
+      tools.push(Box::new(WeatherTool::new()));
     }
     if !is_subagent && config.subagent.enabled {
       tools.push(Box::new(SubagentTool));
