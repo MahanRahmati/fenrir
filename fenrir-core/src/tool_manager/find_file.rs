@@ -4,6 +4,8 @@ use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
+pub const FIND_FILE_TOOL_NAME: &str = "find_file";
+
 pub struct FindFileTool;
 
 const DEFAULT_INCLUDE: &str = "**";
@@ -22,7 +24,7 @@ fn normalize_glob(pattern: &str) -> String {
 #[async_trait::async_trait]
 impl Tool for FindFileTool {
   fn name(&self) -> &str {
-    return "find_file";
+    return FIND_FILE_TOOL_NAME;
   }
 
   fn description(&self) -> &str {

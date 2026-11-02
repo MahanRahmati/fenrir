@@ -35,6 +35,7 @@ use crate::tool_manager::datetime::DateTimeTool;
 use crate::tool_manager::ddg::DdgTool;
 pub use crate::tool_manager::edit_file::EDIT_FILE_TOOL_NAME;
 use crate::tool_manager::edit_file::EditFileTool;
+pub use crate::tool_manager::find_file::FIND_FILE_TOOL_NAME;
 use crate::tool_manager::find_file::FindFileTool;
 pub use crate::tool_manager::find_text::FIND_TEXT_TOOL_NAME;
 use crate::tool_manager::find_text::FindTextTool;
