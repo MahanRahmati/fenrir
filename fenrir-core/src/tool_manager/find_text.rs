@@ -4,6 +4,8 @@ use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
+pub const FIND_TEXT_TOOL_NAME: &str = "find_text";
+
 pub struct FindTextTool;
 
 const DEFAULT_PATH: &str = ".";
@@ -13,7 +15,7 @@ const DEFAULT_CASE_SENSITIVE: bool = true;
 #[async_trait::async_trait]
 impl Tool for FindTextTool {
   fn name(&self) -> &str {
-    return "find_text";
+    return FIND_TEXT_TOOL_NAME;
   }
 
   fn description(&self) -> &str {

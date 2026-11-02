@@ -5,7 +5,7 @@ use ratatui::text::Line;
 use ratatui::widgets::Widget;
 
 use crate::tui::container::Container;
-use crate::tui::tool_view::{ToolCallView, tool_call_view};
+use crate::tui::tool_view::{ToolCallView, tool_call_view, tool_result_label};
 use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
 use fenrir_core::tool_manager::task_summary;
 
@@ -191,7 +191,14 @@ impl MessageItem {
     }
 
     if let Some(view) = &self.tool_view {
-      let label = format!("{} {}", view.icon, view.label);
+      let label = match (&self.tool_name, &self.tool_result) {
+        (Some(name), Some((result, false))) => {
+          tool_result_label(name, view, result)
+            .unwrap_or_else(|| view.label.clone())
+        }
+        _ => view.label.clone(),
+      };
+      let label = format!("{} {}", view.icon, label);
       let label = Line::from(truncate_line(&label, width));
       let mut lines: Vec<Line<'static>> = vec![label];
       if let Some((result, error)) = &self.tool_result
