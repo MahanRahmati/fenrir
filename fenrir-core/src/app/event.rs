@@ -78,6 +78,11 @@ pub trait EventSink {
     current: String,
   ) -> Result<Option<String>>;
   async fn on_persona_selection(&mut self, name: String);
+  async fn on_new_session(
+    &mut self,
+    persona_name: String,
+    model: Option<Model>,
+  );
   async fn on_models(
     &mut self,
     models: Vec<Model>,

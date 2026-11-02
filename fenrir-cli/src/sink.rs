@@ -180,6 +180,14 @@ impl EventSink for CliSink {
     println!("Persona set to: {name}");
   }
 
+  async fn on_new_session(
+    &mut self,
+    persona_name: String,
+    _model: Option<Model>,
+  ) {
+    println!("Persona set to: {persona_name}");
+  }
+
   async fn on_models(
     &mut self,
     models: Vec<Model>,
@@ -200,7 +208,7 @@ impl EventSink for CliSink {
   async fn set_cancel_token(&mut self, _token: CancellationToken) {}
 }
 
-pub async fn run(app: &mut App) -> Result<String> {
+pub async fn run(app: &mut App) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|p| p.display().to_string())
     .unwrap_or_default();
@@ -210,7 +218,7 @@ pub async fn run(app: &mut App) -> Result<String> {
     reasoning_ends_with_newline: false,
     approvals: None,
   };
-  return app.harness_loop(&mut sink, &cwd).await;
+  return app.run(&mut sink, &cwd).await;
 }
 
 fn print_indexed_list(lines: &[String]) {

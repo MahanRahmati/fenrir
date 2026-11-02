@@ -2,7 +2,6 @@
 pub enum CommandVisibility {
   Always,
   OnlyWithSession,
-  OnlyWithoutSession,
 }
 
 #[derive(Debug, Clone)]
@@ -63,17 +62,15 @@ impl SlashCommand {
 
   fn visibility(&self) -> CommandVisibility {
     match self {
-      SlashCommand::Personas => CommandVisibility::OnlyWithoutSession,
       SlashCommand::Compact => CommandVisibility::OnlyWithSession,
       _ => CommandVisibility::Always,
     }
   }
 
   fn is_active(&self, has_session: bool) -> bool {
-    match self.visibility() {
+    return match self.visibility() {
       CommandVisibility::Always => true,
       CommandVisibility::OnlyWithSession => has_session,
-      CommandVisibility::OnlyWithoutSession => !has_session,
-    }
+    };
   }
 }

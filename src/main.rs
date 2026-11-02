@@ -69,7 +69,7 @@ async fn main() {
   };
 
   return match result {
-    Ok(output) => println!("{output}"),
+    Ok(()) => {}
     Err(e) => {
       eprintln!("{e}");
       std::process::exit(1);

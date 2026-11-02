@@ -1,9 +1,6 @@
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::persona_manager::Persona;
-use crate::provider_manager::Model;
-use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
 use crate::slash_commands::parse_command;
 
@@ -11,36 +8,16 @@ pub enum AppCommand {
   Exit,
   Help,
   ListSessions,
-  LoadSession { id: Uuid },
   ListPersonas,
-  SelectPersona { name: String },
   ListModels,
-  SelectModel { model: Model },
   Compact,
   New,
 }
 
-pub enum AppCommandResult {
+pub enum CommandOutcome {
+  Continue,
   Exit,
-  Help(Vec<SlashCommand>),
-  Sessions {
-    sessions: Vec<Session>,
-  },
-  Session(Uuid),
-  Personas {
-    personas: Vec<Persona>,
-    current_persona_name: String,
-  },
-  Persona(String),
-  Model(Model),
-  Models {
-    models: Vec<Model>,
-    current_model: Option<Model>,
-  },
-  Compacted {
-    summary: String,
-  },
-  Noop,
+  Activate(Option<Uuid>),
 }
 
 impl AppCommand {

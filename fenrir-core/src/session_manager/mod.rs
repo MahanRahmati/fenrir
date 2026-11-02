@@ -16,6 +16,7 @@ use crate::config::Config;
 use crate::database::DB;
 use crate::persona_manager::{Persona, PersonaManager};
 use crate::provider_manager::{ChatUsage, Model, ProviderManager};
+pub use crate::session_manager::compaction::CompactionMode;
 pub use crate::session_manager::repository::SessionRepository;
 pub use crate::session_manager::session::Message;
 use crate::session_manager::session::Session;
@@ -154,27 +155,22 @@ impl SessionManager {
       .await;
   }
 
-  pub async fn maybe_compact(
-    &mut self,
-    id: Uuid,
-    cancel: &CancellationToken,
-  ) -> Result<String> {
-    let index = self.index_of(id)?;
-    let session = &mut self.sessions[index];
-    return session
-      .maybe_compact(&self.config, &self.providers, &self.repository, cancel)
-      .await;
-  }
-
   pub async fn compact(
     &mut self,
     id: Uuid,
+    mode: CompactionMode,
     cancel: &CancellationToken,
   ) -> Result<String> {
     let index = self.index_of(id)?;
     let session = &mut self.sessions[index];
     return session
-      .compact(&self.providers, &self.repository, cancel)
+      .compact(
+        &self.config,
+        &self.providers,
+        &self.repository,
+        mode,
+        cancel,
+      )
       .await;
   }
 

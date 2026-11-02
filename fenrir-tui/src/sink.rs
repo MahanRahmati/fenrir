@@ -216,8 +216,20 @@ impl EventSink for TuiSink {
   }
 
   async fn on_persona_selection(&mut self, name: String) {
-    self.clear_message_queue();
     self.tui.set_persona(&name);
+    self.redraw();
+  }
+
+  async fn on_new_session(
+    &mut self,
+    persona_name: String,
+    model: Option<Model>,
+  ) {
+    self.clear_message_queue();
+    self.tui.set_persona(&persona_name);
+    if let Some(model) = model {
+      self.tui.set_model(&model.label());
+    }
     self.tui.update_messages(None);
     self.redraw();
   }
@@ -253,7 +265,7 @@ impl EventSink for TuiSink {
   }
 }
 
-pub async fn run(app: &mut App) -> Result<String> {
+pub async fn run(app: &mut App) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|p| p.display().to_string())
     .unwrap_or_default();
@@ -286,7 +298,7 @@ pub async fn run(app: &mut App) -> Result<String> {
     .draw(|frame| sink.tui.draw(frame))
     .context("Failed to draw the TUI")?;
 
-  let result = app.harness_loop(&mut sink, &cwd).await;
+  let result = app.run(&mut sink, &cwd).await;
 
   crossterm::execute!(stdout(), DisableMouseCapture)
     .context("Failed to disable mouse capture")?;

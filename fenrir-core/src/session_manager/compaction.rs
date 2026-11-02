@@ -8,29 +8,27 @@ use crate::session_manager::session::Session;
 use crate::vlog;
 use crate::workflow_manager::compaction::CompactionParams;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompactionMode {
+  Auto,
+  Forced,
+}
+
 impl Session {
-  pub async fn maybe_compact(
+  pub async fn compact(
     &mut self,
     config: &Config,
     providers: &ProviderManager,
     repository: &SessionRepository,
+    mode: CompactionMode,
     cancel: &CancellationToken,
   ) -> Result<String> {
-    if let Some(threshold) = config.compaction.threshold
-      && let Some(last_usage) = self.last_usage
-      && last_usage.prompt_tokens as usize >= (threshold as f64 * 0.8) as usize
+    if mode == CompactionMode::Auto
+      && !self.reached_compaction_threshold(config)
     {
-      return self.compact(providers, repository, cancel).await;
+      return Ok(String::new());
     }
-    return Ok(String::new());
-  }
 
-  pub async fn compact(
-    &mut self,
-    providers: &ProviderManager,
-    repository: &SessionRepository,
-    cancel: &CancellationToken,
-  ) -> Result<String> {
     if self.messages.is_empty() {
       vlog!("Failed to compact session: no messages in session");
       bail!("No messages in session");
@@ -69,5 +67,16 @@ impl Session {
     repository.insert_summary(self.id, summary).await?;
 
     return Ok(summary.content.clone());
+  }
+
+  fn reached_compaction_threshold(&self, config: &Config) -> bool {
+    let Some(threshold) = config.compaction.threshold else {
+      return false;
+    };
+    let Some(last_usage) = self.last_usage else {
+      return false;
+    };
+    return last_usage.prompt_tokens as usize
+      >= (threshold as f64 * 0.8) as usize;
   }
 }

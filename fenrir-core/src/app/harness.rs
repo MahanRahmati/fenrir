@@ -12,8 +12,9 @@ use crate::app::App;
 use crate::app::AppEvent;
 use crate::app::ApprovalChannel;
 use crate::app::EventSink;
-use crate::app::command::{AppCommand, AppCommandResult};
+use crate::app::command::{AppCommand, CommandOutcome};
 use crate::persona_manager::PersonaManager;
+use crate::session_manager::CompactionMode;
 use crate::slash_commands::SlashCommand;
 use crate::vlog;
 
@@ -29,12 +30,12 @@ impl App {
       .map(|session| session.approval_channel().clone());
   }
 
-  pub async fn harness_loop(
+  pub async fn run(
     &mut self,
     sink: &mut impl EventSink,
     cwd: &str,
-  ) -> Result<String> {
-    let mut current_session_id: Option<Uuid> = None;
+  ) -> Result<()> {
+    let mut active_session: Option<Uuid> = None;
     loop {
       if self.shutdown.is_cancelled() {
         vlog!("Shutdown signal received, exiting harness loop...");
@@ -62,209 +63,168 @@ impl App {
         let cancel = self.shutdown.child_token();
         sink.set_cancel_token(cancel.clone()).await;
 
-        if matches!(&command, AppCommand::Compact) {
-          match current_session_id {
-            Some(session_id) => {
-              run_compact(self, sink, session_id, &cancel).await;
-            }
-            None => {
-              sink
-                .on_event(AppEvent::Error {
-                  message: "No session selected".to_string(),
-                })
-                .await;
-            }
-          }
-          continue;
-        }
-
-        let result = self
-          .handle_command(command, &mut current_session_id, &cancel, cwd)
-          .await?;
-        match result {
-          AppCommandResult::Exit => {
+        match self
+          .command(sink, active_session, command, &cancel, cwd)
+          .await?
+        {
+          CommandOutcome::Continue => {}
+          CommandOutcome::Exit => {
             sink.on_exit().await;
             break;
           }
-          AppCommandResult::Help(slash_commands) => {
-            sink.on_help(slash_commands).await;
+          CommandOutcome::Activate(session_id) => {
+            active_session = session_id;
           }
-          AppCommandResult::Sessions { sessions } => {
-            let selected =
-              sink.on_sessions(sessions, current_session_id).await?;
-            if let Some(session_id) = selected {
-              self.sessions.load_session(session_id, cwd).await?;
-              current_session_id = Some(session_id);
-              let session = self
-                .sessions
-                .session(session_id)
-                .context("No active session")?;
-              sink.on_session_selection(session).await;
-            }
-          }
-          AppCommandResult::Session(session_id) => {
-            let session = self
-              .sessions
-              .session(session_id)
-              .context("No active session")?;
-            sink.on_session_selection(session).await;
-          }
-          AppCommandResult::Personas {
-            personas,
-            current_persona_name,
-          } => {
-            if let Some(name) =
-              sink.on_personas(personas, current_persona_name).await?
-            {
-              self.sessions.set_persona(current_session_id, &name)?;
-              sink.on_persona_selection(name).await;
-            }
-          }
-          AppCommandResult::Persona(name) => {
-            sink.on_persona_selection(name).await;
-          }
-          AppCommandResult::Models {
-            models,
-            current_model,
-          } => {
-            if let Some(model) = sink.on_models(models, current_model).await? {
-              self.sessions.set_model(current_session_id, model.clone());
-              sink.on_model_selection(model).await;
-            }
-          }
-          AppCommandResult::Model(model) => {
-            sink.on_model_selection(model).await;
-          }
-          AppCommandResult::Compacted { summary } => {
-            sink.on_event(AppEvent::Compacted { summary }).await;
-          }
-          AppCommandResult::Noop => {}
         }
         sink
-          .set_approval_channel(self.approval_channel(current_session_id))
+          .set_approval_channel(self.approval_channel(active_session))
           .await;
         continue;
       }
 
-      let session_id = match current_session_id {
+      let session_id = match active_session {
         Some(session_id) => session_id,
         None => {
           let session_id = self.sessions.create_session(cwd).await?;
           vlog!("Created session with ID: {session_id}");
-          current_session_id = Some(session_id);
+          active_session = Some(session_id);
           session_id
         }
       };
 
-      self.sessions.ensure_system_message(session_id).await?;
-      self.sessions.add_user_message(session_id, &input).await?;
-      sink
-        .set_approval_channel(self.approval_channel(Some(session_id)))
-        .await;
-
-      sink
-        .on_event(AppEvent::UserMessage {
-          content: input.clone(),
-        })
-        .await;
-      sink
-        .on_event(AppEvent::Processing { processing: true })
-        .await;
-
-      let cancel = self.shutdown.child_token();
-      sink.set_cancel_token(cancel.clone()).await;
-
-      let Some(result) = run_chat(self, sink, session_id, &cancel).await else {
-        continue;
-      };
-
-      match result {
-        Ok(_) => {
-          let last_usage = self.sessions.last_usage(session_id);
-          let context_window =
-            match self.sessions.current_model(Some(session_id)) {
-              Some(model) => {
-                self.sessions.get_providers().context_window(&model).await
-              }
-              None => None,
-            };
-          sink
-            .on_event(AppEvent::Usage {
-              usage: last_usage,
-              context_window,
-            })
-            .await;
-          run_compaction(self, sink, session_id, &cancel).await;
-        }
-        Err(e) => {
-          sink
-            .on_event(AppEvent::Error {
-              message: e.to_string(),
-            })
-            .await;
-        }
-      }
+      self.prompt(sink, session_id, &input).await?;
     }
-    return Ok(String::new());
+    return Ok(());
   }
 
-  async fn handle_command(
+  pub async fn prompt(
     &mut self,
+    sink: &mut impl EventSink,
+    session_id: Uuid,
+    input: &str,
+  ) -> Result<()> {
+    self.sessions.ensure_system_message(session_id).await?;
+    self.sessions.add_user_message(session_id, input).await?;
+    sink
+      .set_approval_channel(self.approval_channel(Some(session_id)))
+      .await;
+
+    sink
+      .on_event(AppEvent::UserMessage {
+        content: input.to_string(),
+      })
+      .await;
+    sink
+      .on_event(AppEvent::Processing { processing: true })
+      .await;
+
+    let cancel = self.shutdown.child_token();
+    sink.set_cancel_token(cancel.clone()).await;
+
+    let Some(result) = run_chat(self, sink, session_id, &cancel).await else {
+      return Ok(());
+    };
+
+    match result {
+      Ok(_) => {
+        let last_usage = self.sessions.last_usage(session_id);
+        let context_window = match self.sessions.current_model(Some(session_id))
+        {
+          Some(model) => {
+            self.sessions.get_providers().context_window(&model).await
+          }
+          None => None,
+        };
+        sink
+          .on_event(AppEvent::Usage {
+            usage: last_usage,
+            context_window,
+          })
+          .await;
+        run_compaction(self, sink, session_id, CompactionMode::Auto, &cancel)
+          .await;
+      }
+      Err(e) => {
+        sink
+          .on_event(AppEvent::Error {
+            message: e.to_string(),
+          })
+          .await;
+      }
+    }
+    return Ok(());
+  }
+
+  pub async fn command(
+    &mut self,
+    sink: &mut impl EventSink,
+    active_session: Option<Uuid>,
     command: AppCommand,
-    current_session_id: &mut Option<Uuid>,
     cancel: &CancellationToken,
     cwd: &str,
-  ) -> Result<AppCommandResult> {
-    let has_session = current_session_id.is_some();
+  ) -> Result<CommandOutcome> {
     return match command {
-      AppCommand::Exit => Ok(AppCommandResult::Exit),
-      AppCommand::Help => Ok(AppCommandResult::Help(
-        SlashCommand::available_commands(has_session),
-      )),
+      AppCommand::Exit => Ok(CommandOutcome::Exit),
+      AppCommand::Help => {
+        sink
+          .on_help(SlashCommand::available_commands(active_session.is_some()))
+          .await;
+        Ok(CommandOutcome::Continue)
+      }
       AppCommand::ListSessions => {
         let sessions = self.sessions.list_sessions(cwd).await?;
-        return Ok(AppCommandResult::Sessions { sessions });
-      }
-      AppCommand::LoadSession { id } => {
-        self.sessions.load_session(id, cwd).await?;
-        *current_session_id = Some(id);
-        return Ok(AppCommandResult::Session(id));
+        let Some(session_id) =
+          sink.on_sessions(sessions, active_session).await?
+        else {
+          return Ok(CommandOutcome::Continue);
+        };
+        self.sessions.load_session(session_id, cwd).await?;
+        let session = self
+          .sessions
+          .session(session_id)
+          .context("No active session")?;
+        sink.on_session_selection(session).await;
+        Ok(CommandOutcome::Activate(Some(session_id)))
       }
       AppCommand::ListPersonas => {
         let personas = PersonaManager::list();
-        let current_persona_name =
-          self.sessions.persona_name(*current_session_id);
-        return Ok(AppCommandResult::Personas {
-          personas,
-          current_persona_name,
-        });
-      }
-      AppCommand::SelectPersona { name } => {
-        self.sessions.set_persona(*current_session_id, &name)?;
-        return Ok(AppCommandResult::Noop);
+        let current_persona_name = self.sessions.persona_name(active_session);
+        if let Some(name) =
+          sink.on_personas(personas, current_persona_name).await?
+        {
+          self.sessions.set_persona(active_session, &name)?;
+          sink.on_persona_selection(name).await;
+        }
+        Ok(CommandOutcome::Continue)
       }
       AppCommand::ListModels => {
         let models = self.sessions.get_providers().list_models();
-        let current_model = self.sessions.current_model(*current_session_id);
-        return Ok(AppCommandResult::Models {
-          models,
-          current_model,
-        });
-      }
-      AppCommand::SelectModel { model } => {
-        self.sessions.set_model(*current_session_id, model.clone());
-        return Ok(AppCommandResult::Model(model));
+        let current_model = self.sessions.current_model(active_session);
+        if let Some(model) = sink.on_models(models, current_model).await? {
+          self.sessions.set_model(active_session, model.clone());
+          sink.on_model_selection(model).await;
+        }
+        Ok(CommandOutcome::Continue)
       }
       AppCommand::Compact => {
-        let id = current_session_id.context("No session selected")?;
-        let summary = self.sessions.compact(id, cancel).await?;
-        return Ok(AppCommandResult::Compacted { summary });
+        let Some(session_id) = active_session else {
+          sink
+            .on_event(AppEvent::Error {
+              message: "No session selected".to_string(),
+            })
+            .await;
+          return Ok(CommandOutcome::Continue);
+        };
+        run_compaction(self, sink, session_id, CompactionMode::Forced, cancel)
+          .await;
+        Ok(CommandOutcome::Continue)
       }
       AppCommand::New => {
-        *current_session_id = None;
         self.sessions.reset_persona();
         let name = self.sessions.persona_name(None);
-        return Ok(AppCommandResult::Persona(name));
+        let model = self.sessions.current_model(None);
+        sink.on_new_session(name, model).await;
+        Ok(CommandOutcome::Activate(None))
       }
     };
   }
@@ -337,49 +297,11 @@ async fn run_compaction(
   app: &mut App,
   sink: &mut impl EventSink,
   session_id: Uuid,
+  mode: CompactionMode,
   cancel: &CancellationToken,
 ) {
-  let compact = app.sessions.maybe_compact(session_id, cancel);
+  let compact = app.sessions.compact(session_id, mode, cancel);
   tokio::pin!(compact);
-
-  let mut ticker = ui_ticker();
-
-  loop {
-    tokio::select! {
-      biased;
-      _ = ticker.tick() => sink.poll_events().await,
-      result = &mut compact => {
-        match result {
-          Ok(summary) if !summary.is_empty() => {
-            sink.on_event(AppEvent::Compacted { summary }).await;
-          }
-          Err(e) if !cancel.is_cancelled() => {
-            sink
-              .on_event(AppEvent::Error {
-                message: e.to_string(),
-              })
-              .await;
-          }
-          _ => {}
-        }
-        break;
-      }
-      _ = cancel.cancelled() => {
-        let _ = compact.as_mut().await;
-        break;
-      }
-    }
-  }
-}
-
-async fn run_compact(
-  app: &mut App,
-  sink: &mut impl EventSink,
-  session_id: Uuid,
-  cancel: &CancellationToken,
-) {
-  let command = app.sessions.compact(session_id, cancel);
-  tokio::pin!(command);
 
   let mut ticker = ui_ticker();
   let mut result = None;
@@ -388,18 +310,18 @@ async fn run_compact(
     tokio::select! {
       biased;
       _ = ticker.tick() => sink.poll_events().await,
-      r = &mut command => {
+      r = &mut compact => {
         result = Some(r);
         break;
       }
       _ = cancel.cancelled() => {
-        let _ = command.as_mut().await;
+        let _ = compact.as_mut().await;
         break;
       }
     }
   }
 
-  if cancel.is_cancelled() {
+  if mode == CompactionMode::Forced && cancel.is_cancelled() {
     sink
       .on_event(AppEvent::Processing { processing: false })
       .await;
@@ -407,17 +329,19 @@ async fn run_compact(
   }
 
   match result {
-    Some(Ok(summary)) => {
+    Some(Ok(summary))
+      if mode == CompactionMode::Forced || !summary.is_empty() =>
+    {
       sink.on_event(AppEvent::Compacted { summary }).await;
     }
-    Some(Err(e)) => {
+    Some(Err(e)) if !cancel.is_cancelled() => {
       sink
         .on_event(AppEvent::Error {
           message: e.to_string(),
         })
         .await;
     }
-    None => {}
+    _ => {}
   }
 }
 
