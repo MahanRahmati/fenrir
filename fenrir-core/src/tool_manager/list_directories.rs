@@ -8,12 +8,14 @@ use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 const DEFAULT_PATH: &str = ".";
 
+pub const LIST_DIRECTORIES_TOOL_NAME: &str = "list_directories";
+
 pub struct ListDirectoriesTool;
 
 #[async_trait::async_trait]
 impl Tool for ListDirectoriesTool {
   fn name(&self) -> &str {
-    return "list_directories";
+    return LIST_DIRECTORIES_TOOL_NAME;
   }
 
   fn description(&self) -> &str {

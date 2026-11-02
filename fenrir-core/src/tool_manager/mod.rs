@@ -41,6 +41,7 @@ pub use crate::tool_manager::find_text::FIND_TEXT_TOOL_NAME;
 use crate::tool_manager::find_text::FindTextTool;
 pub use crate::tool_manager::goal_check::GOAL_CHECK_TOOL_NAME;
 use crate::tool_manager::goal_check::GoalCheckTool;
+pub use crate::tool_manager::list_directories::LIST_DIRECTORIES_TOOL_NAME;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
 use crate::tool_manager::music::MusicTool;
 use crate::tool_manager::notify::NotifyTool;
