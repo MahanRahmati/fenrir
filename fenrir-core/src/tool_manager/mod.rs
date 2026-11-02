@@ -45,6 +45,7 @@ pub use crate::tool_manager::list_directories::LIST_DIRECTORIES_TOOL_NAME;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
 use crate::tool_manager::music::MusicTool;
 use crate::tool_manager::notify::NotifyTool;
+pub use crate::tool_manager::project_context::PROJECT_CONTEXT_TOOL_NAME;
 use crate::tool_manager::project_context::ProjectContextTool;
 pub use crate::tool_manager::read_file::READ_FILE_TOOL_NAME;
 use crate::tool_manager::read_file::ReadFileTool;

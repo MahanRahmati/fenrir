@@ -6,12 +6,14 @@ use crate::files::operations;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
+pub const PROJECT_CONTEXT_TOOL_NAME: &str = "project_context";
+
 pub struct ProjectContextTool;
 
 #[async_trait::async_trait]
 impl Tool for ProjectContextTool {
   fn name(&self) -> &str {
-    return "project_context";
+    return PROJECT_CONTEXT_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
