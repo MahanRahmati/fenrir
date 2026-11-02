@@ -14,6 +14,7 @@ mod queued_messages_list;
 mod sessions_popup;
 mod spinner;
 mod statusline;
+mod tool_view;
 
 use std::time::{Duration, Instant};
 

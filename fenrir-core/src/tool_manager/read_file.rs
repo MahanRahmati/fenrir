@@ -9,6 +9,8 @@ use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::hash;
 use crate::utils::path::resolve_path;
 
+pub const READ_FILE_TOOL_NAME: &str = "read_file";
+
 #[derive(Clone)]
 struct ReadEntry {
   hash: u64,
@@ -49,7 +51,7 @@ impl ReadFileTool {
 #[async_trait::async_trait]
 impl Tool for ReadFileTool {
   fn name(&self) -> &str {
-    return "read_file";
+    return READ_FILE_TOOL_NAME;
   }
 
   fn description(&self) -> &str {

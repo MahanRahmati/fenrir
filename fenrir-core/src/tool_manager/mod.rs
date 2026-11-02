@@ -43,6 +43,7 @@ use crate::tool_manager::list_directories::ListDirectoriesTool;
 use crate::tool_manager::music::MusicTool;
 use crate::tool_manager::notify::NotifyTool;
 use crate::tool_manager::project_context::ProjectContextTool;
+pub use crate::tool_manager::read_file::READ_FILE_TOOL_NAME;
 use crate::tool_manager::read_file::ReadFileTool;
 use crate::tool_manager::read_pdf::ReadPdfTool;
 use crate::tool_manager::remove_file::RemoveFileTool;

@@ -5,6 +5,7 @@ use ratatui::text::Line;
 use ratatui::widgets::Widget;
 
 use crate::tui::container::Container;
+use crate::tui::tool_view::{ToolCallView, tool_call_view};
 use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
 use fenrir_core::tool_manager::task_summary;
 
@@ -60,6 +61,7 @@ pub struct MessageItem {
   tool_call_id: Option<String>,
   tool_name: Option<String>,
   tool_arguments: Option<String>,
+  tool_view: Option<ToolCallView>,
   tool_result: Option<(String, bool)>,
 }
 
@@ -72,6 +74,7 @@ impl MessageItem {
       tool_call_id: None,
       tool_name: None,
       tool_arguments: None,
+      tool_view: None,
       tool_result: None,
     };
   }
@@ -82,6 +85,7 @@ impl MessageItem {
   }
 
   pub fn new_tool_call(id: String, name: String, arguments: String) -> Self {
+    let tool_view = tool_call_view(&name, &arguments);
     return Self {
       text: String::new(),
       role: Role::ToolCall,
@@ -89,6 +93,7 @@ impl MessageItem {
       tool_call_id: Some(id),
       tool_name: Some(name),
       tool_arguments: Some(arguments),
+      tool_view,
       tool_result: None,
     };
   }
@@ -111,7 +116,11 @@ impl MessageItem {
   }
 
   pub fn to_list_item(&self, width: u16) -> (ListMessage, u16) {
-    let horizontal_padding = self.role.horizontal_padding();
+    let horizontal_padding = if self.tool_view.is_some() {
+      self.role.horizontal_padding() + TEXT_EXTRA_PADDING
+    } else {
+      self.role.horizontal_padding()
+    };
     let width = width.saturating_sub(horizontal_padding * 2);
     let (container, height) = match self.role {
       Role::User => self.user_list_item(width),
@@ -177,6 +186,29 @@ impl MessageItem {
           Style::default().dim()
         })
         .build();
+      let height = Self::container_height(&container, width);
+      return (container, height);
+    }
+
+    if let Some(view) = &self.tool_view {
+      let label = format!("{} {}", view.icon, view.label);
+      let label = Line::from(truncate_line(&label, width));
+      let mut lines: Vec<Line<'static>> = vec![label];
+      if let Some((result, error)) = &self.tool_result
+        && (view.show_result || *error)
+      {
+        let style = if *error {
+          Style::default().fg(Color::Red)
+        } else {
+          Style::default().dim()
+        };
+        lines.extend(
+          result
+            .lines()
+            .map(|line| Line::from(line.to_string()).patch_style(style)),
+        );
+      }
+      let container = Container::builder(lines).borderless().build();
       let height = Self::container_height(&container, width);
       return (container, height);
     }
