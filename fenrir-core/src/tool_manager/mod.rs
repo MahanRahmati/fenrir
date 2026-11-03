@@ -59,6 +59,7 @@ use crate::tool_manager::subagent::SubagentTool;
 pub use crate::tool_manager::todo_list::TODO_LIST_TOOL_NAME;
 use crate::tool_manager::todo_list::TodoListTool;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams, ToolSpec};
+pub use crate::tool_manager::weather::WEATHER_TOOL_NAME;
 use crate::tool_manager::weather::WeatherTool;
 pub use crate::tool_manager::write_file::WRITE_FILE_TOOL_NAME;
 use crate::tool_manager::write_file::WriteFileTool;
