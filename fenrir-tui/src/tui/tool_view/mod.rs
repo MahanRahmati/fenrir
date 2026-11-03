@@ -3,10 +3,11 @@ mod find_text;
 mod list_directories;
 mod project_context;
 mod read_file;
+mod write_file;
 
 use fenrir_core::tool_manager::{
   FIND_FILE_TOOL_NAME, FIND_TEXT_TOOL_NAME, LIST_DIRECTORIES_TOOL_NAME,
-  PROJECT_CONTEXT_TOOL_NAME, READ_FILE_TOOL_NAME,
+  PROJECT_CONTEXT_TOOL_NAME, READ_FILE_TOOL_NAME, WRITE_FILE_TOOL_NAME,
 };
 
 const TOOL_CALL_ICON: &str = "●";
@@ -15,6 +16,7 @@ const TOOL_CALL_ICON: &str = "●";
 pub struct ToolCallView {
   pub icon: &'static str,
   pub label: String,
+  pub body: Vec<String>,
   pub show_result: bool,
 }
 
@@ -25,6 +27,7 @@ pub fn tool_call_view(name: &str, arguments: &str) -> Option<ToolCallView> {
     LIST_DIRECTORIES_TOOL_NAME => list_directories::view(arguments),
     PROJECT_CONTEXT_TOOL_NAME => project_context::view(arguments),
     READ_FILE_TOOL_NAME => read_file::view(arguments),
+    WRITE_FILE_TOOL_NAME => write_file::view(arguments),
     _ => None,
   };
 }

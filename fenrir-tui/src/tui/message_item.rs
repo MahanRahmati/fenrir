@@ -201,6 +201,9 @@ impl MessageItem {
       let label = format!("{} {}", view.icon, label);
       let label = Line::from(truncate_line(&label, width));
       let mut lines: Vec<Line<'static>> = vec![label];
+      lines.extend(view.body.iter().map(|line| {
+        Line::from(line.clone()).patch_style(Style::default().dim())
+      }));
       if let Some((result, error)) = &self.tool_result
         && (view.show_result || *error)
       {
@@ -215,7 +218,8 @@ impl MessageItem {
             .map(|line| Line::from(line.to_string()).patch_style(style)),
         );
       }
-      let container = Container::builder(lines).borderless().build();
+      let container =
+        Container::builder(lines).borderless().trim(false).build();
       let height = Self::container_height(&container, width);
       return (container, height);
     }

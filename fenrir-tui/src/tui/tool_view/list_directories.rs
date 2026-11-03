@@ -18,6 +18,7 @@ pub fn view(arguments: &str) -> Option<ToolCallView> {
   return Some(ToolCallView {
     icon: TOOL_CALL_ICON,
     label,
+    body: Vec::new(),
     show_result: false,
   });
 }
