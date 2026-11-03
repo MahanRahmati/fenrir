@@ -4,12 +4,14 @@ use crate::files::operations::{remove_file, validate_file_exists};
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
+pub const REMOVE_FILE_TOOL_NAME: &str = "remove_file";
+
 pub struct RemoveFileTool;
 
 #[async_trait::async_trait]
 impl Tool for RemoveFileTool {
   fn name(&self) -> &str {
-    return "remove_file";
+    return REMOVE_FILE_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -35,7 +37,7 @@ impl Tool for RemoveFileTool {
     params: ToolParams,
     _context: &mut ToolContext<'_>,
   ) -> Result<String> {
-    let path = get_param::<String>(&params, "remove_file", "path")?;
+    let path = get_param::<String>(&params, REMOVE_FILE_TOOL_NAME, "path")?;
 
     validate_file_exists(&path)
       .await

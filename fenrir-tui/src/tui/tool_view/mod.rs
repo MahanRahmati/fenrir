@@ -4,6 +4,7 @@ mod goal_check;
 mod list_directories;
 mod project_context;
 mod read_file;
+mod remove_file;
 mod subagent;
 mod todo_list;
 mod write_file;
@@ -11,7 +12,8 @@ mod write_file;
 use fenrir_core::tool_manager::{
   FIND_FILE_TOOL_NAME, FIND_TEXT_TOOL_NAME, GOAL_CHECK_TOOL_NAME,
   LIST_DIRECTORIES_TOOL_NAME, PROJECT_CONTEXT_TOOL_NAME, READ_FILE_TOOL_NAME,
-  SUBAGENT_TOOL_NAME, TODO_LIST_TOOL_NAME, WRITE_FILE_TOOL_NAME,
+  REMOVE_FILE_TOOL_NAME, SUBAGENT_TOOL_NAME, TODO_LIST_TOOL_NAME,
+  WRITE_FILE_TOOL_NAME,
 };
 
 const TOOL_CALL_ICON: &str = "●";
@@ -32,6 +34,7 @@ pub fn tool_call_view(name: &str, arguments: &str) -> Option<ToolCallView> {
     LIST_DIRECTORIES_TOOL_NAME => list_directories::view(arguments),
     PROJECT_CONTEXT_TOOL_NAME => project_context::view(arguments),
     READ_FILE_TOOL_NAME => read_file::view(arguments),
+    REMOVE_FILE_TOOL_NAME => remove_file::view(arguments),
     SUBAGENT_TOOL_NAME => subagent::view(arguments),
     TODO_LIST_TOOL_NAME => todo_list::view(arguments),
     WRITE_FILE_TOOL_NAME => write_file::view(arguments),
