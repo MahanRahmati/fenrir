@@ -37,3 +37,12 @@ where
   vlog!("Getting optional parameter '{name}' for tool '{tool_name}'",);
   return params.get(name).and_then(|v| v.parse::<T>().ok());
 }
+
+pub fn task_summary(task: &str) -> String {
+  return task
+    .lines()
+    .find(|line| !line.trim().is_empty())
+    .unwrap_or("")
+    .trim()
+    .to_string();
+}

@@ -44,12 +44,3 @@ impl Tool for SubagentTool {
       .context("Failed to run subagent");
   }
 }
-
-pub fn task_summary(task: &str) -> String {
-  return task
-    .lines()
-    .find(|line| !line.trim().is_empty())
-    .unwrap_or("")
-    .trim()
-    .to_string();
-}
