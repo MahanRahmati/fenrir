@@ -31,6 +31,7 @@ use crate::config::Config;
 use crate::persona_manager::ToolAccess;
 pub use crate::tool_manager::browser::BROWSER_TOOL_NAME;
 use crate::tool_manager::browser::BrowserTool;
+pub use crate::tool_manager::control_keyboard::CONTROL_KEYBOARD_TOOL_NAME;
 use crate::tool_manager::control_keyboard::ControlKeyboardTool;
 pub use crate::tool_manager::datetime::DATE_TIME_TOOL_NAME;
 use crate::tool_manager::datetime::DateTimeTool;

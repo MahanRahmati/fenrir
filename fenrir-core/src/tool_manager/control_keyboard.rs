@@ -4,12 +4,14 @@ use crate::capability::keyboard;
 use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
+pub const CONTROL_KEYBOARD_TOOL_NAME: &str = "control_keyboard";
+
 pub struct ControlKeyboardTool;
 
 #[async_trait::async_trait]
 impl Tool for ControlKeyboardTool {
   fn name(&self) -> &str {
-    return "control_keyboard";
+    return CONTROL_KEYBOARD_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -41,16 +43,19 @@ impl Tool for ControlKeyboardTool {
     params: ToolParams,
     _context: &mut ToolContext<'_>,
   ) -> Result<String> {
-    let action = get_param::<String>(&params, "control_keyboard", "action")?;
+    let action =
+      get_param::<String>(&params, CONTROL_KEYBOARD_TOOL_NAME, "action")?;
     return match action.as_str() {
       "type" => {
-        let text = get_param::<String>(&params, "control_keyboard", "text")?;
+        let text =
+          get_param::<String>(&params, CONTROL_KEYBOARD_TOOL_NAME, "text")?;
         keyboard::type_with_keyboard(&text)
           .await
           .context(format!("Failed to type text '{text}' on keyboard"))
       }
       "key" => {
-        let key = get_param::<String>(&params, "control_keyboard", "key")?;
+        let key =
+          get_param::<String>(&params, CONTROL_KEYBOARD_TOOL_NAME, "key")?;
         keyboard::press_key_on_keyboard(&key)
           .await
           .context(format!("Failed to press key '{key}' on keyboard"))
