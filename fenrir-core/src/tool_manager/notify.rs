@@ -4,12 +4,14 @@ use crate::tool_manager::helpers::{get_optional_param, get_param};
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
+pub const NOTIFY_TOOL_NAME: &str = "notify";
+
 pub struct NotifyTool;
 
 #[async_trait::async_trait]
 impl Tool for NotifyTool {
   fn name(&self) -> &str {
-    return "notify";
+    return NOTIFY_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -36,8 +38,8 @@ impl Tool for NotifyTool {
     params: ToolParams,
     _context: &mut ToolContext<'_>,
   ) -> Result<String> {
-    let summary = get_param::<String>(&params, "notify", "summary")?;
-    let body = get_optional_param::<String>(&params, "notify", "body")
+    let summary = get_param::<String>(&params, NOTIFY_TOOL_NAME, "summary")?;
+    let body = get_optional_param::<String>(&params, NOTIFY_TOOL_NAME, "body")
       .unwrap_or_default();
 
     let summary_arg = format!("string:{summary}");
