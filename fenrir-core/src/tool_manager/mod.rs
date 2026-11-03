@@ -50,6 +50,7 @@ pub use crate::tool_manager::project_context::PROJECT_CONTEXT_TOOL_NAME;
 use crate::tool_manager::project_context::ProjectContextTool;
 pub use crate::tool_manager::read_file::READ_FILE_TOOL_NAME;
 use crate::tool_manager::read_file::ReadFileTool;
+pub use crate::tool_manager::read_pdf::READ_PDF_TOOL_NAME;
 use crate::tool_manager::read_pdf::ReadPdfTool;
 pub use crate::tool_manager::remove_file::REMOVE_FILE_TOOL_NAME;
 use crate::tool_manager::remove_file::RemoveFileTool;

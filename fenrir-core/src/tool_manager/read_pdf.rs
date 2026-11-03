@@ -4,12 +4,14 @@ use crate::capability::pdf;
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
+pub const READ_PDF_TOOL_NAME: &str = "read_pdf";
+
 pub struct ReadPdfTool;
 
 #[async_trait::async_trait]
 impl Tool for ReadPdfTool {
   fn name(&self) -> &str {
-    return "read_pdf";
+    return READ_PDF_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -36,9 +38,9 @@ impl Tool for ReadPdfTool {
     params: ToolParams,
     _context: &mut ToolContext<'_>,
   ) -> Result<String> {
-    let path = get_param::<String>(&params, "read_pdf", "path")?;
+    let path = get_param::<String>(&params, READ_PDF_TOOL_NAME, "path")?;
     let path = path.trim_start_matches('@').to_string();
-    let page = get_param::<u32>(&params, "read_pdf", "page")?;
+    let page = get_param::<u32>(&params, READ_PDF_TOOL_NAME, "page")?;
     if page == 0 {
       bail!("Page numbers are 1-based");
     }
