@@ -387,10 +387,6 @@ impl Tui {
     self.messages_list.add_tool_call(id, name, arguments);
   }
 
-  pub fn add_subagent_launch(&mut self, task: String) {
-    self.messages_list.add_subagent_launch(task);
-  }
-
   pub fn add_tool_result(&mut self, id: String, result: String, error: bool) {
     self.messages_list.add_tool_result(id, result, error);
   }

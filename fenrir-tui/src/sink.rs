@@ -117,9 +117,6 @@ impl EventSink for TuiSink {
       } => {
         self.tui.set_usage(usage, context_window);
       }
-      AppEvent::SubagentStarted { task } => {
-        self.tui.add_subagent_launch(task);
-      }
       AppEvent::Subagents { delta } => {
         self.tui.update_subagents(delta);
       }

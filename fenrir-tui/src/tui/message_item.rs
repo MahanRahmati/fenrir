@@ -7,7 +7,6 @@ use ratatui::widgets::Widget;
 use crate::tui::container::Container;
 use crate::tui::tool_view::{ToolCallView, tool_call_view, tool_result_label};
 use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
-use fenrir_core::tool_manager::task_summary;
 
 const TEXT_EXTRA_PADDING: u16 = 1;
 
@@ -16,7 +15,6 @@ pub enum Role {
   User,
   Assistant,
   Reasoning,
-  SubagentLaunch,
   ToolCall,
   ToolResult,
   Compaction,
@@ -28,7 +26,7 @@ impl Role {
       Role::User | Role::ToolCall | Role::ToolResult | Role::Compaction => {
         HORIZONTAL_PADDING
       }
-      Role::Assistant | Role::Reasoning | Role::SubagentLaunch => {
+      Role::Assistant | Role::Reasoning => {
         HORIZONTAL_PADDING + TEXT_EXTRA_PADDING
       }
     };
@@ -98,13 +96,6 @@ impl MessageItem {
     };
   }
 
-  pub fn new_subagent_launch(task: String) -> Self {
-    return Self::new(
-      format!("Subagent › {}", task_summary(&task)),
-      Role::SubagentLaunch,
-    );
-  }
-
   pub fn push_tool_result(&mut self, result: String, error: bool) {
     self.tool_result = Some((result, error));
   }
@@ -126,7 +117,6 @@ impl MessageItem {
       Role::User => self.user_list_item(width),
       Role::Assistant => self.llm_list_item(width),
       Role::Reasoning => self.reasoning_list_item(width),
-      Role::SubagentLaunch => self.subagent_list_item(width),
       Role::ToolCall | Role::ToolResult => self.tool_list_item(width),
       Role::Compaction => self.compaction_list_item(width),
     };
@@ -161,16 +151,6 @@ impl MessageItem {
     let container = Container::builder(self.text.clone())
       .borderless()
       .style(Style::default().dim())
-      .build();
-    let height = Self::container_height(&container, width);
-    return (container, height);
-  }
-
-  fn subagent_list_item(&self, width: u16) -> (Container<'static>, u16) {
-    let line = self.text.lines().next().unwrap_or("");
-    let container = Container::builder(truncate_line(line, width))
-      .borderless()
-      .style(Style::default().fg(Color::Cyan))
       .build();
     let height = Self::container_height(&container, width);
     return (container, height);

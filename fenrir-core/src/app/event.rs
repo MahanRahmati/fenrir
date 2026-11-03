@@ -45,9 +45,6 @@ pub enum AppEvent {
     usage: Option<ChatUsage>,
     context_window: Option<u64>,
   },
-  SubagentStarted {
-    task: String,
-  },
   Subagents {
     delta: i32,
   },

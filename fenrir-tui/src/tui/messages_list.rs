@@ -6,8 +6,6 @@ use tui_widget_list::{ListBuilder, ListState, ListView, ScrollDirection};
 
 use crate::tui::message_item::{MessageItem, Role};
 use fenrir_core::session_manager::session::Session;
-use fenrir_core::tool_manager::SUBAGENT_TOOL_NAME;
-use fenrir_core::tool_manager::tool::parse_tool_params;
 
 pub struct MessagesList {
   messages: Vec<MessageItem>,
@@ -96,12 +94,6 @@ impl MessagesList {
     self.select_last();
   }
 
-  pub fn add_subagent_launch(&mut self, task: String) {
-    let message = MessageItem::new_subagent_launch(task);
-    self.messages.push(message);
-    self.select_last();
-  }
-
   pub fn add_tool_result(&mut self, id: String, result: String, error: bool) {
     if let Some(call) = self
       .messages
@@ -174,25 +166,6 @@ impl MessagesList {
               )
             })
             .unwrap_or_default();
-          if name == SUBAGENT_TOOL_NAME {
-            let task = parse_tool_params(&arguments)
-              .remove("task")
-              .unwrap_or_default();
-            self.messages.push(MessageItem::new_subagent_launch(task));
-            if let Some(call_id) = &msg.tool_call_id {
-              for (j, result_msg) in messages.iter().enumerate().skip(i + 1) {
-                if result_msg.role == "tool"
-                  && result_msg.tool_call_id.as_deref()
-                    == Some(call_id.as_str())
-                {
-                  i = j;
-                  break;
-                }
-              }
-            }
-            i += 1;
-            continue;
-          }
           let mut item = MessageItem::new_tool_call(id, name, arguments);
           if let Some(call_id) = &msg.tool_call_id {
             for (j, result_msg) in messages.iter().enumerate().skip(i + 1) {

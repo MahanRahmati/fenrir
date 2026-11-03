@@ -379,7 +379,7 @@ impl Session {
       let runs_subagent = runs_subagent(&tool_call.name);
       let is_subagent_tool = tool_call.name == SUBAGENT_TOOL_NAME;
 
-      if config.general.show_tools && !is_subagent && !is_subagent_tool {
+      if config.general.show_tools && !is_subagent {
         tx.send(AppEvent::ToolCall {
           id: tool_call.id.clone(),
           name: tool_call.name.clone(),
@@ -427,11 +427,6 @@ impl Session {
           }
           continue;
         }
-      }
-
-      if config.general.show_tools && !is_subagent && is_subagent_tool {
-        let task = params.get("task").cloned().unwrap_or_default();
-        tx.send(AppEvent::SubagentStarted { task }).await.ok();
       }
 
       let outcome = {
