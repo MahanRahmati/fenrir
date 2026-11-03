@@ -48,6 +48,7 @@ use crate::tool_manager::goal_check::GoalCheckTool;
 pub use crate::tool_manager::helpers::task_summary;
 pub use crate::tool_manager::list_directories::LIST_DIRECTORIES_TOOL_NAME;
 use crate::tool_manager::list_directories::ListDirectoriesTool;
+pub use crate::tool_manager::music::MUSIC_TOOL_NAME;
 use crate::tool_manager::music::MusicTool;
 pub use crate::tool_manager::notify::NOTIFY_TOOL_NAME;
 use crate::tool_manager::notify::NotifyTool;

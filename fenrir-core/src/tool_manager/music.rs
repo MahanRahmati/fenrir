@@ -4,12 +4,14 @@ use crate::tool_manager::helpers::{get_optional_param, get_param};
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
+pub const MUSIC_TOOL_NAME: &str = "music";
+
 pub struct MusicTool;
 
 #[async_trait::async_trait]
 impl Tool for MusicTool {
   fn name(&self) -> &str {
-    return "music";
+    return MUSIC_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -58,14 +60,14 @@ impl Tool for MusicTool {
     params: ToolParams,
     _context: &mut ToolContext<'_>,
   ) -> Result<String> {
-    let action = get_param::<String>(&params, "music", "action")?;
+    let action = get_param::<String>(&params, MUSIC_TOOL_NAME, "action")?;
 
     if action != "status" {
       let _ = ensure_modes().await;
     }
 
     if action == "play_song" {
-      let query = get_param::<String>(&params, "music", "query")?;
+      let query = get_param::<String>(&params, MUSIC_TOOL_NAME, "query")?;
 
       let mut found = false;
       for search_type in &["title", "artist", "album"] {
@@ -164,8 +166,10 @@ fn build_mpc_args(action: &str, params: &ToolParams) -> Result<Vec<String>> {
       args = vec!["prev".to_string()];
     }
     "volume" => {
-      let value = get_optional_param::<String>(params, "music", "value");
-      let adjust = get_optional_param::<String>(params, "music", "adjust");
+      let value =
+        get_optional_param::<String>(params, MUSIC_TOOL_NAME, "value");
+      let adjust =
+        get_optional_param::<String>(params, MUSIC_TOOL_NAME, "adjust");
       match (value, adjust) {
         (Some(v), _) => args.push(v),
         (_, Some(a)) => args.push(a),
@@ -174,7 +178,8 @@ fn build_mpc_args(action: &str, params: &ToolParams) -> Result<Vec<String>> {
     }
 
     "add" => {
-      if let Some(file) = get_optional_param::<String>(params, "music", "file")
+      if let Some(file) =
+        get_optional_param::<String>(params, MUSIC_TOOL_NAME, "file")
       {
         args.push(file);
       }
