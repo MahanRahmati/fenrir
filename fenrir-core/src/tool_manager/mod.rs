@@ -53,6 +53,7 @@ use crate::tool_manager::read_file::ReadFileTool;
 use crate::tool_manager::read_pdf::ReadPdfTool;
 pub use crate::tool_manager::remove_file::REMOVE_FILE_TOOL_NAME;
 use crate::tool_manager::remove_file::RemoveFileTool;
+pub use crate::tool_manager::screenshot::SCREENSHOT_TOOL_NAME;
 use crate::tool_manager::screenshot::ScreenshotTool;
 pub use crate::tool_manager::subagent::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::subagent::SubagentTool;

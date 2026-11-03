@@ -4,12 +4,14 @@ use crate::capability::screenshot;
 use crate::tool_manager::helpers::get_optional_param;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
+pub const SCREENSHOT_TOOL_NAME: &str = "screenshot";
+
 pub struct ScreenshotTool;
 
 #[async_trait::async_trait]
 impl Tool for ScreenshotTool {
   fn name(&self) -> &str {
-    return "screenshot";
+    return SCREENSHOT_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -36,8 +38,10 @@ impl Tool for ScreenshotTool {
     params: ToolParams,
     _context: &mut ToolContext<'_>,
   ) -> Result<String> {
-    let path = get_optional_param::<String>(&params, "screenshot", "path");
-    let delay = get_optional_param::<u64>(&params, "screenshot", "delay");
+    let path =
+      get_optional_param::<String>(&params, SCREENSHOT_TOOL_NAME, "path");
+    let delay =
+      get_optional_param::<u64>(&params, SCREENSHOT_TOOL_NAME, "delay");
     let destination = screenshot::screenshot(path, delay)
       .await
       .context("Failed to take screenshot")?;
