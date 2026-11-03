@@ -4,12 +4,14 @@ use crate::capability::browser;
 use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
+pub const BROWSER_TOOL_NAME: &str = "browser";
+
 pub struct BrowserTool;
 
 #[async_trait::async_trait]
 impl Tool for BrowserTool {
   fn name(&self) -> &str {
-    return "browser";
+    return BROWSER_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -42,11 +44,11 @@ impl Tool for BrowserTool {
     params: ToolParams,
     _context: &mut ToolContext<'_>,
   ) -> Result<String> {
-    let action = get_param::<String>(&params, "browser", "action")?;
+    let action = get_param::<String>(&params, BROWSER_TOOL_NAME, "action")?;
 
     return match action.as_str() {
       "open_url" => {
-        let url = get_param::<String>(&params, "browser", "url")?;
+        let url = get_param::<String>(&params, BROWSER_TOOL_NAME, "url")?;
         browser::open_url(&url)
           .await
           .context(format!("Failed to open URL '{url}'"))

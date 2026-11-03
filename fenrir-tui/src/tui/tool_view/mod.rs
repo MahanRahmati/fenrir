@@ -1,3 +1,4 @@
+mod browser;
 mod date_time;
 mod find_file;
 mod find_text;
@@ -15,11 +16,12 @@ mod weather;
 mod write_file;
 
 use fenrir_core::tool_manager::{
-  DATE_TIME_TOOL_NAME, FIND_FILE_TOOL_NAME, FIND_TEXT_TOOL_NAME,
-  GOAL_CHECK_TOOL_NAME, LIST_DIRECTORIES_TOOL_NAME, NOTIFY_TOOL_NAME,
-  PROJECT_CONTEXT_TOOL_NAME, READ_FILE_TOOL_NAME, READ_PDF_TOOL_NAME,
-  REMOVE_FILE_TOOL_NAME, SCREENSHOT_TOOL_NAME, SUBAGENT_TOOL_NAME,
-  TODO_LIST_TOOL_NAME, WEATHER_TOOL_NAME, WRITE_FILE_TOOL_NAME,
+  BROWSER_TOOL_NAME, DATE_TIME_TOOL_NAME, FIND_FILE_TOOL_NAME,
+  FIND_TEXT_TOOL_NAME, GOAL_CHECK_TOOL_NAME, LIST_DIRECTORIES_TOOL_NAME,
+  NOTIFY_TOOL_NAME, PROJECT_CONTEXT_TOOL_NAME, READ_FILE_TOOL_NAME,
+  READ_PDF_TOOL_NAME, REMOVE_FILE_TOOL_NAME, SCREENSHOT_TOOL_NAME,
+  SUBAGENT_TOOL_NAME, TODO_LIST_TOOL_NAME, WEATHER_TOOL_NAME,
+  WRITE_FILE_TOOL_NAME,
 };
 
 const TOOL_CALL_ICON: &str = "●";
@@ -34,6 +36,7 @@ pub struct ToolCallView {
 
 pub fn tool_call_view(name: &str, arguments: &str) -> Option<ToolCallView> {
   return match name {
+    BROWSER_TOOL_NAME => browser::view(arguments),
     DATE_TIME_TOOL_NAME => date_time::view(arguments),
     FIND_FILE_TOOL_NAME => find_file::view(arguments),
     FIND_TEXT_TOOL_NAME => find_text::view(arguments),
@@ -59,6 +62,7 @@ pub fn tool_result_label(
   result: &str,
 ) -> Option<String> {
   return match name {
+    BROWSER_TOOL_NAME => browser::result_label(view, result),
     DATE_TIME_TOOL_NAME => date_time::result_label(view, result),
     FIND_FILE_TOOL_NAME => find_file::result_label(view, result),
     FIND_TEXT_TOOL_NAME => find_text::result_label(view, result),
