@@ -3,12 +3,14 @@ use anyhow::Result;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::datetime::get_current_datetime;
 
+pub const DATE_TIME_TOOL_NAME: &str = "date_time";
+
 pub struct DateTimeTool;
 
 #[async_trait::async_trait]
 impl Tool for DateTimeTool {
   fn name(&self) -> &str {
-    return "date_time";
+    return DATE_TIME_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
