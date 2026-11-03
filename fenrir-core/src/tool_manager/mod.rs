@@ -35,6 +35,7 @@ pub use crate::tool_manager::control_keyboard::CONTROL_KEYBOARD_TOOL_NAME;
 use crate::tool_manager::control_keyboard::ControlKeyboardTool;
 pub use crate::tool_manager::datetime::DATE_TIME_TOOL_NAME;
 use crate::tool_manager::datetime::DateTimeTool;
+pub use crate::tool_manager::ddg::DDG_TOOL_NAME;
 use crate::tool_manager::ddg::DdgTool;
 pub use crate::tool_manager::edit_file::EDIT_FILE_TOOL_NAME;
 use crate::tool_manager::edit_file::EditFileTool;

@@ -5,6 +5,8 @@ use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 use crate::utils::process;
 
+pub const DDG_TOOL_NAME: &str = "ddg";
+
 pub struct DdgTool {
   cache: ToolCache<String, String>,
 }
@@ -20,7 +22,7 @@ impl DdgTool {
 #[async_trait::async_trait]
 impl Tool for DdgTool {
   fn name(&self) -> &str {
-    return "ddg";
+    return DDG_TOOL_NAME;
   }
 
   fn description(&self) -> &str {
@@ -50,7 +52,7 @@ impl Tool for DdgTool {
     params: ToolParams,
     _context: &mut ToolContext<'_>,
   ) -> Result<String> {
-    let keyword = get_param::<String>(&params, "ddg", "keyword")?;
+    let keyword = get_param::<String>(&params, DDG_TOOL_NAME, "keyword")?;
 
     if let Some(cached) = self.cache.get(&keyword) {
       return Ok(cached);
