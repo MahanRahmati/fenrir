@@ -5,7 +5,7 @@ use anyhow::Result;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink};
+use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink, InputEvent};
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::ToolApprovalStatus;
@@ -127,14 +127,18 @@ impl EventSink for CliSink {
         println!("\n[Compaction Summary]\n");
         println!("{summary}\n");
       }
+      AppEvent::Prediction { .. } => {}
       AppEvent::Error { message } => {
         println!("\nError: {message}");
       }
     }
   }
 
-  async fn read_input(&mut self) -> Result<Option<String>> {
-    return read_from_stdin();
+  async fn poll_input(&mut self) -> Result<InputEvent> {
+    return Ok(match read_from_stdin()? {
+      Some(input) => InputEvent::Input(input),
+      None => InputEvent::Exit,
+    });
   }
 
   async fn poll_events(&mut self) {}

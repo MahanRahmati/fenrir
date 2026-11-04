@@ -53,16 +53,28 @@ pub enum AppEvent {
   Compacted {
     summary: String,
   },
+  Prediction {
+    text: String,
+  },
   Error {
     message: String,
   },
 }
 
+pub enum InputEvent {
+  Pending,
+  Input(String),
+  Exit,
+}
+
 #[async_trait]
 pub trait EventSink {
   async fn on_event(&mut self, event: AppEvent);
-  async fn read_input(&mut self) -> Result<Option<String>>;
+  async fn poll_input(&mut self) -> Result<InputEvent>;
   async fn poll_events(&mut self);
+  fn wants_prediction(&self) -> bool {
+    return false;
+  }
   async fn on_exit(&mut self);
   async fn on_help(&mut self, commands: Vec<SlashCommand>);
   async fn on_sessions(

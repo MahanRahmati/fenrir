@@ -12,7 +12,7 @@ use ratatui::crossterm::event::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink};
+use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink, InputEvent};
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::ToolApprovalStatus;
@@ -20,6 +20,8 @@ use fenrir_core::session_manager::session::Session;
 use fenrir_core::slash_commands::SlashCommand;
 
 use crate::tui::Tui;
+
+const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 struct TuiSink {
   tui: Tui,
@@ -59,6 +61,7 @@ impl EventSink for TuiSink {
   async fn on_event(&mut self, event: AppEvent) {
     match event {
       AppEvent::UserMessage { content } => {
+        self.tui.clear_suggestion();
         self.tui.add_message(content);
       }
       AppEvent::Token { text, reasoning } => {
@@ -124,6 +127,9 @@ impl EventSink for TuiSink {
       AppEvent::Compacted { summary } => {
         self.tui.add_summary(summary);
       }
+      AppEvent::Prediction { text } => {
+        self.tui.set_suggestion(text);
+      }
       AppEvent::Error { message } => {
         self.tui.add_message(format!("Error: {message}"));
       }
@@ -131,20 +137,37 @@ impl EventSink for TuiSink {
     self.redraw();
   }
 
-  async fn read_input(&mut self) -> Result<Option<String>> {
-    loop {
-      if let Some(text) = self.get_message_from_queue() {
-        return Ok(Some(text));
-      }
-      let input = self.tui.read_input().await;
+  async fn poll_input(&mut self) -> Result<InputEvent> {
+    if let Some(text) = self.get_message_from_queue() {
+      self.tui.clear_suggestion();
       self.redraw();
-      if let Some(text) = input {
-        self.add_to_message_queue(text);
-      }
-      if !self.tui.is_running() {
-        return Ok(None);
-      }
+      return Ok(InputEvent::Input(text));
     }
+    if !self.tui.is_running() {
+      return Ok(InputEvent::Exit);
+    }
+    if !event::poll(INPUT_POLL_INTERVAL)
+      .context("Failed to poll terminal events")?
+    {
+      return Ok(InputEvent::Pending);
+    }
+    let event = event::read().context("Failed to read terminal event")?;
+    let input = self.tui.handle_event(event).await;
+    self.redraw();
+    if !self.tui.is_running() {
+      return Ok(InputEvent::Exit);
+    }
+    return Ok(match input {
+      Some(text) => InputEvent::Input(text),
+      None => InputEvent::Pending,
+    });
+  }
+
+  fn wants_prediction(&self) -> bool {
+    return self.tui.is_running()
+      && self.message_queue.is_empty()
+      && self.tui.input_is_empty()
+      && !self.tui.has_suggestion();
   }
 
   async fn poll_events(&mut self) {

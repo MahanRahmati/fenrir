@@ -19,7 +19,7 @@ mod tool_view;
 use std::time::{Duration, Instant};
 
 use ratatui::Frame;
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -109,6 +109,22 @@ impl Tui {
 
   pub fn set_model(&mut self, name: &str) {
     self.input.set_model(name);
+  }
+
+  pub fn set_suggestion(&mut self, suggestion: String) {
+    self.input.set_suggestion(suggestion);
+  }
+
+  pub fn clear_suggestion(&mut self) {
+    self.input.clear_suggestion();
+  }
+
+  pub fn has_suggestion(&self) -> bool {
+    return self.input.has_suggestion();
+  }
+
+  pub fn input_is_empty(&self) -> bool {
+    return self.input.content.is_empty();
   }
 
   pub fn is_running(&self) -> bool {
@@ -270,17 +286,6 @@ impl Tui {
       || self.completion_popup.is_open();
   }
 
-  pub async fn read_input(&mut self) -> Option<String> {
-    let event = match event::read() {
-      Ok(e) => e,
-      Err(e) => {
-        eprintln!("TUI event error: {e}");
-        return None;
-      }
-    };
-    return self.handle_event(event).await;
-  }
-
   pub async fn handle_event(&mut self, event: Event) -> Option<String> {
     if let Event::Mouse(mouse) = &event {
       self.messages_list.handle_mouse(mouse);
@@ -291,6 +296,7 @@ impl Tui {
         && key.modifiers.contains(KeyModifiers::SHIFT);
 
       if key.code == KeyCode::Esc {
+        self.input.clear_suggestion();
         if let Some(cancel_token) = &self.cancel_token {
           let now = Instant::now();
           if let Some(last) = self.last_escape_time
@@ -324,6 +330,10 @@ impl Tui {
       if is_shift_enter {
         self.input.enter_char('\n');
         self.completion_popup.refresh(&self.input).await;
+        return None;
+      }
+
+      if key.code == KeyCode::Tab && self.input.accept_suggestion() {
         return None;
       }
 
@@ -417,6 +427,7 @@ impl Tui {
   }
 
   pub fn update_messages(&mut self, session: Option<&Session>) {
+    self.clear_suggestion();
     self.messages_list.update_messages(session);
   }
 

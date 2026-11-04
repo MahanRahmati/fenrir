@@ -28,6 +28,7 @@ pub struct GeneralConfig {
   pub show_tools: bool,
   pub tool_timeout_seconds: u64,
   pub restrict_write_tools_to_cwd: bool,
+  pub predict_next_prompt: bool,
 }
 
 impl Default for GeneralConfig {
@@ -39,6 +40,7 @@ impl Default for GeneralConfig {
       show_tools: true,
       tool_timeout_seconds: 60,
       restrict_write_tools_to_cwd: true,
+      predict_next_prompt: true,
     };
   }
 }

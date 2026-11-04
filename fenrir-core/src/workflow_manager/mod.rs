@@ -1,4 +1,5 @@
 pub mod compaction;
+pub mod prediction;
 pub mod title;
 
 use anyhow::Result;
@@ -7,6 +8,9 @@ use crate::config::Config;
 use crate::provider_manager::{Model, ProviderManager};
 use crate::workflow_manager::compaction::{
   CompactionParams, CompactionWorkflow,
+};
+use crate::workflow_manager::prediction::{
+  PredictionParams, PredictionWorkflow,
 };
 use crate::workflow_manager::title::{TitleParams, TitleWorkflow};
 
@@ -46,6 +50,22 @@ impl WorkflowManager {
     params: CompactionParams,
   ) -> Result<String> {
     return CompactionWorkflow::execute(
+      providers,
+      &self.config,
+      model,
+      params,
+      &self.cwd,
+    )
+    .await;
+  }
+
+  pub async fn predict_next_prompt(
+    &self,
+    providers: &ProviderManager,
+    model: &Model,
+    params: PredictionParams,
+  ) -> Result<String> {
+    return PredictionWorkflow::execute(
       providers,
       &self.config,
       model,

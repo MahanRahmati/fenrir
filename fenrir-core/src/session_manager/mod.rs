@@ -1,5 +1,6 @@
 mod compaction;
 mod harness;
+mod prediction;
 mod queries;
 pub mod repository;
 pub mod session;
@@ -172,6 +173,17 @@ impl SessionManager {
         cancel,
       )
       .await;
+  }
+
+  pub async fn predict_next_prompt(&self, id: Uuid) -> Result<String> {
+    let Some(session) = self.session(id) else {
+      return Ok(String::new());
+    };
+    return session.predict_next_prompt(&self.providers).await;
+  }
+
+  pub fn predicts_next_prompt(&self) -> bool {
+    return self.config.general.predict_next_prompt;
   }
 
   pub fn last_usage(&self, id: Uuid) -> Option<ChatUsage> {

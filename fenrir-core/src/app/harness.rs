@@ -1,8 +1,10 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::task::Poll;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use futures::future::LocalBoxFuture;
 use tokio::sync::mpsc;
 use tokio::time::{MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
@@ -12,6 +14,7 @@ use crate::app::App;
 use crate::app::AppEvent;
 use crate::app::ApprovalChannel;
 use crate::app::EventSink;
+use crate::app::InputEvent;
 use crate::app::command::{AppCommand, CommandOutcome};
 use crate::persona_manager::PersonaManager;
 use crate::session_manager::CompactionMode;
@@ -19,6 +22,7 @@ use crate::slash_commands::SlashCommand;
 use crate::vlog;
 
 const UI_TICK: Duration = Duration::from_millis(16);
+const PREDICTION_YIELD: Duration = Duration::from_millis(1);
 
 impl App {
   fn approval_channel(
@@ -36,15 +40,43 @@ impl App {
     cwd: &str,
   ) -> Result<()> {
     let mut active_session: Option<Uuid> = None;
+    let mut prediction: Option<LocalBoxFuture<'_, Result<String>>> = None;
     loop {
       if self.shutdown.is_cancelled() {
         vlog!("Shutdown signal received, exiting harness loop...");
         break;
       }
 
-      let Some(input) = sink.read_input().await? else {
-        break;
+      if prediction.is_some() && !sink.wants_prediction() {
+        prediction = None;
+      }
+
+      let input = match sink.poll_input().await? {
+        InputEvent::Pending => {
+          if let Some(pending) = prediction.as_mut()
+            && let Poll::Ready(result) = futures::poll!(pending)
+          {
+            prediction = None;
+            match result {
+              Ok(text) if !text.is_empty() => {
+                sink.on_event(AppEvent::Prediction { text }).await;
+              }
+              Ok(_) => {}
+              Err(e) => {
+                vlog!("Failed to predict next prompt: {e}");
+              }
+            }
+          }
+          if prediction.is_some() {
+            tokio::time::sleep(PREDICTION_YIELD).await;
+          }
+          continue;
+        }
+        InputEvent::Exit => break,
+        InputEvent::Input(input) => input,
       };
+
+      prediction = None;
 
       let command = match AppCommand::parse(&input) {
         Ok(Some(command)) => Some(command),
@@ -92,7 +124,14 @@ impl App {
         }
       };
 
-      self.prompt(sink, session_id, &input).await?;
+      let completed = self.prompt(sink, session_id, &input).await?;
+      if completed
+        && sink.wants_prediction()
+        && self.sessions.predicts_next_prompt()
+      {
+        prediction =
+          Some(Box::pin(self.sessions.predict_next_prompt(session_id)));
+      }
     }
     return Ok(());
   }
@@ -102,7 +141,7 @@ impl App {
     sink: &mut impl EventSink,
     session_id: Uuid,
     input: &str,
-  ) -> Result<()> {
+  ) -> Result<bool> {
     self.sessions.ensure_system_message(session_id).await?;
     self.sessions.add_user_message(session_id, input).await?;
     sink
@@ -122,7 +161,7 @@ impl App {
     sink.set_cancel_token(cancel.clone()).await;
 
     let Some(result) = run_chat(self, sink, session_id, &cancel).await else {
-      return Ok(());
+      return Ok(false);
     };
 
     match result {
@@ -143,6 +182,7 @@ impl App {
           .await;
         run_compaction(self, sink, session_id, CompactionMode::Auto, &cancel)
           .await;
+        return Ok(true);
       }
       Err(e) => {
         sink
@@ -150,9 +190,9 @@ impl App {
             message: e.to_string(),
           })
           .await;
+        return Ok(false);
       }
     }
-    return Ok(());
   }
 
   pub async fn command(

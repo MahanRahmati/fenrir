@@ -4,7 +4,7 @@ mod event;
 mod harness;
 
 pub use approval::{ApprovalChannel, ApprovalDecision};
-pub use event::{AppEvent, EventSink};
+pub use event::{AppEvent, EventSink, InputEvent};
 
 use crate::config::Config;
 use crate::database::DB;

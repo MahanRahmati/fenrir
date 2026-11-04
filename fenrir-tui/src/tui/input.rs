@@ -1,5 +1,5 @@
 use ratatui::style::{Color, Style};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 
 use crate::tui::container::{Container, Footer};
 
@@ -12,6 +12,7 @@ pub struct Input {
   pub scroll_offset: usize,
   persona_name: String,
   model_name: String,
+  suggestion: Option<String>,
 }
 
 impl Input {
@@ -23,6 +24,7 @@ impl Input {
       scroll_offset: 0,
       persona_name: String::new(),
       model_name: String::new(),
+      suggestion: None,
     };
   }
 
@@ -32,6 +34,30 @@ impl Input {
 
   pub fn set_model(&mut self, name: &str) {
     self.model_name = name.to_string();
+  }
+
+  pub fn set_suggestion(&mut self, suggestion: String) {
+    if self.content.is_empty() && !suggestion.trim().is_empty() {
+      self.suggestion = Some(suggestion);
+    }
+  }
+
+  pub fn clear_suggestion(&mut self) {
+    self.suggestion = None;
+  }
+
+  pub fn has_suggestion(&self) -> bool {
+    return self.suggestion.is_some();
+  }
+
+  pub fn accept_suggestion(&mut self) -> bool {
+    let Some(suggestion) = self.suggestion.take() else {
+      return false;
+    };
+    self.content = suggestion;
+    self.character_index = self.content.chars().count();
+    self.scroll_offset = 0;
+    return true;
   }
 
   pub fn move_cursor_left(&mut self) {
@@ -74,6 +100,7 @@ impl Input {
   }
 
   pub fn enter_char(&mut self, new_char: char) {
+    self.suggestion = None;
     let index = self.byte_index();
     self.content.insert(index, new_char);
     self.move_cursor_right();
@@ -89,6 +116,7 @@ impl Input {
   }
 
   pub fn delete_char(&mut self) {
+    self.suggestion = None;
     let is_not_cursor_leftmost = self.character_index != 0;
     if is_not_cursor_leftmost {
       let current_index = self.character_index;
@@ -106,10 +134,17 @@ impl Input {
     return new_cursor_pos.clamp(0, self.content.chars().count());
   }
 
+  fn display_content(&self) -> &str {
+    if self.content.is_empty() {
+      return self.suggestion.as_deref().unwrap_or("");
+    }
+    return &self.content;
+  }
+
   pub fn wrapped_line_count(&self) -> usize {
     let width = self.width.max(1);
     return self
-      .content
+      .display_content()
       .split('\n')
       .map(|line| line.chars().count().div_ceil(width).max(1))
       .sum();
@@ -118,7 +153,7 @@ impl Input {
   pub fn wrapped_lines(&self) -> Vec<String> {
     let width = self.width.max(1);
     let mut lines = Vec::new();
-    for logical in self.content.split('\n') {
+    for logical in self.display_content().split('\n') {
       let mut line = String::new();
       let mut count = 0;
       let mut any = false;
@@ -205,9 +240,18 @@ impl Input {
     let wrapped = self.wrapped_lines();
     let start = self.scroll_offset;
     let end = (start + visible).min(wrapped.len());
+    let is_suggestion = self.content.is_empty() && self.suggestion.is_some();
+    let suggestion_style = Style::default().fg(Color::DarkGray);
     let lines: Vec<Line> = wrapped[start..end]
       .iter()
-      .map(|line| Line::from(format!(" {line}")))
+      .map(|line| {
+        let text = format!(" {line}");
+        if is_suggestion {
+          Line::from(Span::styled(text, suggestion_style))
+        } else {
+          Line::from(text)
+        }
+      })
       .collect();
     let text = if self.model_name.is_empty() {
       format!(" {}", self.persona_name)
@@ -224,6 +268,7 @@ impl Input {
   }
 
   pub fn submit_content(&mut self) -> String {
+    self.suggestion = None;
     let mut value = std::mem::take(&mut self.content);
     while value.ends_with('\n') {
       value.pop();
