@@ -39,6 +39,7 @@ use fenrir_core::provider_manager::ChatUsage;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::session::Session;
 use fenrir_core::slash_commands::SlashCommand;
+use fenrir_core::tool_manager::ToolPreview;
 
 const TOP_PADDING: u16 = 1;
 const HORIZONTAL_PADDING: u16 = 2;
@@ -383,8 +384,16 @@ impl Tui {
     self.messages_list.add_message(message);
   }
 
-  pub fn add_tool_call(&mut self, id: String, name: String, arguments: String) {
-    self.messages_list.add_tool_call(id, name, arguments);
+  pub fn add_tool_call(
+    &mut self,
+    id: String,
+    name: String,
+    arguments: String,
+    preview: Option<ToolPreview>,
+  ) {
+    self
+      .messages_list
+      .add_tool_call(id, name, arguments, preview);
   }
 
   pub fn add_tool_result(&mut self, id: String, result: String, error: bool) {

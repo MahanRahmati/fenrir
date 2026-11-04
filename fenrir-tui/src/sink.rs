@@ -73,8 +73,9 @@ impl EventSink for TuiSink {
         id,
         name,
         arguments,
+        preview,
       } => {
-        self.tui.add_tool_call(id, name, arguments);
+        self.tui.add_tool_call(id, name, arguments, preview);
       }
       AppEvent::ToolApprovalRequest {
         tool_call_id,

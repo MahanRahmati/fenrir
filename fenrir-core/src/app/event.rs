@@ -10,6 +10,7 @@ use crate::provider_manager::Model;
 use crate::session_manager::ToolApprovalStatus;
 use crate::session_manager::session::Session;
 use crate::slash_commands::SlashCommand;
+use crate::tool_manager::ToolPreview;
 
 pub enum AppEvent {
   UserMessage {
@@ -23,6 +24,7 @@ pub enum AppEvent {
     id: String,
     name: String,
     arguments: String,
+    preview: Option<ToolPreview>,
   },
   ToolApprovalRequest {
     tool_call_id: String,

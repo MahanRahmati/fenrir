@@ -55,6 +55,7 @@ impl EventSink for CliSink {
         id: _,
         name,
         arguments,
+        preview: _,
       } => {
         if self.reasoning_open {
           self.reasoning_open = false;

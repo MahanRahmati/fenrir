@@ -2,6 +2,7 @@ mod browser;
 mod control_keyboard;
 mod date_time;
 mod ddg;
+mod edit_file;
 mod find_file;
 mod find_text;
 mod goal_check;
@@ -20,12 +21,12 @@ mod write_file;
 
 use fenrir_core::tool_manager::{
   BROWSER_TOOL_NAME, CONTROL_KEYBOARD_TOOL_NAME, DATE_TIME_TOOL_NAME,
-  DDG_TOOL_NAME, FIND_FILE_TOOL_NAME, FIND_TEXT_TOOL_NAME,
+  DDG_TOOL_NAME, EDIT_FILE_TOOL_NAME, FIND_FILE_TOOL_NAME, FIND_TEXT_TOOL_NAME,
   GOAL_CHECK_TOOL_NAME, LIST_DIRECTORIES_TOOL_NAME, MUSIC_TOOL_NAME,
   NOTIFY_TOOL_NAME, PROJECT_CONTEXT_TOOL_NAME, READ_FILE_TOOL_NAME,
   READ_PDF_TOOL_NAME, REMOVE_FILE_TOOL_NAME, SCREENSHOT_TOOL_NAME,
-  SUBAGENT_TOOL_NAME, TODO_LIST_TOOL_NAME, WEATHER_TOOL_NAME,
-  WRITE_FILE_TOOL_NAME,
+  SUBAGENT_TOOL_NAME, TODO_LIST_TOOL_NAME, ToolPreview, ToolPreviewLine,
+  ToolPreviewLineKind, WEATHER_TOOL_NAME, WRITE_FILE_TOOL_NAME,
 };
 
 const TOOL_CALL_ICON: &str = "●";
@@ -34,16 +35,32 @@ const TOOL_CALL_ICON: &str = "●";
 pub struct ToolCallView {
   pub icon: &'static str,
   pub label: String,
-  pub body: Vec<String>,
+  pub body: Vec<ToolPreviewLine>,
   pub show_result: bool,
 }
 
-pub fn tool_call_view(name: &str, arguments: &str) -> Option<ToolCallView> {
-  return match name {
+impl Default for ToolCallView {
+  fn default() -> Self {
+    return Self {
+      icon: TOOL_CALL_ICON,
+      label: String::new(),
+      body: Vec::new(),
+      show_result: false,
+    };
+  }
+}
+
+pub fn tool_call_view(
+  name: &str,
+  arguments: &str,
+  preview: Option<&ToolPreview>,
+) -> ToolCallView {
+  let view = match name {
     BROWSER_TOOL_NAME => browser::view(arguments),
     CONTROL_KEYBOARD_TOOL_NAME => control_keyboard::view(arguments),
     DATE_TIME_TOOL_NAME => date_time::view(arguments),
     DDG_TOOL_NAME => ddg::view(arguments),
+    EDIT_FILE_TOOL_NAME => edit_file::view(arguments, preview),
     FIND_FILE_TOOL_NAME => find_file::view(arguments),
     FIND_TEXT_TOOL_NAME => find_text::view(arguments),
     GOAL_CHECK_TOOL_NAME => goal_check::view(arguments),
@@ -59,8 +76,24 @@ pub fn tool_call_view(name: &str, arguments: &str) -> Option<ToolCallView> {
     TODO_LIST_TOOL_NAME => todo_list::view(arguments),
     WEATHER_TOOL_NAME => weather::view(arguments),
     WRITE_FILE_TOOL_NAME => write_file::view(arguments),
-    _ => None,
+    _ => {
+      return ToolCallView {
+        icon: TOOL_CALL_ICON,
+        label: name.to_string(),
+        body: Vec::new(),
+        show_result: true,
+      };
+    }
   };
+  return view.unwrap_or_else(|| ToolCallView {
+    icon: TOOL_CALL_ICON,
+    label: name.to_string(),
+    body: vec![ToolPreviewLine {
+      kind: ToolPreviewLineKind::Warning,
+      text: String::from("Invalid or missing arguments"),
+    }],
+    show_result: false,
+  });
 }
 
 pub fn tool_result_label(

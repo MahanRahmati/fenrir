@@ -11,6 +11,7 @@ use crate::config::Config;
 use crate::persona_manager::Persona;
 use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::SessionRepository;
+use crate::tool_manager::preview::ToolPreview;
 
 pub type ToolParams = HashMap<String, String>;
 
@@ -50,6 +51,9 @@ pub trait Tool: Send + Sync {
     params: ToolParams,
     context: &mut ToolContext<'_>,
   ) -> Result<String>;
+  async fn preview(&self, _params: &ToolParams) -> Option<ToolPreview> {
+    return None;
+  }
   fn is_read_only(&self) -> bool;
   fn reset_cache(&self) {}
   fn to_tool_spec(&self) -> ToolSpec {

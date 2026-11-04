@@ -7,6 +7,9 @@ use ratatui::widgets::Widget;
 use crate::tui::container::Container;
 use crate::tui::tool_view::{ToolCallView, tool_call_view, tool_result_label};
 use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
+use fenrir_core::tool_manager::{
+  ToolPreview, ToolPreviewLine, ToolPreviewLineKind,
+};
 
 const TEXT_EXTRA_PADDING: u16 = 1;
 
@@ -58,8 +61,7 @@ pub struct MessageItem {
   error: bool,
   tool_call_id: Option<String>,
   tool_name: Option<String>,
-  tool_arguments: Option<String>,
-  tool_view: Option<ToolCallView>,
+  tool_view: ToolCallView,
   tool_result: Option<(String, bool)>,
 }
 
@@ -71,8 +73,7 @@ impl MessageItem {
       error: false,
       tool_call_id: None,
       tool_name: None,
-      tool_arguments: None,
-      tool_view: None,
+      tool_view: ToolCallView::default(),
       tool_result: None,
     };
   }
@@ -82,15 +83,19 @@ impl MessageItem {
     return self;
   }
 
-  pub fn new_tool_call(id: String, name: String, arguments: String) -> Self {
-    let tool_view = tool_call_view(&name, &arguments);
+  pub fn new_tool_call(
+    id: String,
+    name: String,
+    arguments: String,
+    preview: Option<ToolPreview>,
+  ) -> Self {
+    let tool_view = tool_call_view(&name, &arguments, preview.as_ref());
     return Self {
       text: String::new(),
       role: Role::ToolCall,
       error: false,
       tool_call_id: Some(id),
       tool_name: Some(name),
-      tool_arguments: Some(arguments),
       tool_view,
       tool_result: None,
     };
@@ -107,7 +112,7 @@ impl MessageItem {
   }
 
   pub fn to_list_item(&self, width: u16) -> (ListMessage, u16) {
-    let horizontal_padding = if self.tool_view.is_some() {
+    let horizontal_padding = if self.role == Role::ToolCall {
       self.role.horizontal_padding() + TEXT_EXTRA_PADDING
     } else {
       self.role.horizontal_padding()
@@ -170,76 +175,33 @@ impl MessageItem {
       return (container, height);
     }
 
-    if let Some(view) = &self.tool_view {
-      let label = match (&self.tool_name, &self.tool_result) {
-        (Some(name), Some((result, false))) => {
-          tool_result_label(name, view, result)
-            .unwrap_or_else(|| view.label.clone())
-        }
-        _ => view.label.clone(),
-      };
-      let label = format!("{} {}", view.icon, label);
-      let label = Line::from(truncate_line(&label, width));
-      let mut lines: Vec<Line<'static>> = vec![label];
-      lines.extend(view.body.iter().map(|line| {
-        Line::from(line.clone()).patch_style(Style::default().dim())
-      }));
-      if let Some((result, error)) = &self.tool_result
-        && (view.show_result || *error)
-      {
-        let style = if *error {
-          Style::default().fg(Color::Red)
-        } else {
-          Style::default().dim()
-        };
-        lines.extend(
-          result
-            .lines()
-            .map(|line| Line::from(line.to_string()).patch_style(style)),
-        );
+    let view = &self.tool_view;
+    let label = match (&self.tool_name, &self.tool_result) {
+      (Some(name), Some((result, false))) => {
+        tool_result_label(name, view, result)
+          .unwrap_or_else(|| view.label.clone())
       }
-      let container =
-        Container::builder(lines).borderless().trim(false).build();
-      let height = Self::container_height(&container, width);
-      return (container, height);
-    }
-
-    let mut title = String::new();
-    if let Some(name) = &self.tool_name {
-      let trimmed = name.trim();
-      if !trimmed.is_empty() {
-        title.push(' ');
-        title.push_str(trimmed);
-      }
-      if let Some(arguments) = &self.tool_arguments {
-        let args = arguments.trim();
-        if !args.is_empty() && args != "{}" {
-          if !title.is_empty() {
-            title.push(' ');
-          }
-          title.push_str(args);
-        }
-      }
-    }
-    let body: Vec<Line<'static>> = self
-      .tool_result
-      .as_ref()
-      .map(|(result, _)| {
-        result.lines().map(|l| Line::from(l.to_string())).collect()
-      })
-      .unwrap_or_default();
-    let mut builder = Container::builder(body).color(Color::Blue);
-    if !title.is_empty() {
-      builder = builder.title(title);
-    }
-    if let Some((_, error)) = &self.tool_result {
-      builder = builder.style(if *error {
+      _ => view.label.clone(),
+    };
+    let label = format!("{} {}", view.icon, label);
+    let label = Line::from(truncate_line(&label, width));
+    let mut lines: Vec<Line<'static>> = vec![label];
+    lines.extend(view.body.iter().map(preview_line));
+    if let Some((result, error)) = &self.tool_result
+      && (view.show_result || *error)
+    {
+      let style = if *error {
         Style::default().fg(Color::Red)
       } else {
         Style::default().dim()
-      });
+      };
+      lines.extend(
+        result
+          .lines()
+          .map(|line| Line::from(line.to_string()).patch_style(style)),
+      );
     }
-    let container = builder.build();
+    let container = Container::builder(lines).borderless().trim(false).build();
     let height = Self::container_height(&container, width);
     return (container, height);
   }
@@ -269,6 +231,19 @@ impl MessageItem {
   pub fn push_string(&mut self, text: &str) {
     self.text.push_str(text);
   }
+}
+
+fn preview_line(line: &ToolPreviewLine) -> Line<'static> {
+  let style = match line.kind {
+    ToolPreviewLineKind::Added => Style::default().fg(Color::Green),
+    ToolPreviewLineKind::Removed => Style::default().fg(Color::Red),
+    ToolPreviewLineKind::Header => Style::default().fg(Color::Cyan),
+    ToolPreviewLineKind::Warning => Style::default().fg(Color::Yellow),
+    ToolPreviewLineKind::Plain | ToolPreviewLineKind::Context => {
+      Style::default().dim()
+    }
+  };
+  return Line::from(line.text.clone()).patch_style(style);
 }
 
 fn truncate_line(text: &str, width: u16) -> String {

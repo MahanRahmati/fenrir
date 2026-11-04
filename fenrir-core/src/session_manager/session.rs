@@ -12,6 +12,7 @@ use crate::provider_manager::{ChatUsage, Model};
 use crate::session_manager::repository::{SessionRepository, SessionRow};
 use crate::session_manager::summary::Summary;
 use crate::tool_manager::ToolManager;
+use crate::tool_manager::ToolPreview;
 use crate::workflow_manager::WorkflowManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +36,8 @@ pub struct ToolCall {
   #[serde(rename = "type")]
   pub call_type: String,
   pub function: ToolFunction,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub preview: Option<ToolPreview>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,6 +178,7 @@ impl Session {
     tool_call_id: &str,
     name: &str,
     arguments: &str,
+    preview: Option<ToolPreview>,
   ) {
     let tool_calls = vec![ToolCall {
       id: tool_call_id.to_string(),
@@ -183,6 +187,7 @@ impl Session {
         name: name.to_string(),
         arguments: arguments.to_string(),
       },
+      preview,
     }];
     self.add_message(
       "assistant",

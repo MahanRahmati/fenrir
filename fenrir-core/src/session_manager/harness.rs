@@ -366,7 +366,17 @@ impl Session {
         tool_call.arguments
       );
 
-      self.add_tool_call(&tool_call.id, &tool_call.name, &tool_call.arguments);
+      let preview = self
+        .tool_manager
+        .preview_tool(&tool_call.name, &tool_call.arguments)
+        .await;
+
+      self.add_tool_call(
+        &tool_call.id,
+        &tool_call.name,
+        &tool_call.arguments,
+        preview.clone(),
+      );
       self.persist_last_message(repository).await?;
 
       if cancel.is_cancelled() {
@@ -384,6 +394,7 @@ impl Session {
           id: tool_call.id.clone(),
           name: tool_call.name.clone(),
           arguments: tool_call.arguments.clone(),
+          preview,
         })
         .await
         .ok();

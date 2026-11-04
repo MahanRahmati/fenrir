@@ -11,6 +11,7 @@ mod helpers;
 mod list_directories;
 mod music;
 mod notify;
+mod preview;
 mod project_context;
 mod read_file;
 mod read_pdf;
@@ -52,6 +53,9 @@ pub use crate::tool_manager::music::MUSIC_TOOL_NAME;
 use crate::tool_manager::music::MusicTool;
 pub use crate::tool_manager::notify::NOTIFY_TOOL_NAME;
 use crate::tool_manager::notify::NotifyTool;
+pub use crate::tool_manager::preview::{
+  ToolPreview, ToolPreviewLine, ToolPreviewLineKind,
+};
 pub use crate::tool_manager::project_context::PROJECT_CONTEXT_TOOL_NAME;
 use crate::tool_manager::project_context::ProjectContextTool;
 pub use crate::tool_manager::read_file::READ_FILE_TOOL_NAME;
@@ -66,7 +70,9 @@ pub use crate::tool_manager::subagent::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::subagent::SubagentTool;
 pub use crate::tool_manager::todo_list::TODO_LIST_TOOL_NAME;
 use crate::tool_manager::todo_list::TodoListTool;
-use crate::tool_manager::tool::{Tool, ToolContext, ToolParams, ToolSpec};
+use crate::tool_manager::tool::{
+  Tool, ToolContext, ToolParams, ToolSpec, parse_tool_params,
+};
 pub use crate::tool_manager::weather::WEATHER_TOOL_NAME;
 use crate::tool_manager::weather::WeatherTool;
 pub use crate::tool_manager::write_file::WRITE_FILE_TOOL_NAME;
@@ -155,6 +161,16 @@ impl ToolManager {
       .filter(|t| tool_access.allows(t.name()))
       .map(|t| t.to_tool_spec())
       .collect();
+  }
+
+  pub async fn preview_tool(
+    &self,
+    name: &str,
+    arguments: &str,
+  ) -> Option<ToolPreview> {
+    let tool = self.find_tool(name)?;
+    let params = parse_tool_params(arguments);
+    return tool.preview(&params).await;
   }
 
   pub async fn execute_tool(

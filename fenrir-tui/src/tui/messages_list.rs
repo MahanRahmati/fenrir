@@ -6,6 +6,7 @@ use tui_widget_list::{ListBuilder, ListState, ListView, ScrollDirection};
 
 use crate::tui::message_item::{MessageItem, Role};
 use fenrir_core::session_manager::session::Session;
+use fenrir_core::tool_manager::ToolPreview;
 
 pub struct MessagesList {
   messages: Vec<MessageItem>,
@@ -88,8 +89,14 @@ impl MessagesList {
     self.select_last();
   }
 
-  pub fn add_tool_call(&mut self, id: String, name: String, arguments: String) {
-    let message = MessageItem::new_tool_call(id, name, arguments);
+  pub fn add_tool_call(
+    &mut self,
+    id: String,
+    name: String,
+    arguments: String,
+    preview: Option<ToolPreview>,
+  ) {
+    let message = MessageItem::new_tool_call(id, name, arguments, preview);
     self.messages.push(message);
     self.select_last();
   }
@@ -154,7 +161,7 @@ impl MessagesList {
           continue;
         }
         if msg.role == "assistant" && msg.tool_calls.is_some() {
-          let (id, name, arguments) = msg
+          let (id, name, arguments, preview) = msg
             .tool_calls
             .as_ref()
             .and_then(|calls| calls.first())
@@ -163,10 +170,12 @@ impl MessagesList {
                 call.id.clone(),
                 call.function.name.clone(),
                 call.function.arguments.clone(),
+                call.preview.clone(),
               )
             })
             .unwrap_or_default();
-          let mut item = MessageItem::new_tool_call(id, name, arguments);
+          let mut item =
+            MessageItem::new_tool_call(id, name, arguments, preview);
           if let Some(call_id) = &msg.tool_call_id {
             for (j, result_msg) in messages.iter().enumerate().skip(i + 1) {
               if result_msg.role == "tool"
