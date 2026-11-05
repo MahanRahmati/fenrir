@@ -5,6 +5,7 @@ mod ddg;
 mod edit_file;
 mod find_file;
 mod find_text;
+mod git;
 mod goal_check;
 mod list_directories;
 mod music;
@@ -22,11 +23,12 @@ mod write_file;
 use fenrir_core::tool_manager::{
   BROWSER_TOOL_NAME, CONTROL_KEYBOARD_TOOL_NAME, DATE_TIME_TOOL_NAME,
   DDG_TOOL_NAME, EDIT_FILE_TOOL_NAME, FIND_FILE_TOOL_NAME, FIND_TEXT_TOOL_NAME,
-  GOAL_CHECK_TOOL_NAME, LIST_DIRECTORIES_TOOL_NAME, MUSIC_TOOL_NAME,
-  NOTIFY_TOOL_NAME, PROJECT_CONTEXT_TOOL_NAME, READ_FILE_TOOL_NAME,
-  READ_PDF_TOOL_NAME, REMOVE_FILE_TOOL_NAME, SCREENSHOT_TOOL_NAME,
-  SUBAGENT_TOOL_NAME, TODO_LIST_TOOL_NAME, ToolPreview, ToolPreviewLine,
-  ToolPreviewLineKind, WEATHER_TOOL_NAME, WRITE_FILE_TOOL_NAME,
+  GIT_TOOL_NAME, GOAL_CHECK_TOOL_NAME, LIST_DIRECTORIES_TOOL_NAME,
+  MUSIC_TOOL_NAME, NOTIFY_TOOL_NAME, PROJECT_CONTEXT_TOOL_NAME,
+  READ_FILE_TOOL_NAME, READ_PDF_TOOL_NAME, REMOVE_FILE_TOOL_NAME,
+  SCREENSHOT_TOOL_NAME, SUBAGENT_TOOL_NAME, TODO_LIST_TOOL_NAME, ToolPreview,
+  ToolPreviewLine, ToolPreviewLineKind, WEATHER_TOOL_NAME,
+  WRITE_FILE_TOOL_NAME,
 };
 
 const TOOL_CALL_ICON: &str = "●";
@@ -63,6 +65,7 @@ pub fn tool_call_view(
     EDIT_FILE_TOOL_NAME => edit_file::view(arguments, preview),
     FIND_FILE_TOOL_NAME => find_file::view(arguments),
     FIND_TEXT_TOOL_NAME => find_text::view(arguments),
+    GIT_TOOL_NAME => git::view(arguments),
     GOAL_CHECK_TOOL_NAME => goal_check::view(arguments),
     LIST_DIRECTORIES_TOOL_NAME => list_directories::view(arguments),
     MUSIC_TOOL_NAME => music::view(arguments),

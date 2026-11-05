@@ -6,6 +6,7 @@ mod ddg;
 mod edit_file;
 mod find_file;
 mod find_text;
+mod git;
 mod goal_check;
 mod helpers;
 mod list_directories;
@@ -44,6 +45,8 @@ pub use crate::tool_manager::find_file::FIND_FILE_TOOL_NAME;
 use crate::tool_manager::find_file::FindFileTool;
 pub use crate::tool_manager::find_text::FIND_TEXT_TOOL_NAME;
 use crate::tool_manager::find_text::FindTextTool;
+pub use crate::tool_manager::git::GIT_TOOL_NAME;
+use crate::tool_manager::git::GitTool;
 pub use crate::tool_manager::goal_check::GOAL_CHECK_TOOL_NAME;
 use crate::tool_manager::goal_check::GoalCheckTool;
 pub use crate::tool_manager::helpers::task_summary;
@@ -140,6 +143,9 @@ impl ToolManager {
     }
     if config.permissions.weather {
       tools.push(Box::new(WeatherTool::new()));
+    }
+    if config.permissions.git {
+      tools.push(Box::new(GitTool));
     }
     if !is_subagent && config.subagent.enabled {
       tools.push(Box::new(SubagentTool));

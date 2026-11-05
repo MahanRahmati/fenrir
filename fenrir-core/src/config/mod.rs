@@ -87,6 +87,7 @@ pub struct PermissionsConfig {
   pub goal_check: bool,
   pub todo_list: bool,
   pub weather: bool,
+  pub git: bool,
 }
 
 impl Default for PermissionsConfig {
@@ -111,6 +112,7 @@ impl Default for PermissionsConfig {
       goal_check: true,
       todo_list: true,
       weather: true,
+      git: true,
     };
   }
 }
