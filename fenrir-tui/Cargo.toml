@@ -11,7 +11,6 @@ tokio = { version = "1.53.2", features = ["sync"] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
 async-trait = "0.1.92"
 ratatui = { version = "0.30.2", features = ["unstable-rendered-line-info"] }
-tui-widget-list = "0.15.3"
 uuid = { version = "1.27.0", features = ["v7"] }
 
 [lints]

@@ -1,8 +1,5 @@
-use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
-use ratatui::text::Line;
-use ratatui::widgets::Widget;
+use ratatui::text::{Line, Span};
 
 use crate::tui::container::Container;
 use crate::tui::tool_view::{ToolCallView, tool_call_view, tool_result_label};
@@ -36,25 +33,6 @@ impl Role {
   }
 }
 
-pub struct ListMessage {
-  container: Container<'static>,
-  horizontal_padding: u16,
-}
-
-impl Widget for ListMessage {
-  fn render(self, area: Rect, buf: &mut Buffer) {
-    let inner = Rect::new(
-      area.x.saturating_add(self.horizontal_padding),
-      area.y.saturating_add(TOP_PADDING),
-      area.width.saturating_sub(self.horizontal_padding * 2),
-      area.height.saturating_sub(TOP_PADDING),
-    );
-    if inner.width > 0 && inner.height > 0 {
-      self.container.render(inner, buf);
-    }
-  }
-}
-
 pub struct MessageItem {
   text: String,
   role: Role,
@@ -63,6 +41,7 @@ pub struct MessageItem {
   tool_name: Option<String>,
   tool_view: ToolCallView,
   tool_result: Option<(String, bool)>,
+  wrapped: Option<(u16, Vec<Line<'static>>)>,
 }
 
 impl MessageItem {
@@ -75,11 +54,13 @@ impl MessageItem {
       tool_name: None,
       tool_view: ToolCallView::default(),
       tool_result: None,
+      wrapped: None,
     };
   }
 
   pub fn with_error(mut self, error: bool) -> Self {
     self.error = error;
+    self.wrapped = None;
     return self;
   }
 
@@ -98,11 +79,13 @@ impl MessageItem {
       tool_name: Some(name),
       tool_view,
       tool_result: None,
+      wrapped: None,
     };
   }
 
   pub fn push_tool_result(&mut self, result: String, error: bool) {
     self.tool_result = Some((result, error));
+    self.wrapped = None;
   }
 
   pub fn is_pending_tool_call(&self, id: &str) -> bool {
@@ -111,59 +94,70 @@ impl MessageItem {
       && self.tool_result.is_none();
   }
 
-  pub fn to_list_item(&self, width: u16) -> (ListMessage, u16) {
-    let horizontal_padding = if self.role == Role::ToolCall {
-      self.role.horizontal_padding() + TEXT_EXTRA_PADDING
-    } else {
-      self.role.horizontal_padding()
-    };
-    let width = width.saturating_sub(horizontal_padding * 2);
-    let (container, height) = match self.role {
-      Role::User => self.user_list_item(width),
-      Role::Assistant => self.llm_list_item(width),
-      Role::Reasoning => self.reasoning_list_item(width),
-      Role::ToolCall | Role::ToolResult => self.tool_list_item(width),
-      Role::Compaction => self.compaction_list_item(width),
-    };
-    return (
-      ListMessage {
-        container,
-        horizontal_padding,
-      },
-      height,
-    );
+  fn horizontal_padding(&self) -> u16 {
+    if self.role == Role::ToolCall {
+      return self.role.horizontal_padding() + TEXT_EXTRA_PADDING;
+    }
+    return self.role.horizontal_padding();
   }
 
-  fn container_height(container: &Container, width: u16) -> u16 {
-    return container.line_count(width).max(1) as u16 + TOP_PADDING;
+  pub fn lines(&mut self, width: u16) -> &[Line<'static>] {
+    let is_cached = self
+      .wrapped
+      .as_ref()
+      .is_some_and(|(cached_width, _)| *cached_width == width);
+    if !is_cached {
+      let horizontal_padding = self.horizontal_padding();
+      let inner_width = width.saturating_sub(horizontal_padding * 2);
+      let container = match self.role {
+        Role::User => self.user_list_item(),
+        Role::Assistant => self.llm_list_item(),
+        Role::Reasoning => self.reasoning_list_item(),
+        Role::ToolCall | Role::ToolResult => self.tool_list_item(inner_width),
+        Role::Compaction => self.compaction_list_item(),
+      };
+      let mut lines = container.render_lines(inner_width);
+      if lines.is_empty() {
+        lines.push(Line::default());
+      }
+      if horizontal_padding > 0 {
+        let padding = " ".repeat(horizontal_padding as usize);
+        for line in &mut lines {
+          line.spans.insert(0, Span::raw(padding.clone()));
+        }
+      }
+      for _ in 0..TOP_PADDING {
+        lines.insert(0, Line::default());
+      }
+      self.wrapped = Some((width, lines));
+    }
+    return &self
+      .wrapped
+      .as_ref()
+      .expect("wrapped lines are always present")
+      .1;
   }
 
-  fn user_list_item(&self, width: u16) -> (Container<'static>, u16) {
-    let container = Container::builder(self.text.clone())
+  fn user_list_item(&self) -> Container<'static> {
+    return Container::builder(self.text.clone())
       .color(Color::Yellow)
       .build();
-    let height = Self::container_height(&container, width);
-    return (container, height);
   }
 
-  fn llm_list_item(&self, width: u16) -> (Container<'static>, u16) {
-    let container = Container::builder(self.text.clone()).borderless().build();
-    let height = Self::container_height(&container, width);
-    return (container, height);
+  fn llm_list_item(&self) -> Container<'static> {
+    return Container::builder(self.text.clone()).borderless().build();
   }
 
-  fn reasoning_list_item(&self, width: u16) -> (Container<'static>, u16) {
-    let container = Container::builder(self.text.clone())
+  fn reasoning_list_item(&self) -> Container<'static> {
+    return Container::builder(self.text.clone())
       .borderless()
       .style(Style::default().dim())
       .build();
-    let height = Self::container_height(&container, width);
-    return (container, height);
   }
 
-  fn tool_list_item(&self, width: u16) -> (Container<'static>, u16) {
+  fn tool_list_item(&self, width: u16) -> Container<'static> {
     if self.role == Role::ToolResult {
-      let container = Container::builder(self.text.clone())
+      return Container::builder(self.text.clone())
         .borderless()
         .style(if self.error {
           Style::default().fg(Color::Red)
@@ -171,8 +165,6 @@ impl MessageItem {
           Style::default().dim()
         })
         .build();
-      let height = Self::container_height(&container, width);
-      return (container, height);
     }
 
     let view = &self.tool_view;
@@ -201,23 +193,19 @@ impl MessageItem {
           .map(|line| Line::from(line.to_string()).patch_style(style)),
       );
     }
-    let container = Container::builder(lines).borderless().trim(false).build();
-    let height = Self::container_height(&container, width);
-    return (container, height);
+    return Container::builder(lines).borderless().trim(false).build();
   }
 
-  fn compaction_list_item(&self, width: u16) -> (Container<'static>, u16) {
+  fn compaction_list_item(&self) -> Container<'static> {
     let body: Vec<Line<'static>> = self
       .text
       .lines()
       .map(|l| Line::from(l.to_string()))
       .collect();
-    let container = Container::builder(body)
+    return Container::builder(body)
       .title(" Compaction")
       .color(Color::Magenta)
       .build();
-    let height = Self::container_height(&container, width);
-    return (container, height);
   }
 
   pub fn is_reasoning(&self) -> bool {
@@ -230,6 +218,7 @@ impl MessageItem {
 
   pub fn push_string(&mut self, text: &str) {
     self.text.push_str(text);
+    self.wrapped = None;
   }
 }
 

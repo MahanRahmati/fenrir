@@ -1,4 +1,4 @@
-use ratatui::buffer::Buffer;
+use ratatui::buffer::{Buffer, CellWidth};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span, Text};
@@ -155,6 +155,17 @@ impl<'a> Container<'a> {
     return self.paragraph(width).line_count(width);
   }
 
+  pub fn render_lines(&self, width: u16) -> Vec<Line<'static>> {
+    let height = self.line_count(width);
+    if width == 0 || height == 0 {
+      return Vec::new();
+    }
+    let area = Rect::new(0, 0, width, height as u16);
+    let mut buffer = Buffer::empty(area);
+    self.paragraph(width).render(area, &mut buffer);
+    return buffer_lines(&buffer);
+  }
+
   fn separator(&self, width: u16) -> Line<'static> {
     let separator = "─".repeat(width as usize);
     let mut style = Style::default();
@@ -164,6 +175,33 @@ impl<'a> Container<'a> {
     let line = Line::from(Span::styled(separator, style));
     return line;
   }
+}
+
+fn buffer_lines(buffer: &Buffer) -> Vec<Line<'static>> {
+  let mut lines = Vec::with_capacity(buffer.area.height as usize);
+  for y in buffer.area.top()..buffer.area.bottom() {
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut x = buffer.area.left();
+    while x < buffer.area.right() {
+      let cell = &buffer[(x, y)];
+      let width = cell.symbol().cell_width();
+      if width == 0 {
+        x += 1;
+        continue;
+      }
+      let style = cell.style();
+      if let Some(last) = spans.last_mut()
+        && last.style == style
+      {
+        last.content.to_mut().push_str(cell.symbol());
+      } else {
+        spans.push(Span::styled(cell.symbol().to_string(), style));
+      }
+      x += width;
+    }
+    lines.push(Line::from(spans));
+  }
+  return lines;
 }
 
 impl Widget for Container<'_> {

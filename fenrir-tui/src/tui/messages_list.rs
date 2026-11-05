@@ -1,8 +1,9 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::{MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
-use ratatui::widgets::{Scrollbar, ScrollbarOrientation};
-use tui_widget_list::{ListBuilder, ListState, ListView, ScrollDirection};
+use ratatui::widgets::{
+  List, ListItem, ListState, Scrollbar, ScrollbarOrientation, ScrollbarState,
+};
 
 use crate::tui::message_item::{MessageItem, Role};
 use fenrir_core::session_manager::session::Session;
@@ -13,6 +14,7 @@ pub struct MessagesList {
   list_state: ListState,
   follow: bool,
   viewport_height: u16,
+  line_count: usize,
 }
 
 impl MessagesList {
@@ -22,6 +24,7 @@ impl MessagesList {
       list_state: ListState::default(),
       follow: true,
       viewport_height: 0,
+      line_count: 0,
     };
   }
 
@@ -31,24 +34,59 @@ impl MessagesList {
 
   pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
     self.viewport_height = area.height;
-    let builder = ListBuilder::new(|context| {
-      let message = &self.messages[context.index];
-      message.to_list_item(context.cross_axis_size)
-    });
-    let list = ListView::new(builder, self.messages.len())
-      .infinite_scrolling(false)
-      .scroll_direction(ScrollDirection::Backward)
-      .scrollbar(
+    let mut items: Vec<ListItem> = Vec::new();
+    for message in &mut self.messages {
+      items.extend(
+        message
+          .lines(area.width)
+          .iter()
+          .map(|line| ListItem::new(line.clone())),
+      );
+    }
+    self.line_count = items.len();
+    if self.follow {
+      self.set_offset(self.max_offset());
+      if self.line_count > 0 {
+        self.list_state.select(Some(self.line_count - 1));
+      } else {
+        self.list_state.select(None);
+      }
+    } else {
+      let offset = self.list_state.offset().min(self.max_offset());
+      self.set_offset(offset);
+      self.follow = offset >= self.max_offset();
+    }
+    let list_height = self.line_count.min(area.height as usize) as u16;
+    let list_area = Rect::new(
+      area.x,
+      area.y + area.height.saturating_sub(list_height),
+      area.width,
+      list_height,
+    );
+    frame.render_stateful_widget(
+      List::new(items),
+      list_area,
+      &mut self.list_state,
+    );
+    let viewport_height = area.height as usize;
+    if self.line_count > viewport_height {
+      let scrollbar_length = self.line_count - viewport_height + 1;
+      let mut scrollbar_state = ScrollbarState::new(scrollbar_length)
+        .viewport_content_length(viewport_height)
+        .position(self.list_state.offset());
+      frame.render_stateful_widget(
         Scrollbar::new(ScrollbarOrientation::VerticalRight)
           .begin_symbol(None)
           .end_symbol(None),
+        area,
+        &mut scrollbar_state,
       );
-    frame.render_stateful_widget(list, area, &mut self.list_state);
+    }
   }
 
   fn select_last(&mut self) {
     if self.follow && !self.messages.is_empty() {
-      self.list_state.select(Some(self.messages.len() - 1));
+      self.list_state.select_last();
     }
   }
 
@@ -60,27 +98,43 @@ impl MessagesList {
     }
   }
 
+  fn max_offset(&self) -> usize {
+    return self
+      .line_count
+      .saturating_sub(self.viewport_height as usize);
+  }
+
+  fn set_offset(&mut self, offset: usize) {
+    *self.list_state.offset_mut() = offset;
+    self.list_state.select(Some(offset));
+  }
+
   fn scroll_older(&mut self) {
-    self.list_state.previous();
+    let offset = self.list_state.offset().saturating_sub(1);
+    self.set_offset(offset);
     self.follow = false;
   }
 
   fn scroll_newer(&mut self) {
-    self.list_state.next();
-    self.follow = !self.messages.is_empty()
-      && self.list_state.selected == Some(self.messages.len() - 1);
+    let max_offset = self.max_offset();
+    let offset = (self.list_state.offset() + 1).min(max_offset);
+    self.set_offset(offset);
+    self.follow = offset >= max_offset;
   }
 
   pub fn scroll_page_older(&mut self) {
-    for _ in 0..self.viewport_height {
-      self.scroll_older();
-    }
+    let amount = (self.viewport_height / 2).max(1) as usize;
+    let offset = self.list_state.offset().saturating_sub(amount);
+    self.set_offset(offset);
+    self.follow = false;
   }
 
   pub fn scroll_page_newer(&mut self) {
-    for _ in 0..self.viewport_height {
-      self.scroll_newer();
-    }
+    let amount = (self.viewport_height / 2).max(1) as usize;
+    let max_offset = self.max_offset();
+    let offset = (self.list_state.offset() + amount).min(max_offset);
+    self.set_offset(offset);
+    self.follow = offset >= max_offset;
   }
 
   pub fn add_message(&mut self, message: String) {
