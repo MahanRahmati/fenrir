@@ -15,7 +15,7 @@ pub use crate::persona_manager::judge::JUDGE_PERSONA;
 pub use crate::persona_manager::persona::{Persona, ToolAccess};
 pub use crate::persona_manager::prediction::PREDICTION_PERSONA;
 use crate::persona_manager::researcher::RESEARCHER_PERSONA;
-use crate::persona_manager::reviewer::REVIEWER_PERSONA;
+pub use crate::persona_manager::reviewer::REVIEWER_PERSONA;
 pub use crate::persona_manager::titles::TITLES_PERSONA;
 
 pub struct PersonaManager {

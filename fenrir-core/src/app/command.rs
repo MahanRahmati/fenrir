@@ -11,6 +11,7 @@ pub enum AppCommand {
   ListPersonas,
   ListModels,
   Compact,
+  Review,
   New,
 }
 
@@ -32,6 +33,7 @@ impl AppCommand {
         SlashCommand::Personas => Self::ListPersonas,
         SlashCommand::Models => Self::ListModels,
         SlashCommand::Compact => Self::Compact,
+        SlashCommand::Review => Self::Review,
         SlashCommand::New => Self::New,
       })
     });
