@@ -24,10 +24,11 @@ impl ModelsPopup {
   pub fn draw(&mut self, frame: &mut Frame) {
     let models = &self.models;
     let current = &self.current;
-    self.list.draw(frame, "Models", |popup_width| {
-      models
+    self.list.draw(frame, "Models", |popup_width, indices| {
+      indices
         .iter()
-        .map(|m| {
+        .map(|&index| {
+          let m = &models[index];
           let marker = match current {
             Some(c) if c == m => "*",
             _ => " ",
@@ -56,7 +57,12 @@ impl ModelsPopup {
   ) {
     self.models = models;
     self.current = current;
-    self.list.open(self.models.len());
+    let searchable = self
+      .models
+      .iter()
+      .map(|m| format!("{} {}", m.label(), m.provider))
+      .collect();
+    self.list.open(searchable);
   }
 
   pub fn get_selected_model(&mut self) -> Option<Model> {

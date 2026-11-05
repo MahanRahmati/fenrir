@@ -10,6 +10,7 @@ mod models_popup;
 mod personas_popup;
 mod popup;
 mod popup_list;
+mod popup_search;
 mod queued_messages_list;
 mod sessions_popup;
 mod spinner;

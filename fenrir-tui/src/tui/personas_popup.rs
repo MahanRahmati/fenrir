@@ -24,10 +24,11 @@ impl PersonasPopup {
   pub fn draw(&mut self, frame: &mut Frame) {
     let personas = &self.personas;
     let current_persona = &self.current_persona;
-    self.list.draw(frame, "Personas", |popup_width| {
-      personas
+    self.list.draw(frame, "Personas", |popup_width, indices| {
+      indices
         .iter()
-        .map(|p| {
+        .map(|&index| {
+          let p = &personas[index];
           let marker = match current_persona {
             Some(name) if name == p.name() => "*",
             _ => " ",
@@ -56,7 +57,12 @@ impl PersonasPopup {
   ) {
     self.personas = personas.to_vec();
     self.current_persona = current_persona.map(|p| p.name().to_string());
-    self.list.open(self.personas.len());
+    let searchable = self
+      .personas
+      .iter()
+      .map(|p| format!("{} {}", p.name(), p.description()))
+      .collect();
+    self.list.open(searchable);
   }
 
   pub fn get_selected_persona(&mut self) -> Option<String> {

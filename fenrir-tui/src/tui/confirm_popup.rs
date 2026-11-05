@@ -37,7 +37,9 @@ impl ConfirmPopup {
     );
 
     if let Some(content_area) =
-      self.popup.draw_header(frame, &self.message, popup_area)
+      self
+        .popup
+        .draw_header(frame, &self.message, None, popup_area)
     {
       let confirm = Button::new("Confirm").selected(!self.selected);
       let cancel = Button::new("Cancel").selected(self.selected);

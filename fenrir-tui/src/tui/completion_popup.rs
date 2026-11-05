@@ -163,7 +163,9 @@ impl CompletionPopup {
       None => return,
     };
 
-    if let Some(list_area) = self.popup.draw_header(frame, title, popup_area) {
+    if let Some(list_area) =
+      self.popup.draw_header(frame, title, None, popup_area)
+    {
       let items: Vec<ListItem> = self
         .candidates
         .iter()

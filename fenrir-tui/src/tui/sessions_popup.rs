@@ -26,10 +26,11 @@ impl SessionsPopup {
   pub fn draw(&mut self, frame: &mut Frame) {
     let sessions = &self.sessions;
     let current_session = &self.current_session;
-    self.list.draw(frame, "Sessions", |popup_width| {
-      sessions
+    self.list.draw(frame, "Sessions", |popup_width, indices| {
+      indices
         .iter()
-        .map(|s| {
+        .map(|&index| {
+          let s = &sessions[index];
           let marker = match current_session {
             Some(id) if *id == s.id => "*",
             _ => " ",
@@ -61,7 +62,12 @@ impl SessionsPopup {
   ) {
     self.sessions = sessions;
     self.current_session = current_session;
-    self.list.open(self.sessions.len());
+    let searchable = self
+      .sessions
+      .iter()
+      .map(|s| s.title.as_deref().unwrap_or("Untitled Session").to_string())
+      .collect();
+    self.list.open(searchable);
   }
 
   pub fn get_selected_session(&mut self) -> Option<Uuid> {

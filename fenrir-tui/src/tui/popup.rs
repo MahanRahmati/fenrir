@@ -1,5 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
+use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -24,6 +25,7 @@ impl Popup {
     &self,
     frame: &mut Frame,
     title: &str,
+    search: Option<&str>,
     popup_area: Rect,
   ) -> Option<Rect> {
     if !self.show_popup {
@@ -37,22 +39,36 @@ impl Popup {
       popup_area,
     );
     let separator = "─".repeat(popup_area.width.saturating_sub(2) as usize);
-    let header = Paragraph::new(vec![
+    let mut lines = vec![
       Line::from(format!(" {title}")),
-      Line::from(separator),
-    ]);
+      Line::from(separator.clone()),
+    ];
+    if let Some(query) = search {
+      let (text, style) = if query.is_empty() {
+        (
+          " Type to filter".to_string(),
+          Style::default().fg(Color::DarkGray),
+        )
+      } else {
+        (format!(" {query}"), Style::default())
+      };
+      lines.push(Line::styled(text, style));
+      lines.push(Line::from(separator));
+    }
+    let header_rows = lines.len() as u16;
+    let header = Paragraph::new(lines);
     let header_area = Rect::new(
       popup_area.x + 1,
       popup_area.y + 1,
       popup_area.width.saturating_sub(2),
-      2,
+      header_rows,
     );
     frame.render_widget(header, header_area);
     return Some(Rect::new(
       popup_area.x + 1,
-      popup_area.y + 3,
+      popup_area.y + 1 + header_rows,
       popup_area.width.saturating_sub(2),
-      popup_area.height.saturating_sub(4),
+      popup_area.height.saturating_sub(2 + header_rows),
     ));
   }
 

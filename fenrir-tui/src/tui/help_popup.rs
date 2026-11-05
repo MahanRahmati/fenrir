@@ -51,7 +51,7 @@ impl HelpPopup {
     if let Some(content_area) =
       self
         .popup
-        .draw_header(frame, "Available Commands", popup_area)
+        .draw_header(frame, "Available Commands", None, popup_area)
     {
       frame.render_widget(paragraph, content_area);
       if num_commands > visible_rows {
