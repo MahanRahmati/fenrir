@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::io::stdout;
 use std::time::Duration;
 
@@ -26,33 +25,12 @@ const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 struct TuiSink {
   tui: Tui,
   terminal: ratatui::DefaultTerminal,
-  message_queue: VecDeque<String>,
   approvals: Option<ApprovalChannel>,
 }
 
 impl TuiSink {
   fn redraw(&mut self) {
     self.terminal.draw(|frame| self.tui.draw(frame)).ok();
-  }
-
-  fn clear_message_queue(&mut self) {
-    self.message_queue.clear();
-    self.tui.update_queued_messages(Vec::new());
-  }
-
-  fn add_to_message_queue(&mut self, text: String) {
-    self.message_queue.push_back(text);
-    self
-      .tui
-      .update_queued_messages(self.message_queue.make_contiguous().to_vec());
-  }
-
-  fn get_message_from_queue(&mut self) -> Option<String> {
-    let message = self.message_queue.pop_front();
-    self
-      .tui
-      .update_queued_messages(self.message_queue.make_contiguous().to_vec());
-    return message;
   }
 }
 
@@ -133,16 +111,14 @@ impl EventSink for TuiSink {
       AppEvent::Error { message } => {
         self.tui.add_message(format!("Error: {message}"));
       }
+      AppEvent::QueueUpdated { messages } => {
+        self.tui.update_queued_messages(messages);
+      }
     }
     self.redraw();
   }
 
   async fn poll_input(&mut self) -> Result<InputEvent> {
-    if let Some(text) = self.get_message_from_queue() {
-      self.tui.clear_suggestion();
-      self.redraw();
-      return Ok(InputEvent::Input(text));
-    }
     if !self.tui.is_running() {
       return Ok(InputEvent::Exit);
     }
@@ -165,19 +141,21 @@ impl EventSink for TuiSink {
 
   fn wants_prediction(&self) -> bool {
     return self.tui.is_running()
-      && self.message_queue.is_empty()
       && self.tui.input_is_empty()
       && !self.tui.has_suggestion();
   }
 
-  async fn poll_events(&mut self) {
-    if event::poll(Duration::from_millis(10)).unwrap_or(false)
+  async fn poll_events(&mut self) -> Option<String> {
+    let input = if event::poll(Duration::from_millis(10)).unwrap_or(false)
       && let Ok(e) = event::read()
       && let Some(input) = self.tui.handle_event(e).await
     {
-      self.add_to_message_queue(input);
-    }
+      Some(input)
+    } else {
+      None
+    };
     self.redraw();
+    return input;
   }
 
   async fn on_exit(&mut self) {
@@ -207,7 +185,6 @@ impl EventSink for TuiSink {
   }
 
   async fn on_session_selection(&mut self, session: &Session) {
-    self.clear_message_queue();
     self
       .tui
       .set_persona(session.persona_manager.current().name());
@@ -246,7 +223,6 @@ impl EventSink for TuiSink {
     persona_name: String,
     model: Option<Model>,
   ) {
-    self.clear_message_queue();
     self.tui.set_persona(&persona_name);
     if let Some(model) = model {
       self.tui.set_model(&model.label());
@@ -293,7 +269,6 @@ pub async fn run(app: &mut App) -> Result<()> {
   let mut sink = TuiSink {
     tui: Tui::new(&cwd),
     terminal: ratatui::init(),
-    message_queue: VecDeque::new(),
     approvals: None,
   };
   crossterm::execute!(stdout(), EnableMouseCapture)

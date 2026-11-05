@@ -4,7 +4,9 @@ use uuid::Uuid;
 
 use crate::database::DB;
 use crate::session_manager::queries::*;
-use crate::session_manager::session::{Message, Session};
+use crate::session_manager::session::{
+  Message, QueuedMessage, QueuedMessageStatus, Session,
+};
 use crate::session_manager::summary::Summary;
 use crate::session_manager::tool_approval::{
   ToolApprovalRequest, ToolApprovalStatus,
@@ -376,6 +378,208 @@ impl SessionRepository {
       )
       .await
       .context(format!("Failed to resolve tool approval '{tool_call_id}'"))?;
+    return Ok(());
+  }
+
+  pub async fn insert_queued_message(
+    &self,
+    session_id: Uuid,
+    content: &str,
+  ) -> Result<QueuedMessage> {
+    let message = QueuedMessage {
+      id: Uuid::now_v7(),
+      session_id,
+      content: content.to_string(),
+      created_at: Utc::now().timestamp(),
+    };
+    self
+      .db
+      .execute(
+        INSERT_QUEUED_MESSAGE,
+        (
+          message.id.to_string(),
+          session_id.to_string(),
+          message.content.as_str(),
+          QueuedMessageStatus::Pending.as_str(),
+          message.created_at,
+        ),
+      )
+      .await
+      .context("Failed to insert queued message")?;
+    return Ok(message);
+  }
+
+  pub async fn load_queued_messages(
+    &self,
+    session_id: Uuid,
+  ) -> Result<Vec<QueuedMessage>> {
+    let mut rows = self
+      .db
+      .query(
+        LOAD_QUEUED_MESSAGES,
+        (
+          session_id.to_string(),
+          QueuedMessageStatus::Pending.as_str(),
+        ),
+      )
+      .await
+      .context(format!(
+        "Failed to load queued messages for session '{session_id}'"
+      ))?;
+
+    let mut messages = Vec::new();
+    while let Ok(Some(row)) = rows.next().await {
+      let id: String = match row.get(0) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let id = match Uuid::parse_str(&id) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let _session_id: String = match row.get(1) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let content: String = match row.get(2) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let created_at: i64 = match row.get(4) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+
+      messages.push(QueuedMessage {
+        id,
+        session_id,
+        content,
+        created_at,
+      });
+    }
+
+    return Ok(messages);
+  }
+
+  pub async fn claim_next_queued_message(
+    &self,
+    session_id: Uuid,
+  ) -> Result<Option<QueuedMessage>> {
+    let mut rows = self
+      .db
+      .query(
+        LOAD_NEXT_QUEUED_MESSAGE,
+        (
+          session_id.to_string(),
+          QueuedMessageStatus::Pending.as_str(),
+        ),
+      )
+      .await
+      .context(format!(
+        "Failed to load next queued message for session '{session_id}'"
+      ))?;
+
+    let message = match rows.next().await {
+      Ok(Some(row)) => {
+        let id: String = match row.get(0) {
+          Ok(v) => v,
+          Err(_) => return Ok(None),
+        };
+        let id = match Uuid::parse_str(&id) {
+          Ok(v) => v,
+          Err(_) => return Ok(None),
+        };
+        let content: String = match row.get(2) {
+          Ok(v) => v,
+          Err(_) => return Ok(None),
+        };
+        let created_at: i64 = match row.get(4) {
+          Ok(v) => v,
+          Err(_) => return Ok(None),
+        };
+
+        let message = QueuedMessage {
+          id,
+          session_id,
+          content,
+          created_at,
+        };
+
+        self
+          .db
+          .execute(
+            CLAIM_QUEUED_MESSAGE,
+            (
+              QueuedMessageStatus::Processing.as_str(),
+              id.to_string(),
+              QueuedMessageStatus::Pending.as_str(),
+            ),
+          )
+          .await
+          .context(format!("Failed to claim queued message '{id}'"))?;
+
+        message
+      }
+      _ => return Ok(None),
+    };
+
+    return Ok(Some(message));
+  }
+
+  pub async fn complete_queued_message(&self, id: Uuid) -> Result<()> {
+    self
+      .db
+      .execute(DELETE_QUEUED_MESSAGE, (id.to_string(),))
+      .await
+      .context(format!("Failed to complete queued message '{id}'"))?;
+    return Ok(());
+  }
+
+  pub async fn release_queued_message(&self, id: Uuid) -> Result<()> {
+    self
+      .db
+      .execute(
+        RELEASE_QUEUED_MESSAGE,
+        (
+          QueuedMessageStatus::Pending.as_str(),
+          id.to_string(),
+          QueuedMessageStatus::Processing.as_str(),
+        ),
+      )
+      .await
+      .context(format!("Failed to release queued message '{id}'"))?;
+    return Ok(());
+  }
+
+  pub async fn reset_processing_queued_messages(
+    &self,
+    session_id: Uuid,
+  ) -> Result<()> {
+    self
+      .db
+      .execute(
+        RESET_PROCESSING_QUEUED_MESSAGES,
+        (
+          QueuedMessageStatus::Pending.as_str(),
+          session_id.to_string(),
+          QueuedMessageStatus::Processing.as_str(),
+        ),
+      )
+      .await
+      .context(format!(
+        "Failed to reset processing queued messages for session '{session_id}'"
+      ))?;
+    return Ok(());
+  }
+
+  pub async fn clear_queued_messages(&self, session_id: Uuid) -> Result<()> {
+    self
+      .db
+      .execute(CLEAR_QUEUED_MESSAGES, (session_id.to_string(),))
+      .await
+      .context(format!(
+        "Failed to clear queued messages for session '{session_id}'"
+      ))?;
     return Ok(());
   }
 }

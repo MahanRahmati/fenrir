@@ -25,5 +25,9 @@ pub fn list_migrations() -> Vec<Migration> {
       name: "004_create_tool_approvals".into(),
       sql: include_str!("../migrations/004_create_tool_approvals.sql").into(),
     },
+    Migration {
+      name: "005_create_queued_messages".into(),
+      sql: include_str!("../migrations/005_create_queued_messages.sql").into(),
+    },
   ];
 }

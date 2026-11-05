@@ -11,3 +11,19 @@ pub const INSERT_TOOL_APPROVAL: &str =
   include_str!("queries/insert_tool_approval.sql");
 pub const RESOLVE_TOOL_APPROVAL: &str =
   include_str!("queries/resolve_tool_approval.sql");
+pub const INSERT_QUEUED_MESSAGE: &str =
+  include_str!("queries/insert_queued_message.sql");
+pub const LOAD_QUEUED_MESSAGES: &str =
+  include_str!("queries/load_queued_messages.sql");
+pub const LOAD_NEXT_QUEUED_MESSAGE: &str =
+  include_str!("queries/load_next_queued_message.sql");
+pub const CLAIM_QUEUED_MESSAGE: &str =
+  include_str!("queries/claim_queued_message.sql");
+pub const DELETE_QUEUED_MESSAGE: &str =
+  include_str!("queries/delete_queued_message.sql");
+pub const RELEASE_QUEUED_MESSAGE: &str =
+  include_str!("queries/release_queued_message.sql");
+pub const RESET_PROCESSING_QUEUED_MESSAGES: &str =
+  include_str!("queries/reset_processing_queued_messages.sql");
+pub const CLEAR_QUEUED_MESSAGES: &str =
+  include_str!("queries/clear_queued_messages.sql");

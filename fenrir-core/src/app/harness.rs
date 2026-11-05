@@ -18,6 +18,8 @@ use crate::app::InputEvent;
 use crate::app::command::{AppCommand, CommandOutcome};
 use crate::persona_manager::{PersonaManager, REVIEWER_PERSONA};
 use crate::session_manager::CompactionMode;
+use crate::session_manager::SessionContext;
+use crate::session_manager::SessionRepository;
 use crate::slash_commands::SlashCommand;
 use crate::vlog;
 
@@ -25,6 +27,34 @@ const UI_TICK: Duration = Duration::from_millis(16);
 const PREDICTION_YIELD: Duration = Duration::from_millis(1);
 const CWD_REVIEW_PROMPT: &str = "Review the uncommitted changes in the current working directory. Use the git tool with `status` to list changed files and `diff` to inspect unstaged changes, and read the changed files you need. Report bugs, risky behavior changes, and clear deviations from existing patterns. Do not modify any files.";
 const SESSION_REVIEW_PROMPT: &str = "Review the changes made in this session. Use the conversation to identify what changed, inspect the current state of those files, and use the git tool with `status` to list changed files and `diff` to inspect unstaged changes. Report bugs, risky behavior changes, and clear deviations from existing patterns. Do not modify any files.";
+
+async fn persist_queued_input(
+  sink: &mut impl EventSink,
+  repository: &SessionRepository,
+  session_id: Uuid,
+) {
+  let Some(input) = sink.poll_events().await else {
+    return;
+  };
+
+  if let Err(e) = repository.insert_queued_message(session_id, &input).await {
+    vlog!("Failed to queue message: {e}");
+    return;
+  }
+
+  match repository.load_queued_messages(session_id).await {
+    Ok(messages) => {
+      let messages = messages
+        .into_iter()
+        .map(|message| message.content)
+        .collect();
+      sink.on_event(AppEvent::QueueUpdated { messages }).await;
+    }
+    Err(e) => {
+      vlog!("Failed to load queued messages: {e}");
+    }
+  }
+}
 
 impl App {
   fn approval_channel(
@@ -43,6 +73,8 @@ impl App {
   ) -> Result<()> {
     let mut active_session: Option<Uuid> = None;
     let mut prediction: Option<LocalBoxFuture<'_, Result<String>>> = None;
+    let mut in_flight_queue_item: Option<Uuid> = None;
+
     loop {
       if self.shutdown.is_cancelled() {
         vlog!("Shutdown signal received, exiting harness loop...");
@@ -53,29 +85,42 @@ impl App {
         prediction = None;
       }
 
-      let input = match sink.poll_input().await? {
-        InputEvent::Pending => {
-          if let Some(pending) = prediction.as_mut()
-            && let Poll::Ready(result) = futures::poll!(pending)
-          {
-            prediction = None;
-            match result {
-              Ok(text) if !text.is_empty() => {
-                sink.on_event(AppEvent::Prediction { text }).await;
-              }
-              Ok(_) => {}
-              Err(e) => {
-                vlog!("Failed to predict next prompt: {e}");
+      let queued = match active_session {
+        Some(session_id) => {
+          self.sessions.claim_next_queued_message(session_id).await?
+        }
+        None => None,
+      };
+
+      let input = if let Some(message) = queued {
+        in_flight_queue_item = Some(message.id);
+        self.emit_queue(sink, active_session).await?;
+        message.content
+      } else {
+        match sink.poll_input().await? {
+          InputEvent::Pending => {
+            if let Some(pending) = prediction.as_mut()
+              && let Poll::Ready(result) = futures::poll!(pending)
+            {
+              prediction = None;
+              match result {
+                Ok(text) if !text.is_empty() => {
+                  sink.on_event(AppEvent::Prediction { text }).await;
+                }
+                Ok(_) => {}
+                Err(e) => {
+                  vlog!("Failed to predict next prompt: {e}");
+                }
               }
             }
+            if prediction.is_some() {
+              tokio::time::sleep(PREDICTION_YIELD).await;
+            }
+            continue;
           }
-          if prediction.is_some() {
-            tokio::time::sleep(PREDICTION_YIELD).await;
-          }
-          continue;
+          InputEvent::Exit => break,
+          InputEvent::Input(input) => input,
         }
-        InputEvent::Exit => break,
-        InputEvent::Input(input) => input,
       };
 
       prediction = None;
@@ -84,6 +129,7 @@ impl App {
         Ok(Some(command)) => Some(command),
         Ok(None) => None,
         Err(e) => {
+          self.complete_in_flight(&mut in_flight_queue_item).await?;
           sink
             .on_event(AppEvent::Error {
               message: e.to_string(),
@@ -97,10 +143,12 @@ impl App {
         let cancel = self.shutdown.child_token();
         sink.set_cancel_token(cancel.clone()).await;
 
-        match self
+        let result = self
           .command(sink, active_session, command, &cancel, cwd)
-          .await?
-        {
+          .await;
+        self.complete_in_flight(&mut in_flight_queue_item).await?;
+
+        match result? {
           CommandOutcome::Continue => {}
           CommandOutcome::Exit => {
             sink.on_exit().await;
@@ -126,8 +174,11 @@ impl App {
         }
       };
 
-      let completed = self.prompt(sink, session_id, &input).await?;
+      let result = self.prompt(sink, session_id, &input).await;
+      self.complete_in_flight(&mut in_flight_queue_item).await?;
+      let completed = result?;
       if completed
+        && !self.sessions.has_queued_messages(session_id).await?
         && sink.wants_prediction()
         && self.sessions.predicts_next_prompt()
       {
@@ -135,6 +186,35 @@ impl App {
           Some(Box::pin(self.sessions.predict_next_prompt(session_id)));
       }
     }
+    return Ok(());
+  }
+
+  async fn complete_in_flight(
+    &self,
+    in_flight: &mut Option<Uuid>,
+  ) -> Result<()> {
+    if let Some(id) = in_flight.take() {
+      self.sessions.complete_queued_message(id).await?;
+    }
+    return Ok(());
+  }
+
+  async fn emit_queue(
+    &self,
+    sink: &mut impl EventSink,
+    session_id: Option<Uuid>,
+  ) -> Result<()> {
+    let messages = match session_id {
+      Some(id) => self
+        .sessions
+        .queued_messages(id)
+        .await?
+        .into_iter()
+        .map(|message| message.content)
+        .collect(),
+      None => Vec::new(),
+    };
+    sink.on_event(AppEvent::QueueUpdated { messages }).await;
     return Ok(());
   }
 
@@ -226,6 +306,7 @@ impl App {
           .session(session_id)
           .context("No active session")?;
         sink.on_session_selection(session).await;
+        self.emit_queue(sink, Some(session_id)).await?;
         Ok(CommandOutcome::Activate(Some(session_id)))
       }
       AppCommand::ListPersonas => {
@@ -294,6 +375,7 @@ impl App {
         let name = self.sessions.persona_name(None);
         let model = self.sessions.current_model(None);
         sink.on_new_session(name, model).await;
+        self.emit_queue(sink, None).await?;
         Ok(CommandOutcome::Activate(None))
       }
     };
@@ -307,7 +389,21 @@ async fn run_chat(
   cancel: &CancellationToken,
 ) -> Option<Result<String>> {
   let (tx, mut rx) = mpsc::channel::<AppEvent>(256);
-  let chat = app.sessions.run_chat(session_id, &tx, cancel);
+
+  let context = match app.sessions.context(session_id) {
+    Ok(context) => context,
+    Err(e) => {
+      return Some(Err(e));
+    }
+  };
+  let SessionContext {
+    session,
+    config,
+    providers,
+    repository,
+  } = context;
+
+  let chat = session.harness_loop(config, providers, repository, &tx, cancel);
   tokio::pin!(chat);
 
   let mut ticker = ui_ticker();
@@ -316,7 +412,9 @@ async fn run_chat(
   loop {
     tokio::select! {
       biased;
-      _ = ticker.tick() => sink.poll_events().await,
+      _ = ticker.tick() => {
+        persist_queued_input(sink, repository, session_id).await;
+      }
       event = rx.recv() => {
         if let Some(event) = event {
           sink.on_event(event).await;
@@ -370,7 +468,21 @@ async fn run_compaction(
   mode: CompactionMode,
   cancel: &CancellationToken,
 ) {
-  let compact = app.sessions.compact(session_id, mode, cancel);
+  let context = match app.sessions.context(session_id) {
+    Ok(context) => context,
+    Err(e) => {
+      vlog!("Failed to prepare compaction: {e}");
+      return;
+    }
+  };
+  let SessionContext {
+    session,
+    config,
+    providers,
+    repository,
+  } = context;
+
+  let compact = session.compact(config, providers, repository, mode, cancel);
   tokio::pin!(compact);
 
   let mut ticker = ui_ticker();
@@ -379,7 +491,9 @@ async fn run_compaction(
   loop {
     tokio::select! {
       biased;
-      _ = ticker.tick() => sink.poll_events().await,
+      _ = ticker.tick() => {
+        persist_queued_input(sink, repository, session_id).await;
+      }
       r = &mut compact => {
         result = Some(r);
         break;

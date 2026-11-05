@@ -15,6 +15,21 @@ use crate::tool_manager::ToolManager;
 use crate::tool_manager::ToolPreview;
 use crate::workflow_manager::WorkflowManager;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum QueuedMessageStatus {
+  Pending,
+  Processing,
+}
+
+impl QueuedMessageStatus {
+  pub fn as_str(&self) -> &'static str {
+    return match self {
+      QueuedMessageStatus::Pending => "pending",
+      QueuedMessageStatus::Processing => "processing",
+    };
+  }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
   pub id: Uuid,
@@ -28,6 +43,14 @@ pub struct Message {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub tool_calls: Option<Vec<ToolCall>>,
   pub timestamp: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueuedMessage {
+  pub id: Uuid,
+  pub session_id: Uuid,
+  pub content: String,
+  pub created_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

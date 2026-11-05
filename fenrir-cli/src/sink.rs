@@ -131,6 +131,7 @@ impl EventSink for CliSink {
       AppEvent::Error { message } => {
         println!("\nError: {message}");
       }
+      AppEvent::QueueUpdated { .. } => {}
     }
   }
 
@@ -141,7 +142,9 @@ impl EventSink for CliSink {
     });
   }
 
-  async fn poll_events(&mut self) {}
+  async fn poll_events(&mut self) -> Option<String> {
+    return None;
+  }
 
   async fn on_exit(&mut self) {}
 

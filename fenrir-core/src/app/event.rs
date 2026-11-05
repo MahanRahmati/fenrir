@@ -59,6 +59,9 @@ pub enum AppEvent {
   Error {
     message: String,
   },
+  QueueUpdated {
+    messages: Vec<String>,
+  },
 }
 
 pub enum InputEvent {
@@ -71,7 +74,7 @@ pub enum InputEvent {
 pub trait EventSink {
   async fn on_event(&mut self, event: AppEvent);
   async fn poll_input(&mut self) -> Result<InputEvent>;
-  async fn poll_events(&mut self);
+  async fn poll_events(&mut self) -> Option<String>;
   fn wants_prediction(&self) -> bool {
     return false;
   }

@@ -20,12 +20,21 @@ use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, Model, ProviderManager};
 pub use crate::session_manager::compaction::CompactionMode;
 pub use crate::session_manager::repository::SessionRepository;
-pub use crate::session_manager::session::Message;
 use crate::session_manager::session::Session;
+pub use crate::session_manager::session::{
+  Message, QueuedMessage, QueuedMessageStatus,
+};
 pub use crate::session_manager::summary::Summary;
 pub use crate::session_manager::tool_approval::{
   ToolApprovalRequest, ToolApprovalStatus,
 };
+
+pub struct SessionContext<'a> {
+  pub session: &'a mut Session,
+  pub config: &'a Config,
+  pub providers: &'a ProviderManager,
+  pub repository: &'a SessionRepository,
+}
 
 pub struct SessionManager {
   sessions: Vec<Session>,
@@ -104,6 +113,7 @@ impl SessionManager {
         )
       })
       .await?;
+    self.repository.reset_processing_queued_messages(id).await?;
     self.sessions.push(session);
     return Ok(());
   }
@@ -256,5 +266,55 @@ impl SessionManager {
       .iter()
       .position(|session| session.id == id)
       .context(format!("Session '{id}' not found"));
+  }
+
+  pub fn context(&mut self, id: Uuid) -> Result<SessionContext<'_>> {
+    let index = self.index_of(id)?;
+    let session = &mut self.sessions[index];
+    return Ok(SessionContext {
+      session,
+      config: &self.config,
+      providers: &self.providers,
+      repository: &self.repository,
+    });
+  }
+
+  pub async fn enqueue_message(
+    &self,
+    session_id: Uuid,
+    content: &str,
+  ) -> Result<QueuedMessage> {
+    return self
+      .repository
+      .insert_queued_message(session_id, content)
+      .await;
+  }
+
+  pub async fn queued_messages(
+    &self,
+    session_id: Uuid,
+  ) -> Result<Vec<QueuedMessage>> {
+    return self.repository.load_queued_messages(session_id).await;
+  }
+
+  pub async fn claim_next_queued_message(
+    &self,
+    session_id: Uuid,
+  ) -> Result<Option<QueuedMessage>> {
+    return self.repository.claim_next_queued_message(session_id).await;
+  }
+
+  pub async fn complete_queued_message(&self, id: Uuid) -> Result<()> {
+    return self.repository.complete_queued_message(id).await;
+  }
+
+  pub async fn has_queued_messages(&self, session_id: Uuid) -> Result<bool> {
+    return Ok(
+      !self
+        .repository
+        .load_queued_messages(session_id)
+        .await?
+        .is_empty(),
+    );
   }
 }
