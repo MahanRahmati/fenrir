@@ -16,6 +16,7 @@ use crate::app::{AppEvent, ApprovalChannel};
 use crate::config::Config;
 use crate::database::DB;
 use crate::persona_manager::{Persona, PersonaManager};
+use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, Model, ProviderManager};
 pub use crate::session_manager::compaction::CompactionMode;
 pub use crate::session_manager::repository::SessionRepository;
@@ -212,13 +213,29 @@ impl SessionManager {
     session_id: Option<Uuid>,
     name: &str,
   ) -> Result<()> {
+    let persona = PersonaManager::find(name)?;
     if let Some(id) = session_id
       && let Some(session) = self.session_mut(id)
     {
-      session.persona_manager.set(name)?;
-    } else {
-      self.next_persona = Some(PersonaManager::find(name)?);
+      session.persona_manager.set_persona(persona);
+      return self.refresh_system_message(id);
     }
+    self.next_persona = Some(persona);
+    return Ok(());
+  }
+
+  pub fn refresh_system_message(&mut self, id: Uuid) -> Result<()> {
+    let index = self.index_of(id)?;
+    let session = &mut self.sessions[index];
+    if !session.has_system_message() {
+      return Ok(());
+    }
+    let prompt = Prompt::new(
+      &self.config,
+      session.persona_manager.current(),
+      &session.cwd,
+    );
+    session.replace_system_message(prompt.get_system_prompt());
     return Ok(());
   }
 

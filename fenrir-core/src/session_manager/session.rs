@@ -124,18 +124,33 @@ impl Session {
     return &self.approvals;
   }
 
+  pub fn has_system_message(&self) -> bool {
+    return self.messages.iter().any(|message| message.role == "system");
+  }
+
   pub async fn ensure_system_message(
     &mut self,
     config: &Config,
     repository: &SessionRepository,
   ) -> Result<()> {
-    if self.messages.iter().any(|message| message.role == "system") {
+    if self.has_system_message() {
       return Ok(());
     }
     let prompt = Prompt::new(config, self.persona_manager.current(), &self.cwd);
     self.add_system_message(prompt.get_system_prompt());
     self.persist_last_message(repository).await?;
     return Ok(());
+  }
+
+  pub fn replace_system_message(&mut self, content: &str) {
+    let Some(message) = self
+      .messages
+      .iter_mut()
+      .find(|message| message.role == "system")
+    else {
+      return;
+    };
+    message.content = content.to_string();
   }
 
   pub async fn persist_last_message(
