@@ -24,6 +24,8 @@ impl AppCommand {
   pub fn parse(input: &str) -> Result<Option<Self>> {
     return parse_command(input).map(|command| {
       command.map(|command| match command {
+        SlashCommand::Q => Self::Exit,
+        SlashCommand::Quit => Self::Exit,
         SlashCommand::Exit => Self::Exit,
         SlashCommand::Help => Self::Help,
         SlashCommand::Sessions => Self::ListSessions,

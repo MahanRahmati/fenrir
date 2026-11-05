@@ -12,6 +12,8 @@ pub enum SlashCommand {
   Models,
   Compact,
   Help,
+  Q,
+  Quit,
   Exit,
 }
 
@@ -24,6 +26,8 @@ impl SlashCommand {
       SlashCommand::Models => "/models",
       SlashCommand::Compact => "/compact",
       SlashCommand::Help => "/help",
+      SlashCommand::Q => "/q",
+      SlashCommand::Quit => "/quit",
       SlashCommand::Exit => "/exit",
     };
   }
@@ -36,6 +40,8 @@ impl SlashCommand {
       SlashCommand::Models => "List all available models",
       SlashCommand::Compact => "Compact the current session",
       SlashCommand::Help => "Show this help message",
+      SlashCommand::Q => "Exit the application",
+      SlashCommand::Quit => "Exit the application",
       SlashCommand::Exit => "Exit the application",
     };
   }
@@ -48,6 +54,8 @@ impl SlashCommand {
       SlashCommand::Models,
       SlashCommand::Compact,
       SlashCommand::Help,
+      SlashCommand::Q,
+      SlashCommand::Quit,
       SlashCommand::Exit,
     ];
   }
