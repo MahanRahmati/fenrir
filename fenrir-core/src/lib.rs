@@ -5,7 +5,7 @@ mod capability;
 mod command;
 pub mod config;
 pub mod database;
-mod engine;
+pub mod engine;
 pub mod files;
 mod hook_manager;
 pub mod logging;

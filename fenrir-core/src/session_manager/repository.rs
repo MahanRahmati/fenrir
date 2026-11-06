@@ -3,6 +3,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::database::DB;
+use crate::engine::protocol::SessionSummary;
 use crate::provider_manager::Model;
 use crate::session_manager::queries::*;
 use crate::session_manager::session::{
@@ -36,6 +37,11 @@ impl SessionRepository {
   }
 
   pub async fn insert_session(&self, session: &Session) -> Result<()> {
+    let model = match &session.model {
+      Some(model) => serde_json::to_string(model)
+        .context("Failed to serialize session model")?,
+      None => String::new(),
+    };
     self
       .db
       .execute(
@@ -47,7 +53,7 @@ impl SessionRepository {
           session.created_at,
           session.last_interaction,
           session.persona.as_str(),
-          session.model.as_ref().map(|m| m.name.clone()),
+          model,
           session.cwd.as_str(),
         ),
       )
@@ -120,6 +126,32 @@ impl SessionRepository {
     return Ok(());
   }
 
+  pub async fn set_persona(
+    &self,
+    session_id: Uuid,
+    persona: &str,
+  ) -> Result<()> {
+    self
+      .db
+      .execute(UPDATE_SESSION_PERSONA, (persona, session_id.to_string()))
+      .await
+      .context(format!(
+        "Failed to update persona for session '{session_id}'"
+      ))?;
+    return Ok(());
+  }
+
+  pub async fn set_model(&self, session_id: Uuid, model: &Model) -> Result<()> {
+    let model = serde_json::to_string(model)
+      .context("Failed to serialize session model")?;
+    self
+      .db
+      .execute(UPDATE_SESSION_MODEL, (model, session_id.to_string()))
+      .await
+      .context(format!("Failed to update model for session '{session_id}'"))?;
+    return Ok(());
+  }
+
   pub(crate) async fn load<F>(&self, id: Uuid, build: F) -> Result<Session>
   where
     F: FnOnce(SessionRow) -> Session,
@@ -184,11 +216,7 @@ impl SessionRepository {
     let model = if model.is_empty() {
       None
     } else {
-      Some(Model {
-        provider: String::new(),
-        name: model,
-        alias: None,
-      })
+      serde_json::from_str(&model).ok()
     };
     let cwd: String = row.get(7).unwrap_or_default();
     let cwd = if cwd.is_empty() { String::new() } else { cwd };
@@ -310,83 +338,6 @@ impl SessionRepository {
     };
 
     return Ok(build(row));
-  }
-
-  pub(crate) async fn list<F>(&self, build: F) -> Result<Vec<Session>>
-  where
-    F: Fn(SessionRow) -> Session,
-  {
-    let mut rows = self
-      .db
-      .query(LIST_SESSIONS, ())
-      .await
-      .context("Failed to list sessions")?;
-
-    let mut result = Vec::new();
-    while let Ok(Some(row)) = rows.next().await {
-      let id: String = match row.get(0) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let id = match Uuid::parse_str(&id) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let parent_id: String = row.get(1).unwrap_or_default();
-      let parent_id = if parent_id.is_empty() {
-        None
-      } else {
-        match Uuid::parse_str(&parent_id) {
-          Ok(v) => Some(v),
-          Err(_) => continue,
-        }
-      };
-      let title: String = row.get(2).unwrap_or_default();
-      let title = if title.is_empty() { None } else { Some(title) };
-      let created_at: i64 = match row.get(3) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let last_interaction: i64 = match row.get(4) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let persona: String = row.get(5).unwrap_or_default();
-      let persona = if persona.is_empty() {
-        String::new()
-      } else {
-        persona
-      };
-      let model: String = row.get(6).unwrap_or_default();
-      let model = if model.is_empty() {
-        None
-      } else {
-        Some(Model {
-          provider: String::new(),
-          name: model,
-          alias: None,
-        })
-      };
-      let cwd: String = row.get(7).unwrap_or_default();
-      let cwd = if cwd.is_empty() { String::new() } else { cwd };
-
-      let session = SessionRow {
-        id,
-        parent_id,
-        title,
-        created_at,
-        last_interaction,
-        persona,
-        model,
-        cwd,
-        messages: Vec::new(),
-        summaries: Vec::new(),
-      };
-
-      result.push(build(session));
-    }
-
-    return Ok(result);
   }
 
   pub async fn insert_tool_approval(
@@ -630,5 +581,54 @@ impl SessionRepository {
         "Failed to clear queued messages for session '{session_id}'"
       ))?;
     return Ok(());
+  }
+
+  pub async fn list_summaries(&self) -> Result<Vec<SessionSummary>> {
+    let mut rows = self
+      .db
+      .query(LIST_SESSIONS, ())
+      .await
+      .context("Failed to list sessions")?;
+
+    let mut result = Vec::new();
+    while let Ok(Some(row)) = rows.next().await {
+      let id: String = match row.get(0) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let id = match Uuid::parse_str(&id) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let parent_id: String = row.get(1).unwrap_or_default();
+      let parent_id = if parent_id.is_empty() {
+        None
+      } else {
+        match Uuid::parse_str(&parent_id) {
+          Ok(v) => Some(v),
+          Err(_) => continue,
+        }
+      };
+      let title: String = row.get(2).unwrap_or_default();
+      let title = if title.is_empty() { None } else { Some(title) };
+      let created_at: i64 = match row.get(3) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let last_interaction: i64 = match row.get(4) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+
+      result.push(SessionSummary {
+        id,
+        parent_id,
+        title,
+        created_at,
+        last_interaction,
+      });
+    }
+
+    return Ok(result);
   }
 }

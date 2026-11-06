@@ -12,14 +12,14 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::app::AppEvent;
-use crate::app::ApprovalChannel;
 use crate::app::EventSink;
 use crate::app::InputEvent;
 use crate::app::command::{AppCommand, CommandOutcome};
+use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::{PersonaManager, REVIEWER_PERSONA};
 use crate::session_manager::CompactionMode;
+use crate::session_manager::HarnessContext;
 use crate::session_manager::SessionContext;
-use crate::session_manager::SessionRepository;
 use crate::slash_commands::SlashCommand;
 use crate::vlog;
 
@@ -30,7 +30,7 @@ const SESSION_REVIEW_PROMPT: &str = "Review the changes made in this session. Us
 
 async fn persist_queued_input(
   sink: &mut impl EventSink,
-  repository: &SessionRepository,
+  repository: &RepoHandle,
   session_id: Uuid,
 ) {
   let Some(input) = sink.poll_events().await else {
@@ -57,15 +57,6 @@ async fn persist_queued_input(
 }
 
 impl App {
-  fn approval_channel(
-    &self,
-    session_id: Option<Uuid>,
-  ) -> Option<ApprovalChannel> {
-    return session_id
-      .and_then(|id| self.sessions.session(id))
-      .map(|session| session.approval_channel().clone());
-  }
-
   pub async fn run(
     &mut self,
     sink: &mut impl EventSink,
@@ -158,9 +149,6 @@ impl App {
             active_session = session_id;
           }
         }
-        sink
-          .set_approval_channel(self.approval_channel(active_session))
-          .await;
         continue;
       }
 
@@ -226,9 +214,6 @@ impl App {
   ) -> Result<bool> {
     self.sessions.ensure_system_message(session_id).await?;
     self.sessions.add_user_message(session_id, input).await?;
-    sink
-      .set_approval_channel(self.approval_channel(Some(session_id)))
-      .await;
 
     sink
       .on_event(AppEvent::UserMessage {
@@ -241,6 +226,9 @@ impl App {
 
     let cancel = self.shutdown.child_token();
     sink.set_cancel_token(cancel.clone()).await;
+    sink
+      .set_approval_channel(Some(self.sessions.approval_channel()))
+      .await;
 
     let Some(result) = run_chat(self, sink, session_id, &cancel).await else {
       return Ok(false);
@@ -315,7 +303,7 @@ impl App {
         if let Some(name) =
           sink.on_personas(personas, current_persona_name).await?
         {
-          self.sessions.set_persona(active_session, &name)?;
+          self.sessions.set_persona(active_session, &name).await?;
           sink.on_persona_selection(name).await;
         }
         Ok(CommandOutcome::Continue)
@@ -324,7 +312,10 @@ impl App {
         let models = self.sessions.get_providers().list_models();
         let current_model = self.sessions.current_model(active_session);
         if let Some(model) = sink.on_models(models, current_model).await? {
-          self.sessions.set_model(active_session, model.clone());
+          self
+            .sessions
+            .set_model(active_session, model.clone())
+            .await?;
           sink.on_model_selection(model).await;
         }
         Ok(CommandOutcome::Continue)
@@ -358,7 +349,8 @@ impl App {
           .unwrap_or(true);
         self
           .sessions
-          .set_persona(Some(session_id), REVIEWER_PERSONA.name())?;
+          .set_persona(Some(session_id), REVIEWER_PERSONA.name())
+          .await?;
         sink
           .on_persona_selection(REVIEWER_PERSONA.name().to_string())
           .await;
@@ -389,6 +381,7 @@ async fn run_chat(
   cancel: &CancellationToken,
 ) -> Option<Result<String>> {
   let (tx, mut rx) = mpsc::channel::<AppEvent>(256);
+  let approvals = app.sessions.approval_channel();
 
   let context = match app.sessions.context(session_id) {
     Ok(context) => context,
@@ -403,7 +396,15 @@ async fn run_chat(
     repository,
   } = context;
 
-  let chat = session.harness_loop(config, providers, repository, &tx, cancel);
+  let harness_context = HarnessContext {
+    config,
+    providers,
+    repository,
+    approvals: &approvals,
+    tx: &tx,
+    cancel,
+  };
+  let chat = session.harness_loop(&harness_context);
   tokio::pin!(chat);
 
   let mut ticker = ui_ticker();

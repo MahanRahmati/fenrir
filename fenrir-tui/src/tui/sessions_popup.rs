@@ -5,12 +5,12 @@ use ratatui::widgets::ListItem;
 use uuid::Uuid;
 
 use crate::tui::popup_list::PopupList;
-use fenrir_core::session_manager::session::Session;
+use fenrir_core::engine::protocol::SessionSummary;
 use fenrir_core::utils::datetime::format_timestamp;
 
 pub struct SessionsPopup {
   list: PopupList,
-  sessions: Vec<Session>,
+  sessions: Vec<SessionSummary>,
   current_session: Option<Uuid>,
 }
 
@@ -57,7 +57,7 @@ impl SessionsPopup {
 
   pub fn open_sessions_popup(
     &mut self,
-    sessions: Vec<Session>,
+    sessions: Vec<SessionSummary>,
     current_session: Option<Uuid>,
   ) {
     self.sessions = sessions;

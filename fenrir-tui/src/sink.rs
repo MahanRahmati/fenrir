@@ -12,6 +12,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink, InputEvent};
+use fenrir_core::engine::protocol::SessionSummary;
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::ToolApprovalStatus;
@@ -169,7 +170,7 @@ impl EventSink for TuiSink {
 
   async fn on_sessions(
     &mut self,
-    sessions: Vec<Session>,
+    sessions: Vec<SessionSummary>,
     current: Option<Uuid>,
   ) -> Result<Option<Uuid>> {
     self.tui.open_sessions_popup(sessions, current);

@@ -4,22 +4,25 @@ mod prediction;
 mod queries;
 pub mod repository;
 pub mod session;
-mod summary;
-mod tool_approval;
+pub mod summary;
+pub mod tool_approval;
 
 use anyhow::{Context, Result};
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::app::{AppEvent, ApprovalChannel};
+use crate::app::AppEvent;
+use crate::app::ApprovalChannel;
 use crate::config::Config;
 use crate::database::DB;
+use crate::engine::protocol::SessionSummary;
+use crate::engine::repo_actor::{RepoActor, RepoHandle};
 use crate::persona_manager::{Persona, PersonaManager};
 use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, Model, ProviderManager};
 pub use crate::session_manager::compaction::CompactionMode;
-pub use crate::session_manager::repository::SessionRepository;
+use crate::session_manager::repository::SessionRepository;
 use crate::session_manager::session::Session;
 pub use crate::session_manager::session::{
   Message, QueuedMessage, QueuedMessageStatus,
@@ -33,14 +36,24 @@ pub struct SessionContext<'a> {
   pub session: &'a mut Session,
   pub config: &'a Config,
   pub providers: &'a ProviderManager,
-  pub repository: &'a SessionRepository,
+  pub repository: &'a RepoHandle,
+}
+
+pub struct HarnessContext<'a> {
+  pub config: &'a Config,
+  pub providers: &'a ProviderManager,
+  pub repository: &'a RepoHandle,
+  pub approvals: &'a ApprovalChannel,
+  pub tx: &'a Sender<AppEvent>,
+  pub cancel: &'a CancellationToken,
 }
 
 pub struct SessionManager {
   sessions: Vec<Session>,
   providers: ProviderManager,
   config: Config,
-  repository: SessionRepository,
+  repo_handle: RepoHandle,
+  approvals: ApprovalChannel,
   model: Option<Model>,
   next_persona: Option<Persona>,
 }
@@ -49,11 +62,14 @@ impl SessionManager {
   pub fn new(config: Config, db: DB) -> Self {
     let providers = ProviderManager::new(config.clone());
     let model = providers.default_model();
+    let repository = SessionRepository::new(db);
+    let repo_handle = RepoActor::spawn(repository, config.clone());
     return Self {
       sessions: Vec::new(),
       providers,
       config,
-      repository: SessionRepository::new(db),
+      repo_handle,
+      approvals: ApprovalChannel::new(),
       model,
       next_persona: None,
     };
@@ -61,6 +77,10 @@ impl SessionManager {
 
   pub fn get_providers(&self) -> &ProviderManager {
     return &self.providers;
+  }
+
+  pub fn approval_channel(&self) -> ApprovalChannel {
+    return self.approvals.clone();
   }
 
   pub fn persona_name(&self, session_id: Option<Uuid>) -> String {
@@ -78,18 +98,15 @@ impl SessionManager {
   }
 
   pub async fn create_session(&mut self, cwd: &str) -> Result<Uuid> {
-    let mut session = Session::new(
-      None,
-      self.model.clone(),
-      &self.config,
-      ApprovalChannel::new(),
-      cwd,
-    );
     let persona = self.next_persona_or_default();
-    let persona_name = persona.name().to_string();
-    session.persona_manager.set_persona(persona);
-    session.persona = persona_name;
-    self.repository.insert_session(&session).await?;
+    let session = self
+      .repo_handle
+      .create_session(
+        Some(persona.name().to_string()),
+        self.model.clone(),
+        cwd.to_string(),
+      )
+      .await?;
     let id = session.id;
     self.sessions.push(session);
     return Ok(id);
@@ -100,35 +117,30 @@ impl SessionManager {
       session.tool_manager.reset_cache();
       return Ok(());
     }
-    let model = self.model.clone();
-    let config = &self.config;
-    let session = self
-      .repository
-      .load(id, |row| {
-        Session::from_row(row, config, model.clone(), ApprovalChannel::new())
-      })
+    let mut session = self.repo_handle.load_session(id).await?;
+    if session.model.is_none()
+      && let Some(model) = self.model.clone()
+    {
+      self.repo_handle.set_model(id, &model).await?;
+      session.model = Some(model);
+    }
+    self
+      .repo_handle
+      .reset_processing_queued_messages(id)
       .await?;
-    self.repository.reset_processing_queued_messages(id).await?;
     self.sessions.push(session);
     return Ok(());
   }
 
-  pub async fn list_sessions(&self) -> Result<Vec<Session>> {
-    let model = self.model.clone();
-    let config = &self.config;
-    return self
-      .repository
-      .list(|row| {
-        Session::from_row(row, config, model.clone(), ApprovalChannel::new())
-      })
-      .await;
+  pub async fn list_sessions(&self) -> Result<Vec<SessionSummary>> {
+    return self.repo_handle.list_sessions().await;
   }
 
   pub async fn ensure_system_message(&mut self, id: Uuid) -> Result<()> {
     let index = self.index_of(id)?;
     let session = &mut self.sessions[index];
     return session
-      .ensure_system_message(&self.config, &self.repository)
+      .ensure_system_message_with(&self.config, &self.repo_handle)
       .await;
   }
 
@@ -140,20 +152,7 @@ impl SessionManager {
     let index = self.index_of(id)?;
     let session = &mut self.sessions[index];
     session.add_user_message(content);
-    return session.persist_last_message(&self.repository).await;
-  }
-
-  pub async fn run_chat(
-    &mut self,
-    id: Uuid,
-    tx: &Sender<AppEvent>,
-    cancel: &CancellationToken,
-  ) -> Result<String> {
-    let index = self.index_of(id)?;
-    let session = &mut self.sessions[index];
-    return session
-      .harness_loop(&self.config, &self.providers, &self.repository, tx, cancel)
-      .await;
+    return session.persist_last_message(&self.repo_handle).await;
   }
 
   pub async fn compact(
@@ -168,7 +167,7 @@ impl SessionManager {
       .compact(
         &self.config,
         &self.providers,
-        &self.repository,
+        &self.repo_handle,
         mode,
         cancel,
       )
@@ -198,16 +197,24 @@ impl SessionManager {
     return self.sessions.iter_mut().find(|session| session.id == id);
   }
 
-  pub fn set_model(&mut self, session_id: Option<Uuid>, model: Model) {
+  pub async fn set_model(
+    &mut self,
+    session_id: Option<Uuid>,
+    model: Model,
+  ) -> Result<()> {
     if let Some(id) = session_id
-      && let Some(session) = self.session_mut(id)
+      && self.session(id).is_some()
     {
-      session.model = Some(model.clone());
+      self.repo_handle.set_model(id, &model).await?;
+      if let Some(session) = self.session_mut(id) {
+        session.model = Some(model.clone());
+      }
     }
     self.model = Some(model);
+    return Ok(());
   }
 
-  pub fn set_persona(
+  pub async fn set_persona(
     &mut self,
     session_id: Option<Uuid>,
     name: &str,
@@ -215,10 +222,13 @@ impl SessionManager {
     let persona = PersonaManager::find(name)?;
     let persona_name = persona.name().to_string();
     if let Some(id) = session_id
-      && let Some(session) = self.session_mut(id)
+      && self.session(id).is_some()
     {
-      session.persona_manager.set_persona(persona);
-      session.persona = persona_name;
+      self.repo_handle.set_persona(id, &persona_name).await?;
+      if let Some(session) = self.session_mut(id) {
+        session.persona_manager.set_persona(persona.clone());
+        session.persona = persona_name;
+      }
       return self.refresh_system_message(id);
     }
     self.next_persona = Some(persona);
@@ -266,7 +276,7 @@ impl SessionManager {
       session,
       config: &self.config,
       providers: &self.providers,
-      repository: &self.repository,
+      repository: &self.repo_handle,
     });
   }
 
@@ -276,7 +286,7 @@ impl SessionManager {
     content: &str,
   ) -> Result<QueuedMessage> {
     return self
-      .repository
+      .repo_handle
       .insert_queued_message(session_id, content)
       .await;
   }
@@ -285,24 +295,24 @@ impl SessionManager {
     &self,
     session_id: Uuid,
   ) -> Result<Vec<QueuedMessage>> {
-    return self.repository.load_queued_messages(session_id).await;
+    return self.repo_handle.load_queued_messages(session_id).await;
   }
 
   pub async fn claim_next_queued_message(
     &self,
     session_id: Uuid,
   ) -> Result<Option<QueuedMessage>> {
-    return self.repository.claim_next_queued_message(session_id).await;
+    return self.repo_handle.claim_next_queued_message(session_id).await;
   }
 
   pub async fn complete_queued_message(&self, id: Uuid) -> Result<()> {
-    return self.repository.complete_queued_message(id).await;
+    return self.repo_handle.complete_queued_message(id).await;
   }
 
   pub async fn has_queued_messages(&self, session_id: Uuid) -> Result<bool> {
     return Ok(
       !self
-        .repository
+        .repo_handle
         .load_queued_messages(session_id)
         .await?
         .is_empty(),

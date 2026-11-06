@@ -35,6 +35,7 @@ use crate::tui::personas_popup::PersonasPopup;
 use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
+use fenrir_core::engine::protocol::SessionSummary;
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::ChatUsage;
 use fenrir_core::provider_manager::Model;
@@ -442,7 +443,7 @@ impl Tui {
 
   pub fn open_sessions_popup(
     &mut self,
-    sessions: Vec<Session>,
+    sessions: Vec<SessionSummary>,
     current_session: Option<Uuid>,
   ) {
     self

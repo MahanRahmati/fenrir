@@ -3,14 +3,14 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::app::ApprovalChannel;
 use crate::config::Config;
+use crate::engine::repo_actor::RepoHandle;
 use crate::hook_manager::HookManager;
 use crate::persona_manager::DEFAULT_PERSONA;
 use crate::persona_manager::PersonaManager;
 use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, Model};
-use crate::session_manager::repository::{SessionRepository, SessionRow};
+use crate::session_manager::repository::SessionRow;
 use crate::session_manager::summary::Summary;
 use crate::tool_manager::ToolManager;
 use crate::tool_manager::ToolPreview;
@@ -84,7 +84,6 @@ pub struct Session {
   pub persona_manager: PersonaManager,
   pub workflow_manager: WorkflowManager,
   pub hook_manager: HookManager,
-  approvals: ApprovalChannel,
   pub last_usage: Option<ChatUsage>,
   pub cwd: String,
 }
@@ -94,7 +93,6 @@ impl Session {
     parent_id: Option<Uuid>,
     model: Option<Model>,
     config: &Config,
-    approvals: ApprovalChannel,
     cwd: &str,
   ) -> Self {
     let now = Utc::now().timestamp();
@@ -105,30 +103,32 @@ impl Session {
       created_at: now,
       last_interaction: now,
       persona: DEFAULT_PERSONA.name().to_string(),
-      model: None,
+      model: model.clone(),
       cwd: cwd.to_owned(),
       messages: Vec::new(),
       summaries: Vec::new(),
     };
-    return Self::from_row(row, config, model, approvals);
+    return Self::from_row(row, config, model);
   }
 
   pub(crate) fn from_row(
     row: SessionRow,
     config: &Config,
     model: Option<Model>,
-    approvals: ApprovalChannel,
   ) -> Self {
     let is_subagent = row.parent_id.is_some();
     let tool_manager = ToolManager::new(config, is_subagent);
-    let persona_manager = PersonaManager::new();
-    let workflow_manager = WorkflowManager::new(config, &row.cwd);
-    let hook_manager = HookManager::new(config);
+    let mut persona_manager = PersonaManager::new();
     let persona = if row.persona.is_empty() {
       DEFAULT_PERSONA.name().to_string()
     } else {
       row.persona
     };
+    persona_manager.set(&persona).ok();
+    let persona = persona_manager.current().name().to_string();
+    let model = model.or(row.model);
+    let workflow_manager = WorkflowManager::new(config, &row.cwd);
+    let hook_manager = HookManager::new(config);
     return Self {
       id: row.id,
       parent_id: row.parent_id,
@@ -143,7 +143,6 @@ impl Session {
       persona_manager,
       workflow_manager,
       hook_manager,
-      approvals,
       last_usage: None,
       cwd: row.cwd,
     };
@@ -153,18 +152,18 @@ impl Session {
     return self.parent_id.is_some();
   }
 
-  pub fn approval_channel(&self) -> &ApprovalChannel {
-    return &self.approvals;
+  pub fn last_message(&self) -> Option<&Message> {
+    return self.messages.last();
   }
 
   pub fn has_system_message(&self) -> bool {
     return self.messages.iter().any(|message| message.role == "system");
   }
 
-  pub async fn ensure_system_message(
+  pub async fn ensure_system_message_with(
     &mut self,
     config: &Config,
-    repository: &SessionRepository,
+    repository: &RepoHandle,
   ) -> Result<()> {
     if self.has_system_message() {
       return Ok(());
@@ -188,12 +187,14 @@ impl Session {
 
   pub async fn persist_last_message(
     &self,
-    repository: &SessionRepository,
+    repository: &RepoHandle,
   ) -> Result<()> {
     let Some(message) = self.messages.last() else {
       return Ok(());
     };
-    repository.insert_message(self.id, message).await?;
+    repository
+      .insert_message(self.id, Some(message.clone()))
+      .await?;
     return Ok(());
   }
 

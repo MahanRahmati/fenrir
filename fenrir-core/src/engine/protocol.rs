@@ -5,7 +5,9 @@ use uuid::Uuid;
 use crate::command::Command;
 use crate::persona_manager::Persona;
 use crate::provider_manager::{ChatUsage, Model};
-use crate::session_manager::{Message, QueuedMessage, Summary, ToolApprovalStatus};
+use crate::session_manager::{
+  Message, QueuedMessage, Summary, ToolApprovalStatus,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Correlation {

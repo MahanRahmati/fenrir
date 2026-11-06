@@ -2,18 +2,15 @@ use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 use futures::StreamExt;
-use tokio::sync::mpsc::Sender;
-use tokio_util::sync::CancellationToken;
 
 use crate::app::AppEvent;
-use crate::config::Config;
 use crate::hook_manager::hook::{
   HookContext, HookDecision, ToolCallContext, ToolResultContext,
 };
 use crate::mentions::strip_mentions;
 use crate::persona_manager::Persona;
-use crate::provider_manager::{ChatUsage, Model, ProviderManager, ToolCall};
-use crate::session_manager::SessionRepository;
+use crate::provider_manager::{ChatUsage, Model, ToolCall};
+use crate::session_manager::HarnessContext;
 use crate::session_manager::session::Session;
 use crate::tool_manager::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::runs_subagent;
@@ -24,41 +21,27 @@ use crate::workflow_manager::title::TitleParams;
 impl Session {
   pub async fn harness_loop(
     &mut self,
-    config: &Config,
-    providers: &ProviderManager,
-    repository: &SessionRepository,
-    tx: &Sender<AppEvent>,
-    cancel: &CancellationToken,
+    context: &HarnessContext<'_>,
   ) -> Result<String> {
-    if cancel.is_cancelled() {
+    if context.cancel.is_cancelled() {
       return Ok(String::new());
     }
     let Some(model) = self.model.clone() else {
       bail!("No model selected");
     };
     if !self.is_subagent() {
-      self
-        .generate_title(providers, repository, &model, cancel)
-        .await?;
+      self.generate_title(context, &model).await?;
     }
-    if config.general.stream {
-      return self
-        .process_chat_stream(config, providers, repository, &model, tx, cancel)
-        .await;
+    if context.config.general.stream {
+      return self.process_chat_stream(context, &model).await;
     }
-    return self
-      .process_chat_non_streaming(
-        config, providers, repository, &model, tx, cancel,
-      )
-      .await;
+    return self.process_chat_non_streaming(context, &model).await;
   }
 
   async fn generate_title(
     &mut self,
-    providers: &ProviderManager,
-    repository: &SessionRepository,
+    context: &HarnessContext<'_>,
     model: &Model,
-    cancel: &CancellationToken,
   ) -> Result<()> {
     if self.title.is_some() {
       return Ok(());
@@ -81,13 +64,13 @@ impl Session {
 
     let title = match tokio::select! {
       biased;
-      _ = cancel.cancelled() => {
+      _ = context.cancel.cancelled() => {
         vlog!("Session title generation cancelled.");
         return Ok(());
       }
       result = self
         .workflow_manager
-        .generate_title(providers, model, params) => result,
+        .generate_title(context.providers, model, params) => result,
     } {
       Ok(title) => title,
       Err(e) => {
@@ -101,19 +84,20 @@ impl Session {
     }
 
     self.title = Some(title.clone());
-    repository.update_title(self.id, &title).await?;
+    context.repository.update_title(self.id, &title).await?;
     return Ok(());
   }
 
   async fn process_chat_stream(
     &mut self,
-    config: &Config,
-    providers: &ProviderManager,
-    repository: &SessionRepository,
+    context: &HarnessContext<'_>,
     model: &Model,
-    tx: &Sender<AppEvent>,
-    cancel: &CancellationToken,
   ) -> Result<String> {
+    let config = context.config;
+    let providers = context.providers;
+    let repository = context.repository;
+    let tx = context.tx;
+    let cancel = context.cancel;
     let is_subagent = self.is_subagent();
     let mut assistant_content = String::new();
     let max_iterations = config.subagent.max_iterations;
@@ -232,16 +216,7 @@ impl Session {
 
       let tool_calls: Vec<ToolCall> =
         tool_call_builders.into_values().collect();
-      self
-        .execute_tool_calls(
-          config,
-          providers,
-          repository,
-          &tool_calls,
-          tx,
-          cancel,
-        )
-        .await?;
+      self.execute_tool_calls(context, &tool_calls).await?;
     }
 
     return Ok(assistant_content);
@@ -249,13 +224,14 @@ impl Session {
 
   async fn process_chat_non_streaming(
     &mut self,
-    config: &Config,
-    providers: &ProviderManager,
-    repository: &SessionRepository,
+    context: &HarnessContext<'_>,
     model: &Model,
-    tx: &Sender<AppEvent>,
-    cancel: &CancellationToken,
   ) -> Result<String> {
+    let config = context.config;
+    let providers = context.providers;
+    let repository = context.repository;
+    let tx = context.tx;
+    let cancel = context.cancel;
     let is_subagent = self.is_subagent();
     let mut assistant_content = String::new();
     let max_iterations = config.subagent.max_iterations;
@@ -329,14 +305,7 @@ impl Session {
       }
 
       self
-        .execute_tool_calls(
-          config,
-          providers,
-          repository,
-          &response.tool_calls,
-          tx,
-          cancel,
-        )
+        .execute_tool_calls(context, &response.tool_calls)
         .await?;
     }
 
@@ -345,13 +314,15 @@ impl Session {
 
   async fn execute_tool_calls(
     &mut self,
-    config: &Config,
-    providers: &ProviderManager,
-    repository: &SessionRepository,
+    context: &HarnessContext<'_>,
     tool_calls: &[ToolCall],
-    tx: &Sender<AppEvent>,
-    cancel: &CancellationToken,
   ) -> Result<()> {
+    let config = context.config;
+    let providers = context.providers;
+    let repository = context.repository;
+    let approvals = context.approvals;
+    let tx = context.tx;
+    let cancel = context.cancel;
     let Some(model) = self.model.clone() else {
       bail!("No model selected");
     };
@@ -407,7 +378,7 @@ impl Session {
         is_subagent,
         tx,
         repository,
-        approvals: self.approval_channel(),
+        approvals,
         cancel,
         cwd: &self.cwd,
       };
@@ -447,7 +418,7 @@ impl Session {
           model: &model,
           provider_manager: providers,
           repository,
-          approvals: self.approval_channel(),
+          approvals,
           tx,
           cancel,
           session_id: self.id,
@@ -500,7 +471,7 @@ impl Session {
         is_subagent,
         tx,
         repository,
-        approvals: self.approval_channel(),
+        approvals,
         cancel,
         cwd: &self.cwd,
       };
@@ -566,36 +537,35 @@ impl Session {
     task: &str,
   ) -> Result<String> {
     let parent_session_id = context.session_id;
-    let mut session = Session::new(
-      Some(parent_session_id),
-      Some(context.model.clone()),
-      context.config,
-      context.approvals.clone(),
-      context.cwd,
-    );
-    session.persona_manager.set_persona(persona.clone());
-    session.persona = persona.name().to_string();
-    context.repository.insert_session(&session).await?;
+    let mut session = context
+      .repository
+      .create_child_session(
+        Some(parent_session_id),
+        Some(persona.name().to_string()),
+        Some(context.model.clone()),
+        context.cwd.clone(),
+      )
+      .await?;
     let session_id = session.id;
     vlog!(
       "Started subagent session {session_id} (parent {parent_session_id}): {task}"
     );
 
     session
-      .ensure_system_message(context.config, context.repository)
+      .ensure_system_message_with(context.config, context.repository)
       .await?;
     session.add_user_message(task);
     session.persist_last_message(context.repository).await?;
 
-    let result = session
-      .harness_loop(
-        context.config,
-        context.provider_manager,
-        context.repository,
-        context.tx,
-        context.cancel,
-      )
-      .await;
+    let harness_context = HarnessContext {
+      config: context.config,
+      providers: context.provider_manager,
+      repository: context.repository,
+      approvals: context.approvals,
+      tx: context.tx,
+      cancel: context.cancel,
+    };
+    let result = session.harness_loop(&harness_context).await;
 
     let report = result?.trim().to_string();
     if report.is_empty() {

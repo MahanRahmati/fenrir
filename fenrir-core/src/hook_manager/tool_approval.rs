@@ -85,7 +85,7 @@ impl PreToolHook for ToolApprovalHook {
       tool_call.name.to_string(),
       message.clone(),
     );
-    if let Err(e) = context.repository.insert_tool_approval(&request).await {
+    if let Err(e) = context.repository.insert_tool_approval(request).await {
       vlog!("Failed to record tool approval '{tool_call_id}': {e}");
     }
 

@@ -2,8 +2,8 @@ use anyhow::{Context, Result, bail};
 use tokio_util::sync::CancellationToken;
 
 use crate::config::Config;
+use crate::engine::repo_actor::RepoHandle;
 use crate::provider_manager::ProviderManager;
-use crate::session_manager::SessionRepository;
 use crate::session_manager::session::Session;
 use crate::vlog;
 use crate::workflow_manager::compaction::CompactionParams;
@@ -19,7 +19,7 @@ impl Session {
     &mut self,
     config: &Config,
     providers: &ProviderManager,
-    repository: &SessionRepository,
+    repository: &RepoHandle,
     mode: CompactionMode,
     cancel: &CancellationToken,
   ) -> Result<String> {
@@ -64,7 +64,7 @@ impl Session {
 
     self.add_summary(&summary, covers_message_id);
     let summary = self.summaries.last().context("No summary to persist")?;
-    repository.insert_summary(self.id, summary).await?;
+    repository.insert_summary(self.id, summary.clone()).await?;
 
     return Ok(summary.content.clone());
   }

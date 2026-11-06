@@ -6,6 +6,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink, InputEvent};
+use fenrir_core::engine::protocol::SessionSummary;
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::ToolApprovalStatus;
@@ -157,7 +158,7 @@ impl EventSink for CliSink {
 
   async fn on_sessions(
     &mut self,
-    sessions: Vec<Session>,
+    sessions: Vec<SessionSummary>,
     current: Option<Uuid>,
   ) -> Result<Option<Uuid>> {
     let session_id = handle_sessions(sessions, current)?;
@@ -233,7 +234,7 @@ fn print_indexed_list(lines: &[String]) {
 }
 
 fn handle_sessions(
-  sessions: Vec<Session>,
+  sessions: Vec<SessionSummary>,
   current: Option<Uuid>,
 ) -> Result<Option<Uuid>> {
   if sessions.is_empty() {

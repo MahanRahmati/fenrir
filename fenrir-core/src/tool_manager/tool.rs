@@ -8,9 +8,9 @@ use uuid::Uuid;
 use crate::app::AppEvent;
 use crate::app::ApprovalChannel;
 use crate::config::Config;
+use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::Persona;
 use crate::provider_manager::{Model, ProviderManager};
-use crate::session_manager::SessionRepository;
 use crate::tool_manager::preview::ToolPreview;
 
 pub type ToolParams = HashMap<String, String>;
@@ -20,7 +20,7 @@ pub struct ToolContext<'a> {
   pub persona: &'a Persona,
   pub model: &'a Model,
   pub provider_manager: &'a ProviderManager,
-  pub repository: &'a SessionRepository,
+  pub repository: &'a RepoHandle,
   pub approvals: &'a ApprovalChannel,
   pub tx: &'a Sender<AppEvent>,
   pub cancel: &'a CancellationToken,
