@@ -85,16 +85,17 @@ impl SessionManager {
       ApprovalChannel::new(),
       cwd,
     );
-    session
-      .persona_manager
-      .set_persona(self.next_persona_or_default());
+    let persona = self.next_persona_or_default();
+    let persona_name = persona.name().to_string();
+    session.persona_manager.set_persona(persona);
+    session.persona = persona_name;
     self.repository.insert_session(&session).await?;
     let id = session.id;
     self.sessions.push(session);
     return Ok(id);
   }
 
-  pub async fn load_session(&mut self, id: Uuid, cwd: &str) -> Result<()> {
+  pub async fn load_session(&mut self, id: Uuid) -> Result<()> {
     if let Some(session) = self.session_mut(id) {
       session.tool_manager.reset_cache();
       return Ok(());
@@ -104,13 +105,7 @@ impl SessionManager {
     let session = self
       .repository
       .load(id, |row| {
-        Session::from_row(
-          row,
-          config,
-          model.clone(),
-          ApprovalChannel::new(),
-          cwd,
-        )
+        Session::from_row(row, config, model.clone(), ApprovalChannel::new())
       })
       .await?;
     self.repository.reset_processing_queued_messages(id).await?;
@@ -118,19 +113,13 @@ impl SessionManager {
     return Ok(());
   }
 
-  pub async fn list_sessions(&self, cwd: &str) -> Result<Vec<Session>> {
+  pub async fn list_sessions(&self) -> Result<Vec<Session>> {
     let model = self.model.clone();
     let config = &self.config;
     return self
       .repository
       .list(|row| {
-        Session::from_row(
-          row,
-          config,
-          model.clone(),
-          ApprovalChannel::new(),
-          cwd,
-        )
+        Session::from_row(row, config, model.clone(), ApprovalChannel::new())
       })
       .await;
   }
@@ -224,10 +213,12 @@ impl SessionManager {
     name: &str,
   ) -> Result<()> {
     let persona = PersonaManager::find(name)?;
+    let persona_name = persona.name().to_string();
     if let Some(id) = session_id
       && let Some(session) = self.session_mut(id)
     {
       session.persona_manager.set_persona(persona);
+      session.persona = persona_name;
       return self.refresh_system_message(id);
     }
     self.next_persona = Some(persona);

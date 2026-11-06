@@ -2,12 +2,12 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use futures::Stream;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Model {
   pub provider: String,
   pub name: String,
@@ -29,7 +29,7 @@ pub struct ToolCall {
   pub arguments: String,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ChatUsage {
   pub prompt_tokens: u64,
 }

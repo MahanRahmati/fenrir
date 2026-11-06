@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::app::ApprovalChannel;
 use crate::config::Config;
 use crate::hook_manager::HookManager;
+use crate::persona_manager::DEFAULT_PERSONA;
 use crate::persona_manager::PersonaManager;
 use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, Model};
@@ -75,6 +76,7 @@ pub struct Session {
   pub title: Option<String>,
   pub created_at: i64,
   pub last_interaction: i64,
+  pub persona: String,
   pub messages: Vec<Message>,
   pub summaries: Vec<Summary>,
   pub model: Option<Model>,
@@ -102,10 +104,13 @@ impl Session {
       title: None,
       created_at: now,
       last_interaction: now,
+      persona: DEFAULT_PERSONA.name().to_string(),
+      model: None,
+      cwd: cwd.to_owned(),
       messages: Vec::new(),
       summaries: Vec::new(),
     };
-    return Self::from_row(row, config, model, approvals, cwd);
+    return Self::from_row(row, config, model, approvals);
   }
 
   pub(crate) fn from_row(
@@ -113,19 +118,24 @@ impl Session {
     config: &Config,
     model: Option<Model>,
     approvals: ApprovalChannel,
-    cwd: &str,
   ) -> Self {
     let is_subagent = row.parent_id.is_some();
     let tool_manager = ToolManager::new(config, is_subagent);
     let persona_manager = PersonaManager::new();
-    let workflow_manager = WorkflowManager::new(config, cwd);
+    let workflow_manager = WorkflowManager::new(config, &row.cwd);
     let hook_manager = HookManager::new(config);
+    let persona = if row.persona.is_empty() {
+      DEFAULT_PERSONA.name().to_string()
+    } else {
+      row.persona
+    };
     return Self {
       id: row.id,
       parent_id: row.parent_id,
       title: row.title,
       created_at: row.created_at,
       last_interaction: row.last_interaction,
+      persona: persona.clone(),
       messages: row.messages,
       summaries: row.summaries,
       model,
@@ -135,7 +145,7 @@ impl Session {
       hook_manager,
       approvals,
       last_usage: None,
-      cwd: cwd.to_owned(),
+      cwd: row.cwd,
     };
   }
 

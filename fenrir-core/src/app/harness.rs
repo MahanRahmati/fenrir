@@ -294,13 +294,13 @@ impl App {
         Ok(CommandOutcome::Continue)
       }
       AppCommand::ListSessions => {
-        let sessions = self.sessions.list_sessions(cwd).await?;
+        let sessions = self.sessions.list_sessions().await?;
         let Some(session_id) =
           sink.on_sessions(sessions, active_session).await?
         else {
           return Ok(CommandOutcome::Continue);
         };
-        self.sessions.load_session(session_id, cwd).await?;
+        self.sessions.load_session(session_id).await?;
         let session = self
           .sessions
           .session(session_id)

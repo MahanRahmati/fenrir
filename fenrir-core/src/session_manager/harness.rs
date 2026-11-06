@@ -574,6 +574,7 @@ impl Session {
       context.cwd,
     );
     session.persona_manager.set_persona(persona.clone());
+    session.persona = persona.name().to_string();
     context.repository.insert_session(&session).await?;
     let session_id = session.id;
     vlog!(

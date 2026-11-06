@@ -3,5 +3,8 @@ INSERT INTO sessions (
   parent_id,
   title,
   created_at,
-  last_interaction
-) VALUES (?, ?, ?, ?, ?);
+  last_interaction,
+  persona,
+  model,
+  cwd
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);

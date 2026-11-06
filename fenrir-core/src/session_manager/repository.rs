@@ -3,6 +3,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::database::DB;
+use crate::provider_manager::Model;
 use crate::session_manager::queries::*;
 use crate::session_manager::session::{
   Message, QueuedMessage, QueuedMessageStatus, Session,
@@ -18,6 +19,9 @@ pub(crate) struct SessionRow {
   pub(crate) title: Option<String>,
   pub(crate) created_at: i64,
   pub(crate) last_interaction: i64,
+  pub(crate) persona: String,
+  pub(crate) model: Option<Model>,
+  pub(crate) cwd: String,
   pub(crate) messages: Vec<Message>,
   pub(crate) summaries: Vec<Summary>,
 }
@@ -42,6 +46,9 @@ impl SessionRepository {
           session.title.clone(),
           session.created_at,
           session.last_interaction,
+          session.persona.as_str(),
+          session.model.as_ref().map(|m| m.name.clone()),
+          session.cwd.as_str(),
         ),
       )
       .await
@@ -167,6 +174,24 @@ impl SessionRepository {
         bail!("Invalid session data");
       }
     };
+    let persona: String = row.get(5).unwrap_or_default();
+    let persona = if persona.is_empty() {
+      String::new()
+    } else {
+      persona
+    };
+    let model: String = row.get(6).unwrap_or_default();
+    let model = if model.is_empty() {
+      None
+    } else {
+      Some(Model {
+        provider: String::new(),
+        name: model,
+        alias: None,
+      })
+    };
+    let cwd: String = row.get(7).unwrap_or_default();
+    let cwd = if cwd.is_empty() { String::new() } else { cwd };
 
     let mut messages_rows = self
       .db
@@ -277,6 +302,9 @@ impl SessionRepository {
       title,
       created_at,
       last_interaction,
+      persona,
+      model,
+      cwd,
       messages,
       summaries,
     };
@@ -323,6 +351,24 @@ impl SessionRepository {
         Ok(v) => v,
         Err(_) => continue,
       };
+      let persona: String = row.get(5).unwrap_or_default();
+      let persona = if persona.is_empty() {
+        String::new()
+      } else {
+        persona
+      };
+      let model: String = row.get(6).unwrap_or_default();
+      let model = if model.is_empty() {
+        None
+      } else {
+        Some(Model {
+          provider: String::new(),
+          name: model,
+          alias: None,
+        })
+      };
+      let cwd: String = row.get(7).unwrap_or_default();
+      let cwd = if cwd.is_empty() { String::new() } else { cwd };
 
       let session = SessionRow {
         id,
@@ -330,6 +376,9 @@ impl SessionRepository {
         title,
         created_at,
         last_interaction,
+        persona,
+        model,
+        cwd,
         messages: Vec::new(),
         summaries: Vec::new(),
       };

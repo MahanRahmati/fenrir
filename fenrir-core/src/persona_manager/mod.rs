@@ -10,7 +10,7 @@ mod reviewer;
 mod titles;
 
 pub use crate::persona_manager::compaction::COMPACTION_PERSONA;
-use crate::persona_manager::default::DEFAULT_PERSONA;
+pub use crate::persona_manager::default::DEFAULT_PERSONA;
 pub use crate::persona_manager::judge::JUDGE_PERSONA;
 pub use crate::persona_manager::persona::{Persona, ToolAccess};
 pub use crate::persona_manager::prediction::PREDICTION_PERSONA;
