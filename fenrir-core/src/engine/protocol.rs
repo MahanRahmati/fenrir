@@ -49,6 +49,7 @@ pub enum PromptMode {
 #[derive(Debug)]
 pub enum BrokerRequest {
   Connect {
+    cwd: String,
     events: mpsc::Sender<ServerEvent>,
     reply: oneshot::Sender<Uuid>,
   },
