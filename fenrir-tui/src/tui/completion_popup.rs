@@ -9,8 +9,8 @@ use ratatui::widgets::{List, ListItem, ListState};
 
 use crate::tui::input::Input;
 use crate::tui::popup::Popup;
+use fenrir_core::command::Command;
 use fenrir_core::files::operations::is_dir;
-use fenrir_core::slash_commands::SlashCommand;
 use fenrir_core::utils::process;
 
 const MAX_RESULTS: usize = 10;
@@ -379,13 +379,12 @@ async fn file_candidates(prefix: &str) -> Vec<CompletionItem> {
 
 fn command_candidates(prefix: &str) -> Vec<CompletionItem> {
   let mut items: Vec<CompletionItem> = Vec::new();
-  for command in SlashCommand::all() {
-    let name = command.name();
-    if name.starts_with(&format!("/{prefix}")) {
+  for command in Command::catalog() {
+    if command.name.starts_with(&format!("/{prefix}")) {
       items.push(CompletionItem {
-        text: name[1..].to_string(),
+        text: command.name[1..].to_string(),
         is_dir: false,
-        detail: Some(command.description().to_string()),
+        detail: Some(command.description),
       });
     }
   }

@@ -7,13 +7,13 @@ use ratatui::widgets::{
 };
 
 use crate::tui::popup::{Popup, constrained_height, constrained_width};
-use fenrir_core::slash_commands::SlashCommand;
+use fenrir_core::engine::protocol::CommandInfo;
 
 const MAX_VISIBLE_ITEMS: u16 = 10;
 
 pub struct HelpPopup {
   popup: Popup,
-  commands: Vec<SlashCommand>,
+  commands: Vec<CommandInfo>,
   scroll_offset: usize,
 }
 
@@ -45,7 +45,7 @@ impl HelpPopup {
       .iter()
       .skip(self.scroll_offset)
       .take(visible_rows)
-      .map(|cmd| Line::from(format!("{} - {}", cmd.name(), cmd.description())))
+      .map(|cmd| Line::from(format!("{} - {}", cmd.name, cmd.description)))
       .collect();
     let paragraph = Paragraph::new(lines);
     if let Some(content_area) =
@@ -95,7 +95,7 @@ impl HelpPopup {
     return true;
   }
 
-  pub fn open_help_popup(&mut self, commands: Vec<SlashCommand>) {
+  pub fn open_help_popup(&mut self, commands: Vec<CommandInfo>) {
     self.commands = commands;
     self.scroll_offset = 0;
     self.popup.open_popup();

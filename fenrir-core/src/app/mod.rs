@@ -1,5 +1,4 @@
 mod approval;
-pub mod command;
 mod event;
 mod harness;
 

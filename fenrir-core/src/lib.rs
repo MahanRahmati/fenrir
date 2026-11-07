@@ -2,7 +2,7 @@
 
 pub mod app;
 mod capability;
-mod command;
+pub mod command;
 pub mod config;
 pub mod database;
 pub mod engine;
@@ -16,7 +16,6 @@ mod prompt;
 pub mod provider_manager;
 pub mod session_manager;
 mod shutdown;
-pub mod slash_commands;
 pub mod tool_manager;
 pub mod utils;
 mod workflow_manager;

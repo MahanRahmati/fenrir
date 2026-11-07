@@ -4,13 +4,12 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::app::ApprovalChannel;
-use crate::engine::protocol::SessionSummary;
+use crate::engine::protocol::{CommandInfo, SessionSummary};
 use crate::persona_manager::Persona;
 use crate::provider_manager::ChatUsage;
 use crate::provider_manager::Model;
 use crate::session_manager::ToolApprovalStatus;
 use crate::session_manager::session::Session;
-use crate::slash_commands::SlashCommand;
 use crate::tool_manager::ToolPreview;
 
 pub enum AppEvent {
@@ -80,7 +79,7 @@ pub trait EventSink {
     return false;
   }
   async fn on_exit(&mut self);
-  async fn on_help(&mut self, commands: Vec<SlashCommand>);
+  async fn on_help(&mut self, commands: Vec<CommandInfo>);
   async fn on_sessions(
     &mut self,
     sessions: Vec<SessionSummary>,

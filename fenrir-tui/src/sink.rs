@@ -12,12 +12,11 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use fenrir_core::app::{App, AppEvent, ApprovalChannel, EventSink, InputEvent};
-use fenrir_core::engine::protocol::SessionSummary;
+use fenrir_core::engine::protocol::{CommandInfo, SessionSummary};
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::ToolApprovalStatus;
 use fenrir_core::session_manager::session::Session;
-use fenrir_core::slash_commands::SlashCommand;
 
 use crate::tui::Tui;
 
@@ -163,7 +162,7 @@ impl EventSink for TuiSink {
     self.tui.quit();
   }
 
-  async fn on_help(&mut self, commands: Vec<SlashCommand>) {
+  async fn on_help(&mut self, commands: Vec<CommandInfo>) {
     self.tui.open_help_popup(commands);
     self.redraw();
   }

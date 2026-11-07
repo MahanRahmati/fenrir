@@ -14,14 +14,13 @@ use crate::app::App;
 use crate::app::AppEvent;
 use crate::app::EventSink;
 use crate::app::InputEvent;
-use crate::app::command::{AppCommand, CommandOutcome};
+use crate::command::{Command, Effect};
 use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::{PersonaManager, REVIEWER_PERSONA};
 use crate::prompt::review;
 use crate::session_manager::CompactionMode;
 use crate::session_manager::HarnessContext;
 use crate::session_manager::SessionContext;
-use crate::slash_commands::SlashCommand;
 use crate::vlog;
 
 const UI_TICK: Duration = Duration::from_millis(16);
@@ -115,7 +114,7 @@ impl App {
 
       prediction = None;
 
-      let command = match AppCommand::parse(&input) {
+      let command = match Command::parse(&input) {
         Ok(Some(command)) => Some(command),
         Ok(None) => None,
         Err(e) => {
@@ -130,21 +129,34 @@ impl App {
       };
 
       if let Some(command) = command {
+        let effect = match command.effect(active_session) {
+          Ok(effect) => effect,
+          Err(e) => {
+            self.complete_in_flight(&mut in_flight_queue_item).await?;
+            sink
+              .on_event(AppEvent::Error {
+                message: e.to_string(),
+              })
+              .await;
+            continue;
+          }
+        };
+
         let cancel = self.shutdown.child_token();
         sink.set_cancel_token(cancel.clone()).await;
 
         let result = self
-          .command(sink, active_session, command, &cancel, cwd)
+          .apply_effect(sink, active_session, effect, &cancel, cwd)
           .await;
         self.complete_in_flight(&mut in_flight_queue_item).await?;
 
         match result? {
-          CommandOutcome::Continue => {}
-          CommandOutcome::Exit => {
+          EffectOutcome::Continue => {}
+          EffectOutcome::Exit => {
             sink.on_exit().await;
             break;
           }
-          CommandOutcome::Activate(session_id) => {
+          EffectOutcome::Activate(session_id) => {
             active_session = session_id;
           }
         }
@@ -264,28 +276,35 @@ impl App {
     }
   }
 
-  pub async fn command(
+  async fn apply_effect(
     &mut self,
     sink: &mut impl EventSink,
     active_session: Option<Uuid>,
-    command: AppCommand,
+    effect: Effect,
     cancel: &CancellationToken,
     cwd: &str,
-  ) -> Result<CommandOutcome> {
-    return match command {
-      AppCommand::Exit => Ok(CommandOutcome::Exit),
-      AppCommand::Help => {
-        sink
-          .on_help(SlashCommand::available_commands(active_session.is_some()))
-          .await;
-        Ok(CommandOutcome::Continue)
+  ) -> Result<EffectOutcome> {
+    return match effect {
+      Effect::CreateSession { persona, model } => {
+        match persona {
+          Some(name) => self.sessions.set_persona(None, &name).await?,
+          None => self.sessions.reset_persona(),
+        }
+        if let Some(model) = model {
+          self.sessions.set_model(None, model).await?;
+        }
+        let name = self.sessions.persona_name(None);
+        let model = self.sessions.current_model(None);
+        sink.on_new_session(name, model).await;
+        self.emit_queue(sink, None).await?;
+        Ok(EffectOutcome::Activate(None))
       }
-      AppCommand::ListSessions => {
+      Effect::ListSessions => {
         let sessions = self.sessions.list_sessions().await?;
         let Some(session_id) =
           sink.on_sessions(sessions, active_session).await?
         else {
-          return Ok(CommandOutcome::Continue);
+          return Ok(EffectOutcome::Continue);
         };
         self.sessions.load_session(session_id).await?;
         let session = self
@@ -294,9 +313,9 @@ impl App {
           .context("No active session")?;
         sink.on_session_selection(session).await;
         self.emit_queue(sink, Some(session_id)).await?;
-        Ok(CommandOutcome::Activate(Some(session_id)))
+        Ok(EffectOutcome::Activate(Some(session_id)))
       }
-      AppCommand::ListPersonas => {
+      Effect::ListPersonas => {
         let personas = PersonaManager::list();
         let current_persona_name = self.sessions.persona_name(active_session);
         if let Some(name) =
@@ -305,9 +324,9 @@ impl App {
           self.sessions.set_persona(active_session, &name).await?;
           sink.on_persona_selection(name).await;
         }
-        Ok(CommandOutcome::Continue)
+        Ok(EffectOutcome::Continue)
       }
-      AppCommand::ListModels => {
+      Effect::ListModels => {
         let models = self.sessions.get_providers().list_models();
         let current_model = self.sessions.current_model(active_session);
         if let Some(model) = sink.on_models(models, current_model).await? {
@@ -317,23 +336,15 @@ impl App {
             .await?;
           sink.on_model_selection(model).await;
         }
-        Ok(CommandOutcome::Continue)
+        Ok(EffectOutcome::Continue)
       }
-      AppCommand::Compact => {
-        let Some(session_id) = active_session else {
-          sink
-            .on_event(AppEvent::Error {
-              message: "No session selected".to_string(),
-            })
-            .await;
-          return Ok(CommandOutcome::Continue);
-        };
+      Effect::Compact { session_id } => {
         run_compaction(self, sink, session_id, CompactionMode::Forced, cancel)
           .await;
-        Ok(CommandOutcome::Continue)
+        Ok(EffectOutcome::Continue)
       }
-      AppCommand::Review => {
-        let session_id = match active_session {
+      Effect::StartReview { session_id } => {
+        let session_id = match session_id {
           Some(session_id) => session_id,
           None => {
             let session_id = self.sessions.create_session(cwd).await?;
@@ -353,18 +364,23 @@ impl App {
           None => review::CWD_REVIEW_PROMPT.to_string(),
         };
         self.prompt(sink, session_id, &prompt).await?;
-        Ok(CommandOutcome::Activate(Some(session_id)))
+        Ok(EffectOutcome::Activate(Some(session_id)))
       }
-      AppCommand::New => {
-        self.sessions.reset_persona();
-        let name = self.sessions.persona_name(None);
-        let model = self.sessions.current_model(None);
-        sink.on_new_session(name, model).await;
-        self.emit_queue(sink, None).await?;
-        Ok(CommandOutcome::Activate(None))
+      Effect::ShowHelp => {
+        sink
+          .on_help(Command::available_commands(active_session.is_some()))
+          .await;
+        Ok(EffectOutcome::Continue)
       }
+      Effect::Exit => Ok(EffectOutcome::Exit),
     };
   }
+}
+
+enum EffectOutcome {
+  Continue,
+  Exit,
+  Activate(Option<Uuid>),
 }
 
 async fn run_chat(

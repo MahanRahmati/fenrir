@@ -35,12 +35,11 @@ use crate::tui::personas_popup::PersonasPopup;
 use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
-use fenrir_core::engine::protocol::SessionSummary;
+use fenrir_core::engine::protocol::{CommandInfo, SessionSummary};
 use fenrir_core::persona_manager::Persona;
 use fenrir_core::provider_manager::ChatUsage;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::session::Session;
-use fenrir_core::slash_commands::SlashCommand;
 use fenrir_core::tool_manager::ToolPreview;
 
 const TOP_PADDING: u16 = 1;
@@ -437,7 +436,7 @@ impl Tui {
     self.queued_messages_list.update_messages(queued_messages);
   }
 
-  pub fn open_help_popup(&mut self, commands: Vec<SlashCommand>) {
+  pub fn open_help_popup(&mut self, commands: Vec<CommandInfo>) {
     self.help_popup.open_help_popup(commands);
   }
 
