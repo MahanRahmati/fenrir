@@ -1,10 +1,12 @@
-use anyhow::{Context, Result, bail};
-use chrono::Utc;
+use anyhow::{Result, bail};
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::persona_manager::COMPACTION_PERSONA;
-use crate::prompt::Prompt;
+use crate::engine::protocol::Correlation;
+use crate::prompt::PromptExecutor;
+use crate::prompt::compaction::build;
 use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::{Message, Summary};
 use crate::vlog;
@@ -22,73 +24,20 @@ impl CompactionWorkflow {
     config: &Config,
     model: &Model,
     params: CompactionParams,
-    cwd: &String,
+    cwd: &str,
   ) -> Result<String> {
-    let prompt = Prompt::new(config, &COMPACTION_PERSONA, cwd);
-    let now = Utc::now().timestamp();
-    let max_chars = config.compaction.tool_result_max_chars;
+    let spec = build(config, cwd, model, params.messages, params.last_summary);
+    let (events, _events_rx) = mpsc::channel(1);
+    let correlation = Correlation {
+      session_id: Uuid::nil(),
+      turn_id: Uuid::nil(),
+    };
+    let cancel = CancellationToken::new();
+    let output = PromptExecutor::new(provider, config)
+      .once(spec, correlation, &events, &cancel)
+      .await?;
 
-    let mut system_prompt = prompt.get_system_prompt().to_string();
-    if let Some(ref summary) = params.last_summary {
-      system_prompt.push_str("\n\nPrevious summary:\n");
-      system_prompt.push_str(&summary.content);
-    }
-
-    let mut messages = Vec::new();
-    messages.push(Message {
-      id: Uuid::now_v7(),
-      msg_type: None,
-      role: "system".to_string(),
-      content: system_prompt,
-      tool_call_id: None,
-      tool_calls: None,
-      timestamp: now,
-    });
-
-    let serialized: Vec<Message> = params
-      .messages
-      .iter()
-      .filter(|msg| msg.role != "system")
-      .filter_map(|msg| {
-        let content = msg.serialize_for_compaction(max_chars);
-        if content.is_empty() {
-          return None;
-        }
-        Some(Message {
-          id: msg.id,
-          msg_type: msg.msg_type.clone(),
-          role: msg.role.clone(),
-          content,
-          tool_call_id: msg.tool_call_id.clone(),
-          tool_calls: msg.tool_calls.clone(),
-          timestamp: msg.timestamp,
-        })
-      })
-      .collect();
-
-    if let Some(ref summary) = params.last_summary {
-      let first_user_message = serialized.iter().find(|m| m.role == "user");
-      if let Some(msg) = first_user_message {
-        messages.push(msg.clone());
-      }
-
-      for msg in &serialized {
-        if msg.id > summary.covers_message_id {
-          messages.push(msg.clone());
-        }
-      }
-    } else {
-      for msg in &serialized {
-        messages.push(msg.clone());
-      }
-    }
-
-    let response = provider
-      .chat(model, &messages, &[])
-      .await
-      .context("Failed to execute compaction workflow")?;
-
-    let Some(content) = response.content else {
+    let Some(content) = output.content else {
       bail!("Compaction workflow returned no content");
     };
 

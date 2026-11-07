@@ -57,9 +57,8 @@ impl Tool for WriteFileTool {
       .context(format!("Cannot write to file '{path}'"))?;
 
     return Ok(format!(
-      "Successfully wrote {} bytes to '{}'",
-      content.len(),
-      &path
+      "Successfully wrote {} bytes to '{path}'",
+      content.len()
     ));
   }
 }

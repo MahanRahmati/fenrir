@@ -1,9 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::persona_manager::TITLES_PERSONA;
-use crate::prompt::Prompt;
+use crate::engine::protocol::Correlation;
+use crate::prompt::{PromptExecutor, title};
 use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::Message;
 use crate::vlog;
@@ -20,41 +22,34 @@ impl TitleWorkflow {
     config: &Config,
     model: &Model,
     params: TitleParams,
-    cwd: &String,
+    cwd: &str,
   ) -> Result<String> {
     if params.message.is_empty() {
       return Ok(String::new());
     }
 
-    let prompt = Prompt::new(config, &TITLES_PERSONA, cwd);
     let now = chrono::Utc::now().timestamp();
-    let messages = vec![
-      Message {
-        id: Uuid::now_v7(),
-        msg_type: None,
-        role: "system".to_string(),
-        content: prompt.get_system_prompt().to_string(),
-        tool_call_id: None,
-        tool_calls: None,
-        timestamp: now,
-      },
-      Message {
-        id: Uuid::now_v7(),
-        msg_type: None,
-        role: "user".to_string(),
-        content: params.message,
-        tool_call_id: None,
-        tool_calls: None,
-        timestamp: now,
-      },
-    ];
+    let message = Message {
+      id: Uuid::now_v7(),
+      msg_type: None,
+      role: "user".to_string(),
+      content: params.message,
+      tool_call_id: None,
+      tool_calls: None,
+      timestamp: now,
+    };
+    let spec = title::build(config, cwd, model, message);
+    let (events, _events_rx) = mpsc::channel(1);
+    let correlation = Correlation {
+      session_id: Uuid::nil(),
+      turn_id: Uuid::nil(),
+    };
+    let cancel = CancellationToken::new();
+    let output = PromptExecutor::new(provider, config)
+      .once(spec, correlation, &events, &cancel)
+      .await?;
 
-    let response = provider
-      .chat(model, &messages, &[])
-      .await
-      .context("Failed to execute title workflow")?;
-
-    let Some(content) = response.content else {
+    let Some(content) = output.content else {
       return Ok(String::new());
     };
 

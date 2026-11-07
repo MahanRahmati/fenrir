@@ -9,6 +9,7 @@ use crate::hook_manager::hook::{
 };
 use crate::mentions::strip_mentions;
 use crate::persona_manager::Persona;
+use crate::prompt::{chat, with_system};
 use crate::provider_manager::{ChatUsage, Model, ToolCall};
 use crate::session_manager::HarnessContext;
 use crate::session_manager::session::Session;
@@ -113,10 +114,9 @@ impl Session {
       }
       turns += 1;
 
-      let messages = self.build_chat_context();
-      let tools = self
-        .tool_manager
-        .get_tools_specs(self.persona_manager.current().allowed_tools());
+      let spec = chat::build(self, config, model);
+      let messages = with_system(&spec.system, &spec.messages);
+      let tools = spec.tools;
 
       let mut stream = tokio::select! {
         biased;
@@ -247,10 +247,9 @@ impl Session {
       }
       turns += 1;
 
-      let messages = self.build_chat_context();
-      let tools = self
-        .tool_manager
-        .get_tools_specs(self.persona_manager.current().allowed_tools());
+      let spec = chat::build(self, config, model);
+      let messages = with_system(&spec.system, &spec.messages);
+      let tools = spec.tools;
 
       let response = tokio::select! {
         biased;

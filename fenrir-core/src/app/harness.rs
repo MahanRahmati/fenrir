@@ -17,6 +17,7 @@ use crate::app::InputEvent;
 use crate::app::command::{AppCommand, CommandOutcome};
 use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::{PersonaManager, REVIEWER_PERSONA};
+use crate::prompt::review;
 use crate::session_manager::CompactionMode;
 use crate::session_manager::HarnessContext;
 use crate::session_manager::SessionContext;
@@ -25,8 +26,6 @@ use crate::vlog;
 
 const UI_TICK: Duration = Duration::from_millis(16);
 const PREDICTION_YIELD: Duration = Duration::from_millis(1);
-const CWD_REVIEW_PROMPT: &str = "Review the uncommitted changes in the current working directory. Use the git tool with `status` to list changed files and `diff` to inspect unstaged changes, and read the changed files you need. Report bugs, risky behavior changes, and clear deviations from existing patterns. Do not modify any files.";
-const SESSION_REVIEW_PROMPT: &str = "Review the changes made in this session. Use the conversation to identify what changed, inspect the current state of those files, and use the git tool with `status` to list changed files and `diff` to inspect unstaged changes. Report bugs, risky behavior changes, and clear deviations from existing patterns. Do not modify any files.";
 
 async fn persist_queued_input(
   sink: &mut impl EventSink,
@@ -342,11 +341,6 @@ impl App {
             session_id
           }
         };
-        let is_empty = self
-          .sessions
-          .session(session_id)
-          .map(|session| session.messages.is_empty())
-          .unwrap_or(true);
         self
           .sessions
           .set_persona(Some(session_id), REVIEWER_PERSONA.name())
@@ -354,12 +348,11 @@ impl App {
         sink
           .on_persona_selection(REVIEWER_PERSONA.name().to_string())
           .await;
-        let prompt = if is_empty {
-          CWD_REVIEW_PROMPT
-        } else {
-          SESSION_REVIEW_PROMPT
+        let prompt = match self.sessions.session(session_id) {
+          Some(session) => review::build(session),
+          None => review::CWD_REVIEW_PROMPT.to_string(),
         };
-        self.prompt(sink, session_id, prompt).await?;
+        self.prompt(sink, session_id, &prompt).await?;
         Ok(CommandOutcome::Activate(Some(session_id)))
       }
       AppCommand::New => {

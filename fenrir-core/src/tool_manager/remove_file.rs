@@ -47,6 +47,6 @@ impl Tool for RemoveFileTool {
       .await
       .context(format!("Cannot remove file '{path}'"))?;
 
-    return Ok(format!("Successfully removed '{}'", &path));
+    return Ok(format!("Successfully removed '{path}'"));
   }
 }

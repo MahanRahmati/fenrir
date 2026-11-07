@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 
 use crate::persona_manager::JUDGE_PERSONA;
+use crate::prompt::judge;
 use crate::session_manager::session::Session;
 use crate::tool_manager::helpers::get_param;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
@@ -43,8 +44,7 @@ impl Tool for GoalCheckTool {
     if goal.is_empty() {
       bail!("Goal cannot be empty");
     }
-    let task =
-      format!("Determine whether this goal is fully achieved:\n\n{goal}");
+    let task = judge::build(goal);
     let report = Session::run_subagent(context, &JUDGE_PERSONA, &task)
       .await
       .context("Failed to check goal")?;
