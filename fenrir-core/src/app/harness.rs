@@ -10,17 +10,19 @@ use tokio::time::{MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::agent::{AgentContext, run_compact, run_turn};
 use crate::app::App;
 use crate::app::AppEvent;
+use crate::app::ApprovalChannel;
 use crate::app::EventSink;
 use crate::app::InputEvent;
 use crate::command::{Command, Effect};
+use crate::engine::protocol::{
+  ApprovalDecision, PromptMode, ServerEvent, SessionEvent, TurnOutcome,
+};
 use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::{PersonaManager, REVIEWER_PERSONA};
-use crate::prompt::review;
-use crate::session_manager::CompactionMode;
-use crate::session_manager::HarnessContext;
-use crate::session_manager::SessionContext;
+use crate::session_manager::{SessionContext, ToolApprovalStatus};
 use crate::vlog;
 
 const UI_TICK: Duration = Duration::from_millis(16);
@@ -173,7 +175,9 @@ impl App {
         }
       };
 
-      let result = self.prompt(sink, session_id, &input).await;
+      let result = self
+        .run_prompt(sink, session_id, PromptMode::Normal, Some(input))
+        .await;
       self.complete_in_flight(&mut in_flight_queue_item).await?;
       let completed = result?;
       if completed
@@ -217,20 +221,13 @@ impl App {
     return Ok(());
   }
 
-  pub async fn prompt(
+  async fn run_prompt(
     &mut self,
     sink: &mut impl EventSink,
     session_id: Uuid,
-    input: &str,
+    mode: PromptMode,
+    text: Option<String>,
   ) -> Result<bool> {
-    self.sessions.ensure_system_message(session_id).await?;
-    self.sessions.add_user_message(session_id, input).await?;
-
-    sink
-      .on_event(AppEvent::UserMessage {
-        content: input.to_string(),
-      })
-      .await;
     sink
       .on_event(AppEvent::Processing { processing: true })
       .await;
@@ -241,39 +238,38 @@ impl App {
       .set_approval_channel(Some(self.sessions.approval_channel()))
       .await;
 
-    let Some(result) = run_chat(self, sink, session_id, &cancel).await else {
-      return Ok(false);
-    };
+    let outcome =
+      match run_turn_adapter(self, sink, session_id, mode, text, &cancel).await
+      {
+        Ok(outcome) => outcome,
+        Err(e) => {
+          sink
+            .on_event(AppEvent::Error {
+              message: e.to_string(),
+            })
+            .await;
+          return Ok(false);
+        }
+      };
 
-    match result {
-      Ok(_) => {
-        let last_usage = self.sessions.last_usage(session_id);
-        let context_window = match self.sessions.current_model(Some(session_id))
-        {
-          Some(model) => {
-            self.sessions.get_providers().context_window(&model).await
-          }
-          None => None,
-        };
-        sink
-          .on_event(AppEvent::Usage {
-            usage: last_usage,
-            context_window,
-          })
-          .await;
-        run_compaction(self, sink, session_id, CompactionMode::Auto, &cancel)
-          .await;
-        return Ok(true);
-      }
-      Err(e) => {
-        sink
-          .on_event(AppEvent::Error {
-            message: e.to_string(),
-          })
-          .await;
-        return Ok(false);
-      }
+    if let Some(TurnOutcome::Completed { .. }) = outcome {
+      let last_usage = self.sessions.last_usage(session_id);
+      let context_window = match self.sessions.current_model(Some(session_id)) {
+        Some(model) => {
+          self.sessions.get_providers().context_window(&model).await
+        }
+        None => None,
+      };
+      sink
+        .on_event(AppEvent::Usage {
+          usage: last_usage,
+          context_window,
+        })
+        .await;
+      return Ok(true);
     }
+
+    return Ok(false);
   }
 
   async fn apply_effect(
@@ -339,8 +335,7 @@ impl App {
         Ok(EffectOutcome::Continue)
       }
       Effect::Compact { session_id } => {
-        run_compaction(self, sink, session_id, CompactionMode::Forced, cancel)
-          .await;
+        compact_session(self, sink, session_id, cancel).await;
         Ok(EffectOutcome::Continue)
       }
       Effect::StartReview { session_id } => {
@@ -359,11 +354,9 @@ impl App {
         sink
           .on_persona_selection(REVIEWER_PERSONA.name().to_string())
           .await;
-        let prompt = match self.sessions.session(session_id) {
-          Some(session) => review::build(session),
-          None => review::CWD_REVIEW_PROMPT.to_string(),
-        };
-        self.prompt(sink, session_id, &prompt).await?;
+        self
+          .run_prompt(sink, session_id, PromptMode::Review, None)
+          .await?;
         Ok(EffectOutcome::Activate(Some(session_id)))
       }
       Effect::ShowHelp => {
@@ -383,38 +376,41 @@ enum EffectOutcome {
   Activate(Option<Uuid>),
 }
 
-async fn run_chat(
+async fn run_turn_adapter(
   app: &mut App,
   sink: &mut impl EventSink,
   session_id: Uuid,
+  mode: PromptMode,
+  text: Option<String>,
   cancel: &CancellationToken,
-) -> Option<Result<String>> {
-  let (tx, mut rx) = mpsc::channel::<AppEvent>(256);
+) -> Result<Option<TurnOutcome>> {
+  let (events, mut rx) = mpsc::channel::<SessionEvent>(256);
   let approvals = app.sessions.approval_channel();
-
-  let context = match app.sessions.context(session_id) {
-    Ok(context) => context,
-    Err(e) => {
-      return Some(Err(e));
-    }
-  };
+  let context = app.sessions.context(session_id)?;
+  let repository = context.repository.clone();
   let SessionContext {
     session,
     config,
     providers,
-    repository,
+    repository: repo,
   } = context;
 
-  let harness_context = HarnessContext {
+  let agent_context = AgentContext {
     config,
     providers,
-    repository,
-    approvals: &approvals,
-    tx: &tx,
+    repo,
+    events: &events,
     cancel,
   };
-  let chat = session.harness_loop(&harness_context);
-  tokio::pin!(chat);
+  let turn = run_turn(
+    session,
+    Uuid::now_v7(),
+    Uuid::nil(),
+    mode,
+    text,
+    &agent_context,
+  );
+  tokio::pin!(turn);
 
   let mut ticker = ui_ticker();
   let mut outcome = None;
@@ -423,18 +419,18 @@ async fn run_chat(
     tokio::select! {
       biased;
       _ = ticker.tick() => {
-        persist_queued_input(sink, repository, session_id).await;
+        persist_queued_input(sink, &repository, session_id).await;
       }
       event = rx.recv() => {
         if let Some(event) = event {
-          sink.on_event(event).await;
+          handle_session_event(sink, &approvals, event).await;
         }
       }
       _ = cancel.cancelled() => {
-        drain_cancelled_turn(&mut chat, &mut rx).await;
+        drain_cancelled_turn(&mut turn, &mut rx).await;
         break;
       }
-      result = &mut chat => {
+      result = &mut turn => {
         outcome = Some(result);
         break;
       }
@@ -443,41 +439,39 @@ async fn run_chat(
 
   if !cancel.is_cancelled() {
     while let Ok(event) = rx.try_recv() {
-      sink.on_event(event).await;
+      handle_session_event(sink, &approvals, event).await;
     }
   }
   sink
     .on_event(AppEvent::Processing { processing: false })
     .await;
 
-  if cancel.is_cancelled() {
-    return None;
-  }
-  return outcome;
+  return Ok(outcome);
 }
 
 async fn drain_cancelled_turn<F>(
-  chat: &mut Pin<&mut F>,
-  rx: &mut mpsc::Receiver<AppEvent>,
+  turn: &mut Pin<&mut F>,
+  rx: &mut mpsc::Receiver<SessionEvent>,
 ) where
-  F: Future<Output = Result<String>>,
+  F: Future<Output = TurnOutcome>,
 {
   loop {
     tokio::select! {
       biased;
-      _ = chat.as_mut() => break,
+      _ = turn.as_mut() => break,
       _ = rx.recv() => {}
     }
   }
 }
 
-async fn run_compaction(
+async fn compact_session(
   app: &mut App,
   sink: &mut impl EventSink,
   session_id: Uuid,
-  mode: CompactionMode,
   cancel: &CancellationToken,
 ) {
+  let (events, mut rx) = mpsc::channel::<SessionEvent>(256);
+  let approvals = app.sessions.approval_channel();
   let context = match app.sessions.context(session_id) {
     Ok(context) => context,
     Err(e) => {
@@ -485,58 +479,174 @@ async fn run_compaction(
       return;
     }
   };
+  let repository = context.repository.clone();
   let SessionContext {
     session,
     config,
     providers,
-    repository,
+    repository: repo,
   } = context;
 
-  let compact = session.compact(config, providers, repository, mode, cancel);
+  let agent_context = AgentContext {
+    config,
+    providers,
+    repo,
+    events: &events,
+    cancel,
+  };
+  let compact = run_compact(session, Uuid::now_v7(), 0, &agent_context);
   tokio::pin!(compact);
 
   let mut ticker = ui_ticker();
-  let mut result = None;
+  let mut outcome = None;
 
   loop {
     tokio::select! {
       biased;
       _ = ticker.tick() => {
-        persist_queued_input(sink, repository, session_id).await;
+        persist_queued_input(sink, &repository, session_id).await;
       }
-      r = &mut compact => {
-        result = Some(r);
-        break;
+      event = rx.recv() => {
+        if let Some(event) = event {
+          handle_session_event(sink, &approvals, event).await;
+        }
       }
       _ = cancel.cancelled() => {
-        let _ = compact.as_mut().await;
+        drain_cancelled_turn(&mut compact, &mut rx).await;
+        break;
+      }
+      result = &mut compact => {
+        outcome = Some(result);
         break;
       }
     }
   }
 
-  if mode == CompactionMode::Forced && cancel.is_cancelled() {
+  if !cancel.is_cancelled() {
+    while let Ok(event) = rx.try_recv() {
+      handle_session_event(sink, &approvals, event).await;
+    }
+  }
+
+  if cancel.is_cancelled() {
     sink
       .on_event(AppEvent::Processing { processing: false })
       .await;
     return;
   }
 
-  match result {
-    Some(Ok(summary))
-      if mode == CompactionMode::Forced || !summary.is_empty() =>
-    {
-      sink.on_event(AppEvent::Compacted { summary }).await;
-    }
-    Some(Err(e)) if !cancel.is_cancelled() => {
-      sink
-        .on_event(AppEvent::Error {
-          message: e.to_string(),
-        })
-        .await;
-    }
-    _ => {}
+  if let Some(TurnOutcome::Failed { message }) = outcome {
+    vlog!("Compaction failed: {message}");
   }
+}
+
+async fn handle_session_event(
+  sink: &mut impl EventSink,
+  approvals: &ApprovalChannel,
+  event: SessionEvent,
+) {
+  match event {
+    SessionEvent::Event(event) => {
+      if let Some(event) = app_event(event) {
+        sink.on_event(event).await;
+      }
+    }
+    SessionEvent::ApprovalRequest { event, reply } => {
+      let tool_call_id = match &event {
+        ServerEvent::ToolApprovalRequest { tool_call_id, .. } => {
+          tool_call_id.clone()
+        }
+        _ => {
+          let _ = reply.send(ApprovalDecision::Denied);
+          return;
+        }
+      };
+
+      let mut decisions = approvals.subscribe();
+      if let Some(event) = app_event(event) {
+        sink.on_event(event).await;
+      }
+
+      let decision = match decisions.try_recv() {
+        Ok(decision)
+          if decision.tool_call_id == tool_call_id
+            && decision.status == ToolApprovalStatus::Approved =>
+        {
+          ApprovalDecision::Approved
+        }
+        _ => ApprovalDecision::Denied,
+      };
+      let _ = reply.send(decision);
+    }
+    SessionEvent::Stopped { .. } => {}
+  }
+}
+
+fn app_event(event: ServerEvent) -> Option<AppEvent> {
+  return match event {
+    ServerEvent::UserMessage { content, .. } => {
+      Some(AppEvent::UserMessage { content })
+    }
+    ServerEvent::Token {
+      text, reasoning, ..
+    } => Some(AppEvent::Token { text, reasoning }),
+    ServerEvent::ToolCall {
+      id,
+      name,
+      arguments,
+      preview,
+      ..
+    } => Some(AppEvent::ToolCall {
+      id,
+      name,
+      arguments,
+      preview,
+    }),
+    ServerEvent::ToolApprovalRequest {
+      tool_call_id,
+      tool_name,
+      message,
+      ..
+    } => Some(AppEvent::ToolApprovalRequest {
+      tool_call_id,
+      tool_name,
+      message,
+    }),
+    ServerEvent::ToolApprovalResult {
+      tool_call_id,
+      status,
+      ..
+    } => Some(AppEvent::ToolApprovalResult {
+      tool_call_id,
+      status,
+    }),
+    ServerEvent::ToolResult {
+      id, result, error, ..
+    } => Some(AppEvent::ToolResult { id, result, error }),
+    ServerEvent::Usage {
+      usage,
+      context_window,
+      ..
+    } => Some(AppEvent::Usage {
+      usage,
+      context_window,
+    }),
+    ServerEvent::Subagents { delta, .. } => Some(AppEvent::Subagents { delta }),
+    ServerEvent::Compacted { summary, .. } => {
+      Some(AppEvent::Compacted { summary })
+    }
+    ServerEvent::Prediction { text, .. } => Some(AppEvent::Prediction { text }),
+    ServerEvent::QueueUpdated { messages, .. } => {
+      Some(AppEvent::QueueUpdated {
+        messages: messages
+          .into_iter()
+          .map(|message| message.content)
+          .collect(),
+      })
+    }
+    ServerEvent::Error { message, .. } => Some(AppEvent::Error { message }),
+    _ => None,
+  };
 }
 
 fn ui_ticker() -> tokio::time::Interval {

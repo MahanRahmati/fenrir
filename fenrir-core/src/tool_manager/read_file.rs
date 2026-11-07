@@ -85,7 +85,7 @@ impl Tool for ReadFileTool {
     context: &mut ToolContext<'_>,
   ) -> Result<String> {
     let path = get_param::<String>(&params, "read_file", "path")?;
-    let cwd = Path::new(&context.cwd);
+    let cwd = Path::new(context.cwd);
 
     let content = read_to_string(&path)
       .await

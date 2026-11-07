@@ -86,6 +86,7 @@ pub struct Session {
   pub hook_manager: HookManager,
   pub last_usage: Option<ChatUsage>,
   pub cwd: String,
+  pub title_pending: bool,
 }
 
 impl Session {
@@ -145,6 +146,7 @@ impl Session {
       hook_manager,
       last_usage: None,
       cwd: row.cwd,
+      title_pending: false,
     };
   }
 

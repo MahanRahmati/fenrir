@@ -1,4 +1,5 @@
 use anyhow::Result;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
@@ -14,7 +15,7 @@ use crate::session_manager::tool_approval::{
 
 #[derive(Clone)]
 pub struct RepoHandle {
-  tx: mpsc::Sender<RepoRequest>,
+  tx: Sender<RepoRequest>,
 }
 
 pub enum RepoRequest {
@@ -321,7 +322,7 @@ impl RepoHandle {
 pub struct RepoActor {
   repo: SessionRepository,
   config: Config,
-  inbox: mpsc::Receiver<RepoRequest>,
+  inbox: Receiver<RepoRequest>,
 }
 
 impl RepoActor {

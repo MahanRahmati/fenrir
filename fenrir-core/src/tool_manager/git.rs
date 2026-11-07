@@ -57,7 +57,7 @@ impl Tool for GitTool {
   ) -> Result<String> {
     let subcommand = get_param::<String>(&params, GIT_TOOL_NAME, "subcommand")?;
     let path = get_optional_param::<String>(&params, GIT_TOOL_NAME, "path");
-    let mut args = vec![CWD_FLAG, context.cwd.as_str()];
+    let mut args = vec![CWD_FLAG, context.cwd];
 
     match subcommand.as_str() {
       STATUS => args.extend(STATUS_ARGS),

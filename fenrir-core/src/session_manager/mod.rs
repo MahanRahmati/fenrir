@@ -1,5 +1,3 @@
-mod compaction;
-mod harness;
 mod prediction;
 mod queries;
 pub mod repository;
@@ -8,11 +6,8 @@ pub mod summary;
 pub mod tool_approval;
 
 use anyhow::{Context, Result};
-use tokio::sync::mpsc::Sender;
-use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::app::AppEvent;
 use crate::app::ApprovalChannel;
 use crate::config::Config;
 use crate::database::DB;
@@ -21,7 +16,6 @@ use crate::engine::repo_actor::{RepoActor, RepoHandle};
 use crate::persona_manager::{Persona, PersonaManager};
 use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, Model, ProviderManager};
-pub use crate::session_manager::compaction::CompactionMode;
 use crate::session_manager::repository::SessionRepository;
 use crate::session_manager::session::Session;
 pub use crate::session_manager::session::{
@@ -37,15 +31,6 @@ pub struct SessionContext<'a> {
   pub config: &'a Config,
   pub providers: &'a ProviderManager,
   pub repository: &'a RepoHandle,
-}
-
-pub struct HarnessContext<'a> {
-  pub config: &'a Config,
-  pub providers: &'a ProviderManager,
-  pub repository: &'a RepoHandle,
-  pub approvals: &'a ApprovalChannel,
-  pub tx: &'a Sender<AppEvent>,
-  pub cancel: &'a CancellationToken,
 }
 
 pub struct SessionManager {
@@ -134,44 +119,6 @@ impl SessionManager {
 
   pub async fn list_sessions(&self) -> Result<Vec<SessionSummary>> {
     return self.repo_handle.list_sessions().await;
-  }
-
-  pub async fn ensure_system_message(&mut self, id: Uuid) -> Result<()> {
-    let index = self.index_of(id)?;
-    let session = &mut self.sessions[index];
-    return session
-      .ensure_system_message_with(&self.config, &self.repo_handle)
-      .await;
-  }
-
-  pub async fn add_user_message(
-    &mut self,
-    id: Uuid,
-    content: &str,
-  ) -> Result<()> {
-    let index = self.index_of(id)?;
-    let session = &mut self.sessions[index];
-    session.add_user_message(content);
-    return session.persist_last_message(&self.repo_handle).await;
-  }
-
-  pub async fn compact(
-    &mut self,
-    id: Uuid,
-    mode: CompactionMode,
-    cancel: &CancellationToken,
-  ) -> Result<String> {
-    let index = self.index_of(id)?;
-    let session = &mut self.sessions[index];
-    return session
-      .compact(
-        &self.config,
-        &self.providers,
-        &self.repo_handle,
-        mode,
-        cancel,
-      )
-      .await;
   }
 
   pub async fn predict_next_prompt(&self, id: Uuid) -> Result<String> {

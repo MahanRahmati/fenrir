@@ -381,10 +381,11 @@ fn parse_sse_chunk(chunk: SSEChunk) -> Option<Result<ChatStreamDelta>> {
   if chunk.event == "error" {
     return Some(Err(anyhow!("Failed to parse sse '{}'", chunk.data)));
   }
-  if chunk.data.trim() == "[DONE]" {
+  let data = chunk.data.trim();
+  if data.is_empty() || data == "[DONE]" {
     return None;
   }
-  match serde_json::from_str::<ChatCompletionStreamResponse>(&chunk.data) {
+  match serde_json::from_str::<ChatCompletionStreamResponse>(data) {
     Ok(stream_resp) => {
       if stream_resp.choices.is_empty()
         && let Some(usage) = stream_resp.usage

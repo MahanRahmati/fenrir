@@ -5,9 +5,8 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::app::AppEvent;
-use crate::app::ApprovalChannel;
 use crate::config::Config;
+use crate::engine::protocol::{Correlation, SessionEvent};
 use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::Persona;
 use crate::provider_manager::{Model, ProviderManager};
@@ -21,11 +20,11 @@ pub struct ToolContext<'a> {
   pub model: &'a Model,
   pub provider_manager: &'a ProviderManager,
   pub repository: &'a RepoHandle,
-  pub approvals: &'a ApprovalChannel,
-  pub tx: &'a Sender<AppEvent>,
+  pub events: &'a Sender<SessionEvent>,
+  pub correlation: Correlation,
   pub cancel: &'a CancellationToken,
   pub session_id: Uuid,
-  pub cwd: &'a String,
+  pub cwd: &'a str,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

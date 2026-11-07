@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 use futures::StreamExt;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -25,6 +25,7 @@ use crate::tool_manager::{
   TODO_LIST_TOOL_NAME, WRITE_FILE_TOOL_NAME,
 };
 use crate::utils::datetime::get_current_datetime;
+use crate::vlog;
 
 const TOOLS: &str = "Use tools when appropriate.";
 const EDIT: &str = "Before editing files, read them with `append_loc=true` for accurate line numbers. Prefer many small edits over one large one.";
@@ -42,8 +43,6 @@ pub enum PromptKind {
   Title,
   Compaction,
   Prediction,
-  Judge,
-  Subagent,
 }
 
 pub struct PromptSpec {
@@ -77,18 +76,21 @@ impl<'a> PromptExecutor<'a> {
     &self,
     spec: PromptSpec,
     correlation: Correlation,
-    events: &mpsc::Sender<SessionEvent>,
+    events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
   ) -> Result<PromptOutput> {
+    vlog!("Running prompt: {:?}", spec.kind);
     if spec.stream && self.config.general.stream {
       return self.once_streaming(spec, correlation, events, cancel).await;
     }
-    return self.once_blocking(spec, cancel).await;
+    return self.once_blocking(spec, correlation, events, cancel).await;
   }
 
   async fn once_blocking(
     &self,
     spec: PromptSpec,
+    correlation: Correlation,
+    events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
   ) -> Result<PromptOutput> {
     let messages = with_system(&spec.system, &spec.messages);
@@ -101,6 +103,28 @@ impl<'a> PromptExecutor<'a> {
             &spec.tools,
         ) => response?,
     };
+    if spec.emit_tokens {
+      if self.config.general.show_reasoning
+        && let Some(reasoning) = response.reasoning.as_deref()
+      {
+        let _ = events
+          .send(SessionEvent::Event(ServerEvent::Token {
+            correlation,
+            text: reasoning.to_string(),
+            reasoning: true,
+          }))
+          .await;
+      }
+      if let Some(content) = response.content.as_deref() {
+        let _ = events
+          .send(SessionEvent::Event(ServerEvent::Token {
+            correlation,
+            text: content.to_string(),
+            reasoning: false,
+          }))
+          .await;
+      }
+    }
     return Ok(PromptOutput {
       content: response.content,
       reasoning: response.reasoning,
@@ -113,7 +137,7 @@ impl<'a> PromptExecutor<'a> {
     &self,
     spec: PromptSpec,
     correlation: Correlation,
-    events: &mpsc::Sender<SessionEvent>,
+    events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
   ) -> Result<PromptOutput> {
     let messages = with_system(&spec.system, &spec.messages);

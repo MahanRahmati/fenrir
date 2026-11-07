@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use tokio::sync::broadcast;
+use tokio::sync::oneshot;
 
-use crate::app::AppEvent;
+use crate::engine::protocol::{ApprovalDecision, ServerEvent, SessionEvent};
 use crate::hook_manager::hook::{
   HookContext, HookDecision, PreToolHook, ToolCallContext,
 };
@@ -51,7 +51,7 @@ impl PreToolHook for ToolApprovalHook {
       return HookDecision::Allow;
     };
 
-    let cwd = Path::new(&context.cwd);
+    let cwd = Path::new(context.cwd);
     let cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
 
     if is_path_within(path, &cwd) {
@@ -77,8 +77,6 @@ impl PreToolHook for ToolApprovalHook {
     };
 
     let tool_call_id = tool_call.id.to_string();
-    let mut decisions = context.approvals.subscribe();
-
     let request = ToolApprovalRequest::new(
       tool_call_id.clone(),
       context.session_id,
@@ -89,12 +87,17 @@ impl PreToolHook for ToolApprovalHook {
       vlog!("Failed to record tool approval '{tool_call_id}': {e}");
     }
 
+    let (reply, decision) = oneshot::channel();
     let requested = context
-      .tx
-      .send(AppEvent::ToolApprovalRequest {
-        tool_call_id: tool_call_id.clone(),
-        tool_name: tool_call.name.to_string(),
-        message,
+      .events
+      .send(SessionEvent::ApprovalRequest {
+        event: ServerEvent::ToolApprovalRequest {
+          correlation: context.correlation,
+          tool_call_id: tool_call_id.clone(),
+          tool_name: tool_call.name.to_string(),
+          message,
+        },
+        reply,
       })
       .await
       .is_ok();
@@ -102,23 +105,13 @@ impl PreToolHook for ToolApprovalHook {
     let status = if !requested {
       ToolApprovalStatus::Denied
     } else {
-      let decision = loop {
-        tokio::select! {
-          biased;
-          _ = context.cancel.cancelled() => break None,
-          decision = decisions.recv() => match decision {
-            Ok(decision) if decision.tool_call_id == tool_call_id => {
-              break Some(decision.status);
-            }
-            Ok(_) => {}
-            Err(broadcast::error::RecvError::Lagged(_)) => {}
-            Err(broadcast::error::RecvError::Closed) => break None,
-          },
-        }
-      };
-      match decision {
-        Some(ToolApprovalStatus::Approved) => ToolApprovalStatus::Approved,
-        _ => ToolApprovalStatus::Denied,
+      tokio::select! {
+        biased;
+        _ = context.cancel.cancelled() => ToolApprovalStatus::Denied,
+        result = decision => match result {
+          Ok(ApprovalDecision::Approved) => ToolApprovalStatus::Approved,
+          _ => ToolApprovalStatus::Denied,
+        },
       }
     };
 
@@ -130,14 +123,14 @@ impl PreToolHook for ToolApprovalHook {
       vlog!("Failed to resolve tool approval '{tool_call_id}': {e}");
     }
 
-    context
-      .tx
-      .send(AppEvent::ToolApprovalResult {
+    let _ = context
+      .events
+      .send(SessionEvent::Event(ServerEvent::ToolApprovalResult {
+        correlation: context.correlation,
         tool_call_id: tool_call_id.clone(),
         status: status.clone(),
-      })
-      .await
-      .ok();
+      }))
+      .await;
 
     if status == ToolApprovalStatus::Approved {
       return HookDecision::Allow;

@@ -39,7 +39,7 @@ impl PostToolHook for RustHook {
       return String::new();
     }
 
-    let cwd = Path::new(&context.cwd);
+    let cwd = Path::new(context.cwd);
     let cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
 
     if !is_path_within(&path, &cwd) {
