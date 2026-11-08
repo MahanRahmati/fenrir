@@ -133,7 +133,10 @@ impl HttpClient {
     let request_builder = request_builder
       .header("User-Agent", concat!("Fenrir/", env!("CARGO_PKG_VERSION")));
     if let Some(hdrs) = headers {
-      vlog!("Applying headers to request: {:?}", hdrs);
+      vlog!(
+        "Applying headers to request: {:?}",
+        Self::redact_headers(&hdrs)
+      );
       return hdrs
         .into_iter()
         .fold(request_builder, |builder, (key, value)| {
@@ -141,6 +144,25 @@ impl HttpClient {
         });
     }
     return request_builder;
+  }
+
+  fn redact_headers(
+    headers: &HashMap<String, String>,
+  ) -> Vec<(String, String)> {
+    const SENSITIVE_HEADERS: &[&str] =
+      &["Authorization", "X-Api-Key", "X-Token"];
+    return headers
+      .iter()
+      .map(|(k, v)| {
+        let redacted =
+          if SENSITIVE_HEADERS.iter().any(|s| k.eq_ignore_ascii_case(s)) {
+            "[REDACTED]".to_string()
+          } else {
+            v.clone()
+          };
+        return (k.clone(), redacted);
+      })
+      .collect();
   }
 
   async fn response_to_stream(response: Response) -> Result<SSEStream> {
