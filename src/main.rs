@@ -5,7 +5,10 @@ use fenrir_cli::input::confirm_with;
 use fenrir_core::app::App;
 use fenrir_core::config::Config;
 use fenrir_core::database::DB;
+use fenrir_core::engine::broker;
+use fenrir_core::engine::repo_actor::RepoActor;
 use fenrir_core::logging::{set_print_enabled, setup_logging};
+use fenrir_core::session_manager::repository::SessionRepository;
 
 use crate::cli::{Cli, Commands};
 
@@ -37,8 +40,6 @@ async fn main() {
     }
   };
 
-  let mut app = App::new(config, db);
-
   let result = match cli.command {
     Some(Commands::ResetConfig { yes }) => {
       if !yes
@@ -61,10 +62,16 @@ async fn main() {
         }
       }
     }
-    Some(Commands::Tui) => fenrir_tui::run(&mut app).await,
+    Some(Commands::Tui) => {
+      let mut app = App::new(config, db);
+      fenrir_tui::run(&mut app).await
+    }
     None => {
       set_print_enabled(true);
-      fenrir_cli::run(&mut app).await
+      let repository = SessionRepository::new(db);
+      let repo = RepoActor::spawn(repository, config.clone());
+      let broker = broker::spawn(config, repo);
+      fenrir_cli::run(&broker).await
     }
   };
 

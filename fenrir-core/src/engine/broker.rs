@@ -85,11 +85,14 @@ struct Broker {
   sessions: HashMap<Uuid, SessionHandle>,
   subscriptions: HashMap<Uuid, HashSet<Uuid>>,
   pending_approvals: HashMap<(Uuid, Uuid, String), PendingApproval>,
+  next_persona: Option<String>,
+  default_model: Option<Model>,
 }
 
 pub fn spawn(config: Config, repo: RepoHandle) -> BrokerHandle {
   let (request_tx, request_rx) = mpsc::channel(256);
   let (event_tx, event_rx) = mpsc::channel(512);
+  let default_model = ProviderManager::new(config.clone()).default_model();
   let broker = Broker {
     config,
     repo,
@@ -100,6 +103,8 @@ pub fn spawn(config: Config, repo: RepoHandle) -> BrokerHandle {
     sessions: HashMap::new(),
     subscriptions: HashMap::new(),
     pending_approvals: HashMap::new(),
+    next_persona: None,
+    default_model,
   };
   tokio::spawn(broker.run());
   return BrokerHandle {
@@ -127,6 +132,7 @@ impl Broker {
                 self.shutdown().await;
                 break;
               }
+              let request_id = request_id_of(&request);
               if let Err(error) = self
                 .handle_client_request(client_id, request)
                 .await
@@ -134,7 +140,7 @@ impl Broker {
                 self.send_to(
                   client_id,
                   ServerEvent::Error {
-                    request_id: None,
+                    request_id,
                     session_id: None,
                     message: error.to_string(),
                   },
@@ -176,7 +182,7 @@ impl Broker {
         let session = self
           .repo
           .create_session(
-            persona,
+            persona.or_else(|| self.next_persona.clone()),
             self.model_or_default(model),
             self.client_cwd(client_id)?,
           )
@@ -246,7 +252,7 @@ impl Broker {
           ServerEvent::PersonasListed {
             request_id,
             personas: persona_infos(),
-            current: None,
+            current: self.next_persona.clone(),
           },
         );
         return Ok(());
@@ -256,15 +262,81 @@ impl Broker {
         session_id,
       } => {
         let providers = ProviderManager::new(self.config.clone());
-        let _ = session_id;
+        let current = self.current_model(session_id).await?;
         self.send_to(
           client_id,
           ServerEvent::ModelsListed {
             request_id,
             models: providers.list_models(),
-            current: None,
+            current,
           },
         );
+        return Ok(());
+      }
+      ClientRequest::SetPersona {
+        request_id,
+        session_id,
+        name,
+      } => {
+        let persona = PersonaManager::find(&name)?;
+        let name = persona.name().to_string();
+        match session_id {
+          Some(session_id) => {
+            self.ensure_session(session_id).await?;
+            self.require_subscription(client_id, session_id)?;
+            let handle = self
+              .sessions
+              .get(&session_id)
+              .context("Session actor is not running")?;
+            handle
+              .requests
+              .send(SessionRequest::SetPersona { request_id, name })
+              .await?;
+          }
+          None => {
+            self.next_persona = Some(name.clone());
+            self.send_to(
+              client_id,
+              ServerEvent::PersonaUpdated {
+                request_id,
+                session_id: None,
+                persona: name,
+              },
+            );
+          }
+        }
+        return Ok(());
+      }
+      ClientRequest::SetModel {
+        request_id,
+        session_id,
+        model,
+      } => {
+        self.default_model = Some(model.clone());
+        match session_id {
+          Some(session_id) => {
+            self.ensure_session(session_id).await?;
+            self.require_subscription(client_id, session_id)?;
+            let handle = self
+              .sessions
+              .get(&session_id)
+              .context("Session actor is not running")?;
+            handle
+              .requests
+              .send(SessionRequest::SetModel { request_id, model })
+              .await?;
+          }
+          None => {
+            self.send_to(
+              client_id,
+              ServerEvent::ModelUpdated {
+                request_id,
+                session_id: None,
+                model,
+              },
+            );
+          }
+        }
         return Ok(());
       }
       ClientRequest::Subscribe { session_id } => {
@@ -305,7 +377,7 @@ impl Broker {
             let session = self
               .repo
               .create_session(
-                None,
+                self.next_persona.clone(),
                 self.model_or_default(None),
                 self.client_cwd(client_id)?,
               )
@@ -437,6 +509,7 @@ impl Broker {
   ) -> Result<()> {
     match command.effect(session_id)? {
       Effect::CreateSession { persona, model } => {
+        self.next_persona = None;
         let session = self
           .repo
           .create_session(
@@ -470,24 +543,26 @@ impl Broker {
         return Ok(());
       }
       Effect::ListPersonas => {
+        let current = self.current_persona(session_id).await?;
         self.send_to(
           client_id,
           ServerEvent::PersonasListed {
             request_id,
             personas: persona_infos(),
-            current: None,
+            current,
           },
         );
         return Ok(());
       }
       Effect::ListModels => {
         let providers = ProviderManager::new(self.config.clone());
+        let current = self.current_model(session_id).await?;
         self.send_to(
           client_id,
           ServerEvent::ModelsListed {
             request_id,
             models: providers.list_models(),
-            current: None,
+            current,
           },
         );
         return Ok(());
@@ -497,7 +572,7 @@ impl Broker {
           client_id,
           ServerEvent::CommandCatalog {
             request_id,
-            commands: Command::catalog(),
+            commands: Command::available_commands(session_id.is_some()),
           },
         );
         return Ok(());
@@ -509,7 +584,7 @@ impl Broker {
             let session = self
               .repo
               .create_session(
-                None,
+                self.next_persona.clone(),
                 self.model_or_default(None),
                 self.client_cwd(client_id)?,
               )
@@ -739,8 +814,30 @@ impl Broker {
   }
 
   fn model_or_default(&self, model: Option<Model>) -> Option<Model> {
-    return model
-      .or_else(|| ProviderManager::new(self.config.clone()).default_model());
+    return model.or_else(|| self.default_model.clone());
+  }
+
+  async fn current_persona(
+    &self,
+    session_id: Option<Uuid>,
+  ) -> Result<Option<String>> {
+    return match session_id {
+      Some(id) => Ok(Some(self.repo.load_session(id).await?.persona)),
+      None => Ok(self.next_persona.clone()),
+    };
+  }
+
+  async fn current_model(
+    &self,
+    session_id: Option<Uuid>,
+  ) -> Result<Option<Model>> {
+    return match session_id {
+      Some(id) => {
+        let session = self.load_session(id).await?;
+        Ok(session.model.or_else(|| self.default_model.clone()))
+      }
+      None => Ok(self.default_model.clone()),
+    };
   }
 
   fn client_cwd(&self, id: Uuid) -> Result<String> {
@@ -827,6 +924,29 @@ fn session_id_of(event: &ServerEvent) -> Option<Uuid> {
     | ServerEvent::TitleUpdated { session_id, .. }
     | ServerEvent::QueueUpdated { session_id, .. }
     | ServerEvent::SessionStopped { session_id } => Some(*session_id),
-    ServerEvent::Error { session_id, .. } => *session_id,
+    ServerEvent::PersonaUpdated { session_id, .. }
+    | ServerEvent::ModelUpdated { session_id, .. }
+    | ServerEvent::Error { session_id, .. } => *session_id,
+  };
+}
+
+fn request_id_of(request: &ClientRequest) -> Option<u64> {
+  return match request {
+    ClientRequest::CreateSession { request_id, .. }
+    | ClientRequest::LoadSession { request_id, .. }
+    | ClientRequest::ListSessions { request_id }
+    | ClientRequest::ListPersonas { request_id }
+    | ClientRequest::ListModels { request_id, .. }
+    | ClientRequest::SetPersona { request_id, .. }
+    | ClientRequest::SetModel { request_id, .. }
+    | ClientRequest::SendPrompt { request_id, .. }
+    | ClientRequest::RunCommand { request_id, .. }
+    | ClientRequest::Compact { request_id, .. } => Some(*request_id),
+    ClientRequest::Disconnect
+    | ClientRequest::Subscribe { .. }
+    | ClientRequest::Unsubscribe { .. }
+    | ClientRequest::Cancel { .. }
+    | ClientRequest::ApproveTool { .. }
+    | ClientRequest::Shutdown => None,
   };
 }

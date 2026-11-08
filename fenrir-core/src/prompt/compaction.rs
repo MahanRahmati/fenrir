@@ -101,6 +101,8 @@ pub async fn run_once(
     .once(spec, correlation, events, cancel)
     .await?;
 
+  session.last_usage = output.usage;
+
   let Some(content) = output.content else {
     bail!("Compaction workflow returned no content");
   };

@@ -81,6 +81,16 @@ pub enum ClientRequest {
     request_id: u64,
     session_id: Option<Uuid>,
   },
+  SetPersona {
+    request_id: u64,
+    session_id: Option<Uuid>,
+    name: String,
+  },
+  SetModel {
+    request_id: u64,
+    session_id: Option<Uuid>,
+    model: Model,
+  },
   Subscribe {
     session_id: Uuid,
   },
@@ -141,6 +151,16 @@ pub enum ServerEvent {
     request_id: u64,
     models: Vec<Model>,
     current: Option<Model>,
+  },
+  PersonaUpdated {
+    request_id: u64,
+    session_id: Option<Uuid>,
+    persona: String,
+  },
+  ModelUpdated {
+    request_id: u64,
+    session_id: Option<Uuid>,
+    model: Model,
   },
   CommandCatalog {
     request_id: u64,

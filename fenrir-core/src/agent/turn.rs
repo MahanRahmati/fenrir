@@ -45,6 +45,11 @@ pub async fn run_turn(
         return failed(context.events, correlation, e).await;
       }
       session.persona = session.persona_manager.current().name().to_string();
+      if let Err(e) =
+        context.repo.set_persona(session.id, &session.persona).await
+      {
+        return failed(context.events, correlation, e).await;
+      }
       session.replace_system_message(&system::build(
         context.config,
         session.persona_manager.current(),

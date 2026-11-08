@@ -1,4 +1,4 @@
+mod adapter;
 pub mod input;
-mod sink;
 
-pub use sink::run;
+pub use adapter::run;

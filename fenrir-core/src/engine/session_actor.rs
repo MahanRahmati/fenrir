@@ -12,7 +12,8 @@ use crate::engine::protocol::{
   Correlation, PromptMode, ServerEvent, SessionEvent, TurnOutcome,
 };
 use crate::engine::repo_actor::RepoHandle;
-use crate::provider_manager::ProviderManager;
+use crate::persona_manager::PersonaManager;
+use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::session::Session;
 
 pub struct SessionHandle {
@@ -29,6 +30,14 @@ pub enum SessionRequest {
   Compact {
     request_id: u64,
     client_id: Uuid,
+  },
+  SetPersona {
+    request_id: u64,
+    name: String,
+  },
+  SetModel {
+    request_id: u64,
+    model: Model,
   },
   Shutdown {
     reply: Option<oneshot::Sender<()>>,
@@ -160,6 +169,36 @@ impl SessionActor {
                 ).await;
               }
             }
+            SessionRequest::SetPersona { request_id, name } => {
+              if shutting_down {
+                continue;
+              }
+              if turn.is_some() {
+                self.emit(ServerEvent::Error {
+                  request_id: Some(request_id),
+                  session_id: Some(self.id),
+                  message: "Session is busy; retry persona change when the turn finishes."
+                    .to_string(),
+                }).await;
+              } else {
+                self.set_persona(request_id, &name).await;
+              }
+            }
+            SessionRequest::SetModel { request_id, model } => {
+              if shutting_down {
+                continue;
+              }
+              if turn.is_some() {
+                self.emit(ServerEvent::Error {
+                  request_id: Some(request_id),
+                  session_id: Some(self.id),
+                  message: "Session is busy; retry model change when the turn finishes."
+                    .to_string(),
+                }).await;
+              } else {
+                self.set_model(request_id, model).await;
+              }
+            }
             SessionRequest::Shutdown { reply } => {
               shutting_down = true;
               shutdown_reply = reply;
@@ -207,13 +246,36 @@ impl SessionActor {
             }).await;
           }
 
+          let completed = matches!(&outcome, TurnOutcome::Completed { .. });
+          let correlation = Correlation {
+            session_id: self.id,
+            turn_id,
+          };
           self.emit(ServerEvent::TurnFinished {
-            correlation: Correlation {
-              session_id: self.id,
-              turn_id,
-            },
+            correlation,
             outcome,
           }).await;
+
+          if completed {
+            let usage = self.session.as_ref().and_then(|session| session.last_usage);
+            let context_window = match self
+              .session
+              .as_ref()
+              .and_then(|session| session.model.clone())
+            {
+              Some(model) => {
+                ProviderManager::new(self.config.clone())
+                  .context_window(&model)
+                  .await
+              }
+              None => None,
+            };
+            self.emit(ServerEvent::Usage {
+              correlation,
+              usage,
+              context_window,
+            }).await;
+          }
 
           if shutting_down {
             if let Some(reply) = shutdown_reply.take() {
@@ -336,6 +398,89 @@ impl SessionActor {
         outcome,
       }
     }));
+  }
+
+  async fn set_persona(&mut self, request_id: u64, name: &str) {
+    let Some(mut session) = self.session.take() else {
+      return;
+    };
+    let result = match PersonaManager::find(name) {
+      Ok(persona) => {
+        let persona_name = persona.name().to_string();
+        match self.repo.set_persona(session.id, &persona_name).await {
+          Ok(()) => {
+            session.persona_manager.set_persona(persona);
+            session.persona = persona_name.clone();
+            if session.has_system_message() {
+              let prompt = crate::prompt::system::build(
+                &self.config,
+                session.persona_manager.current(),
+                &session.cwd,
+              );
+              session.replace_system_message(&prompt);
+            }
+            Ok(persona_name)
+          }
+          Err(e) => Err(e),
+        }
+      }
+      Err(e) => Err(e),
+    };
+    self.session = Some(session);
+    match result {
+      Ok(persona) => {
+        self
+          .emit(ServerEvent::PersonaUpdated {
+            request_id,
+            session_id: Some(self.id),
+            persona,
+          })
+          .await;
+      }
+      Err(e) => {
+        self
+          .emit(ServerEvent::Error {
+            request_id: Some(request_id),
+            session_id: Some(self.id),
+            message: e.to_string(),
+          })
+          .await;
+      }
+    }
+  }
+
+  async fn set_model(&mut self, request_id: u64, model: Model) {
+    let Some(mut session) = self.session.take() else {
+      return;
+    };
+    let result = match self.repo.set_model(session.id, &model).await {
+      Ok(()) => {
+        session.model = Some(model.clone());
+        Ok(())
+      }
+      Err(e) => Err(e),
+    };
+    self.session = Some(session);
+    match result {
+      Ok(()) => {
+        self
+          .emit(ServerEvent::ModelUpdated {
+            request_id,
+            session_id: Some(self.id),
+            model,
+          })
+          .await;
+      }
+      Err(e) => {
+        self
+          .emit(ServerEvent::Error {
+            request_id: Some(request_id),
+            session_id: Some(self.id),
+            message: e.to_string(),
+          })
+          .await;
+      }
+    }
   }
 
   async fn enqueue_prompt(&mut self, text: Option<String>) {
