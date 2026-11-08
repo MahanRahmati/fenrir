@@ -402,13 +402,16 @@ impl Adapter {
         flush();
       }
       ServerEvent::Usage {
-        correlation, usage, ..
+        correlation,
+        usage,
+        context_window,
+        ..
       } => {
         if self.awaiting_usage == Some(correlation.turn_id) {
           self.awaiting_usage = None;
         }
-        let usage =
-          usage.and_then(|usage| format_usage(usage.prompt_tokens, None));
+        let usage = usage
+          .and_then(|usage| format_usage(usage.prompt_tokens, context_window));
         if let Some(usage) = usage {
           println!("\n[usage] {usage}");
         }

@@ -10,6 +10,6 @@ pub fn format_usage(
   let Some(context_window) = context_window.filter(|window| *window > 0) else {
     return Some(usage);
   };
-  let percentage = (tokens as f64 / context_window as f64 * 100.0).round();
-  return Some(format!("{usage} ({percentage:.0}%)"));
+  let percentage = tokens as f64 / context_window as f64 * 100.0;
+  return Some(format!("{usage} ({percentage:.1}%)"));
 }

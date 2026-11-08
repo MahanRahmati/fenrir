@@ -180,6 +180,8 @@ pub struct ModelEntry {
   pub id: String,
   #[serde(default)]
   pub meta: Option<ModelMeta>,
+  #[serde(default)]
+  pub context_length: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -325,17 +327,18 @@ pub fn parse_sse_chunk(chunk: SSEChunk) -> Option<Result<ChatStreamDelta>> {
   }
   match serde_json::from_str::<ChatCompletionStreamResponse>(data) {
     Ok(stream_resp) => {
-      if stream_resp.choices.is_empty()
-        && let Some(usage) = stream_resp.usage
-      {
-        return Some(Ok(ChatStreamDelta {
-          content: None,
-          reasoning: None,
-          tool_calls: Vec::new(),
-          usage: Some(usage),
-        }));
-      }
-      let choice = stream_resp.choices.into_iter().next()?;
+      let usage = stream_resp.usage;
+      let Some(choice) = stream_resp.choices.into_iter().next() else {
+        if let Some(usage) = usage {
+          return Some(Ok(ChatStreamDelta {
+            content: None,
+            reasoning: None,
+            tool_calls: Vec::new(),
+            usage: Some(usage),
+          }));
+        }
+        return None;
+      };
       let delta = choice.delta;
       let tool_calls = delta
         .tool_calls
@@ -353,7 +356,7 @@ pub fn parse_sse_chunk(chunk: SSEChunk) -> Option<Result<ChatStreamDelta>> {
         content,
         reasoning,
         tool_calls,
-        usage: None,
+        usage,
       }));
     }
     Err(e) => {
@@ -456,7 +459,12 @@ pub fn parse_context_window(
     .data
     .iter()
     .find(|entry| entry.id == model)
-    .and_then(|entry| entry.meta.clone())
-    .and_then(|meta| meta.n_ctx)
+    .and_then(|entry| {
+      entry
+        .meta
+        .clone()
+        .and_then(|meta| meta.n_ctx)
+        .or(entry.context_length)
+    })
     .filter(|n_ctx| *n_ctx > 0)
 }
