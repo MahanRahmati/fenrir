@@ -101,6 +101,10 @@ impl ConfirmPopup {
     return confirmed;
   }
 
+  pub fn close(&mut self) {
+    self.popup.close_popup();
+  }
+
   pub fn is_open(&self) -> bool {
     return self.popup.is_open();
   }

@@ -112,6 +112,9 @@ pub enum ClientRequest {
     request_id: u64,
     session_id: Uuid,
   },
+  Predict {
+    session_id: Uuid,
+  },
   Cancel {
     session_id: Uuid,
     turn_id: Option<Uuid>,
@@ -132,7 +135,7 @@ pub enum ServerEvent {
   },
   SessionCreated {
     request_id: u64,
-    session: SessionSummary,
+    session: SessionView,
   },
   SessionLoaded {
     request_id: u64,

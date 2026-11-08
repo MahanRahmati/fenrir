@@ -6,7 +6,7 @@ use ratatui::widgets::{
 };
 
 use crate::tui::message_item::{MessageItem, Role};
-use fenrir_core::session_manager::session::Session;
+use fenrir_core::session_manager::Message;
 use fenrir_core::tool_manager::ToolPreview;
 
 pub struct MessagesList {
@@ -203,10 +203,9 @@ impl MessagesList {
     self.select_last();
   }
 
-  pub fn update_messages(&mut self, session: Option<&Session>) {
+  pub fn update_messages(&mut self, messages: Option<&[Message]>) {
     self.messages.clear();
-    if let Some(session) = session {
-      let messages = &session.messages;
+    if let Some(messages) = messages {
       let mut i = 0;
       while i < messages.len() {
         let msg = &messages[i];

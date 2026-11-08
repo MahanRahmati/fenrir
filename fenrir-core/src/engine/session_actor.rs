@@ -39,6 +39,7 @@ pub enum SessionRequest {
     request_id: u64,
     model: Model,
   },
+  Predict,
   Shutdown {
     reply: Option<oneshot::Sender<()>>,
   },
@@ -198,6 +199,28 @@ impl SessionActor {
               } else {
                 self.set_model(request_id, model).await;
               }
+            }
+            SessionRequest::Predict => {
+              if shutting_down {
+                continue;
+              }
+              if turn.is_some() {
+                self
+                  .emit(ServerEvent::Prediction {
+                    session_id: self.id,
+                    text: String::new(),
+                  })
+                  .await;
+                continue;
+              }
+              let Some(session) = self.session.as_ref() else {
+                continue;
+              };
+              crate::prompt::prediction::spawn(
+                session,
+                &self.config,
+                self.events.clone(),
+              );
             }
             SessionRequest::Shutdown { reply } => {
               shutting_down = true;

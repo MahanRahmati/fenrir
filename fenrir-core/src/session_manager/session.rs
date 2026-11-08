@@ -14,7 +14,6 @@ use crate::session_manager::repository::SessionRow;
 use crate::session_manager::summary::Summary;
 use crate::tool_manager::ToolManager;
 use crate::tool_manager::ToolPreview;
-use crate::workflow_manager::WorkflowManager;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QueuedMessageStatus {
@@ -82,7 +81,6 @@ pub struct Session {
   pub model: Option<Model>,
   pub tool_manager: ToolManager,
   pub persona_manager: PersonaManager,
-  pub workflow_manager: WorkflowManager,
   pub hook_manager: HookManager,
   pub last_usage: Option<ChatUsage>,
   pub cwd: String,
@@ -128,7 +126,6 @@ impl Session {
     persona_manager.set(&persona).ok();
     let persona = persona_manager.current().name().to_string();
     let model = model.or(row.model);
-    let workflow_manager = WorkflowManager::new(config, &row.cwd);
     let hook_manager = HookManager::new(config);
     return Self {
       id: row.id,
@@ -142,7 +139,6 @@ impl Session {
       model,
       tool_manager,
       persona_manager,
-      workflow_manager,
       hook_manager,
       last_usage: None,
       cwd: row.cwd,

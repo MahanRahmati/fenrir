@@ -1,7 +1,6 @@
 //! Core harness for Fenrir.
 
 pub mod agent;
-pub mod app;
 mod capability;
 pub mod command;
 pub mod config;
@@ -16,7 +15,5 @@ pub mod persona_manager;
 mod prompt;
 pub mod provider_manager;
 pub mod session_manager;
-mod shutdown;
 pub mod tool_manager;
 pub mod utils;
-mod workflow_manager;

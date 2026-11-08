@@ -1,13 +1,21 @@
+use anyhow::Result;
+use tokio::sync::mpsc::{self, Sender};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
 use crate::persona_manager::PREDICTION_PERSONA;
-use crate::prompt::{PromptKind, PromptSpec, system};
-use crate::provider_manager::Model;
+use crate::prompt::{PromptExecutor, PromptKind, PromptSpec, system};
+use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::Message;
+use crate::session_manager::session::Session;
+use crate::vlog;
 
 const MAX_MESSAGE_CHARS: usize = 1000;
 const MAX_SUMMARY_CHARS: usize = 4000;
+const MAX_CONTEXT_MESSAGES: usize = 10;
+const MAX_PREDICTION_CHARS: usize = 300;
 
 pub fn build(
   config: &Config,
@@ -96,4 +104,96 @@ pub fn truncate(content: &str, max_chars: usize) -> String {
     content.chars().take(max_chars.saturating_sub(1)).collect();
   truncated.push('…');
   return truncated;
+}
+
+pub fn spawn(session: &Session, config: &Config, events: Sender<SessionEvent>) {
+  let session_id = session.id;
+  let model = session.model.clone();
+  let messages = if session.is_subagent() {
+    Vec::new()
+  } else {
+    prediction_messages(session)
+  };
+  let summary = session
+    .summaries
+    .last()
+    .map(|summary| summary.content.clone());
+  let cwd = session.cwd.clone();
+  let config = config.clone();
+  tokio::spawn(async move {
+    let text = match model {
+      Some(model) if !messages.is_empty() => {
+        match run(&config, &model, &cwd, messages, summary).await {
+          Ok(text) => text,
+          Err(e) => {
+            vlog!("Failed to predict next prompt: {e}");
+            String::new()
+          }
+        }
+      }
+      _ => String::new(),
+    };
+    let _ = events
+      .send(SessionEvent::Event(ServerEvent::Prediction {
+        session_id,
+        text,
+      }))
+      .await;
+  });
+}
+
+async fn run(
+  config: &Config,
+  model: &Model,
+  cwd: &str,
+  messages: Vec<Message>,
+  summary: Option<String>,
+) -> Result<String> {
+  let spec = build(config, cwd, model, messages, summary);
+  if spec.messages.is_empty() {
+    return Ok(String::new());
+  }
+
+  let providers = ProviderManager::new(config.clone());
+  let (events, _events_rx) = mpsc::channel(1);
+  let correlation = Correlation {
+    session_id: Uuid::nil(),
+    turn_id: Uuid::nil(),
+  };
+  let cancel = CancellationToken::new();
+  let output = PromptExecutor::new(&providers, config)
+    .once(spec, correlation, &events, &cancel)
+    .await?;
+
+  let Some(content) = output.content else {
+    return Ok(String::new());
+  };
+  let prediction = content
+    .trim()
+    .trim_matches(|c| c == '"' || c == '\'' || c == '`')
+    .trim()
+    .to_string();
+  if prediction.is_empty() {
+    return Ok(String::new());
+  }
+
+  let prediction = truncate(&prediction, MAX_PREDICTION_CHARS);
+  vlog!("Predicted next prompt: {prediction}");
+  return Ok(prediction);
+}
+
+fn prediction_messages(session: &Session) -> Vec<Message> {
+  let mut messages: Vec<Message> = session
+    .build_chat_context()
+    .into_iter()
+    .filter(|message| {
+      (message.role == "user" || message.role == "assistant")
+        && message.tool_calls.is_none()
+        && !message.content.trim().is_empty()
+    })
+    .collect();
+  if messages.len() > MAX_CONTEXT_MESSAGES {
+    messages = messages.split_off(messages.len() - MAX_CONTEXT_MESSAGES);
+  }
+  return messages;
 }

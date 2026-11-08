@@ -288,7 +288,7 @@ impl Adapter {
         session,
       } => {
         self.pending_request_ids.remove(&request_id);
-        self.active_session = Some(session.id);
+        self.active_session = Some(session.summary.id);
         if self.new_session_request == Some(request_id) {
           self.new_session_request = None;
           self.busy = false;

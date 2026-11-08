@@ -22,7 +22,6 @@ use std::time::{Duration, Instant};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
-use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::tui::completion_popup::CompletionPopup;
@@ -35,11 +34,10 @@ use crate::tui::personas_popup::PersonasPopup;
 use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::statusline::StatusLine;
-use fenrir_core::engine::protocol::{CommandInfo, SessionSummary};
-use fenrir_core::persona_manager::Persona;
+use fenrir_core::engine::protocol::{CommandInfo, PersonaInfo, SessionSummary};
 use fenrir_core::provider_manager::ChatUsage;
 use fenrir_core::provider_manager::Model;
-use fenrir_core::session_manager::session::Session;
+use fenrir_core::session_manager::Message;
 use fenrir_core::tool_manager::ToolPreview;
 
 const TOP_PADDING: u16 = 1;
@@ -57,7 +55,7 @@ pub struct Tui {
   confirm_popup: ConfirmPopup,
   completion_popup: CompletionPopup,
   statusline: StatusLine,
-  cancel_token: Option<CancellationToken>,
+  cancel_requested: bool,
   last_escape_time: Option<Instant>,
 }
 
@@ -75,7 +73,7 @@ impl Tui {
       confirm_popup: ConfirmPopup::new(),
       completion_popup: CompletionPopup::new(),
       statusline: StatusLine::new(cwd),
-      cancel_token: None,
+      cancel_requested: false,
       last_escape_time: None,
     };
   }
@@ -100,8 +98,10 @@ impl Tui {
     self.statusline.reset_subagents();
   }
 
-  pub fn set_cancel_token(&mut self, token: CancellationToken) {
-    self.cancel_token = Some(token);
+  pub fn take_cancel_request(&mut self) -> bool {
+    let requested = self.cancel_requested;
+    self.cancel_requested = false;
+    return requested;
   }
 
   pub fn set_persona(&mut self, name: &str) {
@@ -296,22 +296,6 @@ impl Tui {
       let is_shift_enter = key.code == KeyCode::Enter
         && key.modifiers.contains(KeyModifiers::SHIFT);
 
-      if key.code == KeyCode::Esc {
-        self.input.clear_suggestion();
-        if let Some(cancel_token) = &self.cancel_token {
-          let now = Instant::now();
-          if let Some(last) = self.last_escape_time
-            && now.duration_since(last) < Duration::from_secs(1)
-          {
-            cancel_token.cancel();
-            self.last_escape_time = None;
-            return None;
-          }
-          self.last_escape_time = Some(now);
-        }
-        return None;
-      }
-
       if self.confirm_popup.handle_input(key.code) {
         return None;
       }
@@ -344,6 +328,20 @@ impl Tui {
           .handle_input(key.code, &mut self.input)
           .await
       {
+        return None;
+      }
+
+      if key.code == KeyCode::Esc {
+        self.input.clear_suggestion();
+        let now = Instant::now();
+        if let Some(last) = self.last_escape_time
+          && now.duration_since(last) < Duration::from_secs(1)
+        {
+          self.cancel_requested = true;
+          self.last_escape_time = None;
+        } else {
+          self.last_escape_time = Some(now);
+        }
         return None;
       }
 
@@ -427,9 +425,9 @@ impl Tui {
     self.messages_list.append_to_last_message(text);
   }
 
-  pub fn update_messages(&mut self, session: Option<&Session>) {
+  pub fn update_messages(&mut self, messages: Option<&[Message]>) {
     self.clear_suggestion();
-    self.messages_list.update_messages(session);
+    self.messages_list.update_messages(messages);
   }
 
   pub fn update_queued_messages(&mut self, queued_messages: Vec<String>) {
@@ -464,8 +462,8 @@ impl Tui {
 
   pub fn open_personas_popup(
     &mut self,
-    personas: &[Persona],
-    current_persona: Option<&Persona>,
+    personas: &[PersonaInfo],
+    current_persona: Option<&str>,
   ) {
     self
       .personas_popup
@@ -506,6 +504,10 @@ impl Tui {
 
   pub fn open_confirm_popup(&mut self, message: String) {
     self.confirm_popup.open_confirm_popup(message);
+  }
+
+  pub fn close_confirm_popup(&mut self) {
+    self.confirm_popup.close();
   }
 
   pub fn get_confirmation(&mut self) -> bool {

@@ -2,7 +2,6 @@ mod cli;
 
 use clap::Parser;
 use fenrir_cli::input::confirm_with;
-use fenrir_core::app::App;
 use fenrir_core::config::Config;
 use fenrir_core::database::DB;
 use fenrir_core::engine::broker;
@@ -63,8 +62,11 @@ async fn main() {
       }
     }
     Some(Commands::Tui) => {
-      let mut app = App::new(config, db);
-      fenrir_tui::run(&mut app).await
+      let predict_enabled = config.general.predict_next_prompt;
+      let repository = SessionRepository::new(db);
+      let repo = RepoActor::spawn(repository, config.clone());
+      let broker = broker::spawn(config, repo);
+      fenrir_tui::run(&broker, predict_enabled).await
     }
     None => {
       set_print_enabled(true);

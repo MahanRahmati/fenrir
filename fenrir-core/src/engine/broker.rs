@@ -15,7 +15,7 @@ use crate::engine::repo_actor::{RepoHandle, summary_of};
 use crate::engine::session_actor::{
   Control, SessionActor, SessionHandle, SessionRequest,
 };
-use crate::persona_manager::PersonaManager;
+use crate::persona_manager::{DEFAULT_PERSONA, PersonaManager};
 use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::session::Session;
 
@@ -188,7 +188,7 @@ impl Broker {
           )
           .await?;
         let session_id = session.id;
-        let summary = summary_of(&session);
+        let view = view_of(&session);
         self.ensure_actor(session).await?;
         self
           .subscriptions
@@ -199,7 +199,7 @@ impl Broker {
           client_id,
           ServerEvent::SessionCreated {
             request_id,
-            session: summary,
+            session: view,
           },
         );
         return Ok(());
@@ -252,7 +252,7 @@ impl Broker {
           ServerEvent::PersonasListed {
             request_id,
             personas: persona_infos(),
-            current: self.next_persona.clone(),
+            current: self.draft_persona(),
           },
         );
         return Ok(());
@@ -383,14 +383,14 @@ impl Broker {
               )
               .await?;
             let id = session.id;
-            let summary = summary_of(&session);
+            let view = view_of(&session);
             self.ensure_actor(session).await?;
             self.subscriptions.entry(id).or_default().insert(client_id);
             self.send_to(
               client_id,
               ServerEvent::SessionCreated {
                 request_id,
-                session: summary,
+                session: view,
               },
             );
             id
@@ -439,6 +439,16 @@ impl Broker {
             client_id,
           })
           .await?;
+        return Ok(());
+      }
+      ClientRequest::Predict { session_id } => {
+        self.ensure_session(session_id).await?;
+        self.require_subscription(client_id, session_id)?;
+        let handle = self
+          .sessions
+          .get(&session_id)
+          .context("Session actor is not running")?;
+        handle.requests.send(SessionRequest::Predict).await?;
         return Ok(());
       }
       ClientRequest::Cancel {
@@ -519,14 +529,14 @@ impl Broker {
           )
           .await?;
         let id = session.id;
-        let summary = summary_of(&session);
+        let view = view_of(&session);
         self.ensure_actor(session).await?;
         self.subscriptions.entry(id).or_default().insert(client_id);
         self.send_to(
           client_id,
           ServerEvent::SessionCreated {
             request_id,
-            session: summary,
+            session: view,
           },
         );
         return Ok(());
@@ -590,14 +600,14 @@ impl Broker {
               )
               .await?;
             let id = session.id;
-            let summary = summary_of(&session);
+            let view = view_of(&session);
             self.ensure_actor(session).await?;
             self.subscriptions.entry(id).or_default().insert(client_id);
             self.send_to(
               client_id,
               ServerEvent::SessionCreated {
                 request_id,
-                session: summary,
+                session: view,
               },
             );
             id
@@ -823,8 +833,15 @@ impl Broker {
   ) -> Result<Option<String>> {
     return match session_id {
       Some(id) => Ok(Some(self.repo.load_session(id).await?.persona)),
-      None => Ok(self.next_persona.clone()),
+      None => Ok(self.draft_persona()),
     };
+  }
+
+  fn draft_persona(&self) -> Option<String> {
+    return self
+      .next_persona
+      .clone()
+      .or_else(|| Some(DEFAULT_PERSONA.name().to_string()));
   }
 
   async fn current_model(
@@ -899,7 +916,7 @@ fn view_of(session: &Session) -> SessionView {
 
 fn session_id_of(event: &ServerEvent) -> Option<Uuid> {
   return match event {
-    ServerEvent::SessionCreated { session, .. } => Some(session.id),
+    ServerEvent::SessionCreated { session, .. } => Some(session.summary.id),
     ServerEvent::SessionLoaded { session, .. } => Some(session.summary.id),
     ServerEvent::SessionsListed { .. }
     | ServerEvent::PersonasListed { .. }
@@ -945,6 +962,7 @@ fn request_id_of(request: &ClientRequest) -> Option<u64> {
     ClientRequest::Disconnect
     | ClientRequest::Subscribe { .. }
     | ClientRequest::Unsubscribe { .. }
+    | ClientRequest::Predict { .. }
     | ClientRequest::Cancel { .. }
     | ClientRequest::ApproveTool { .. }
     | ClientRequest::Shutdown => None,

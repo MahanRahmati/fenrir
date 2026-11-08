@@ -1,4 +1,4 @@
-mod sink;
+mod adapter;
 pub mod tui;
 
-pub use sink::run;
+pub use adapter::run;

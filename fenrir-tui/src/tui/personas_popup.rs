@@ -4,11 +4,11 @@ use ratatui::text::Line;
 use ratatui::widgets::ListItem;
 
 use crate::tui::popup_list::PopupList;
-use fenrir_core::persona_manager::Persona;
+use fenrir_core::engine::protocol::PersonaInfo;
 
 pub struct PersonasPopup {
   list: PopupList,
-  personas: Vec<Persona>,
+  personas: Vec<PersonaInfo>,
   current_persona: Option<String>,
 }
 
@@ -30,11 +30,11 @@ impl PersonasPopup {
         .map(|&index| {
           let p = &personas[index];
           let marker = match current_persona {
-            Some(name) if name == p.name() => "*",
+            Some(name) if name == &p.name => "*",
             _ => " ",
           };
-          let label = format!("{marker}{}", p.name());
-          let description = format!("- {}", p.description());
+          let label = format!("{marker}{}", p.name);
+          let description = format!("- {}", p.description);
           let spacer_width = popup_width
             .saturating_sub(4)
             .saturating_sub(label.len() + description.len());
@@ -52,15 +52,15 @@ impl PersonasPopup {
 
   pub fn open_personas_popup(
     &mut self,
-    personas: &[Persona],
-    current_persona: Option<&Persona>,
+    personas: &[PersonaInfo],
+    current_persona: Option<&str>,
   ) {
     self.personas = personas.to_vec();
-    self.current_persona = current_persona.map(|p| p.name().to_string());
+    self.current_persona = current_persona.map(str::to_string);
     let searchable = self
       .personas
       .iter()
-      .map(|p| format!("{} {}", p.name(), p.description()))
+      .map(|p| format!("{} {}", p.name, p.description))
       .collect();
     self.list.open(searchable);
   }
@@ -70,7 +70,7 @@ impl PersonasPopup {
       .list
       .take_selected()
       .and_then(|index| self.personas.get(index))
-      .map(|p| p.name().to_string());
+      .map(|p| p.name.clone());
   }
 
   pub fn is_open(&self) -> bool {
