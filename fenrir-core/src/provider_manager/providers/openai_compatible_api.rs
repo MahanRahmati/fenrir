@@ -347,9 +347,11 @@ pub fn parse_sse_chunk(chunk: SSEChunk) -> Option<Result<ChatStreamDelta>> {
           arguments: tc.function.map(|f| f.arguments.unwrap_or_default()),
         })
         .collect();
+      let content = delta.content.filter(|text| !text.is_empty());
+      let reasoning = delta.reasoning_content.filter(|text| !text.is_empty());
       return Some(Ok(ChatStreamDelta {
-        content: delta.content,
-        reasoning: delta.reasoning_content,
+        content,
+        reasoning,
         tool_calls,
         usage: None,
       }));
