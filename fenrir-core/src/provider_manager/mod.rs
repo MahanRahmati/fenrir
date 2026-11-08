@@ -10,6 +10,7 @@ pub use crate::provider_manager::provider::ToolCall;
 use crate::provider_manager::provider::{ChatResponse, ChatStream, Provider};
 use crate::provider_manager::providers::openai_compatible::OpenAICompatibleProvider;
 use crate::provider_manager::providers::openrouter::OpenRouterProvider;
+use crate::provider_manager::providers::zai::ZaiProvider;
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
 use crate::vlog;
@@ -26,6 +27,9 @@ impl ProviderManager {
       providers.push(Box::new(provider));
     }
     if let Some(provider) = setup_openrouter(config.clone()) {
+      providers.push(Box::new(provider));
+    }
+    if let Some(provider) = setup_zai(config.clone()) {
       providers.push(Box::new(provider));
     }
     let default_model = resolve_default_model(&config, &providers);
@@ -160,6 +164,17 @@ fn setup_openrouter(config: Config) -> Option<OpenRouterProvider> {
     return None;
   }
   return Some(OpenRouterProvider::new(
+    config.api_key.clone(),
+    config.models.clone(),
+  ));
+}
+
+fn setup_zai(config: Config) -> Option<ZaiProvider> {
+  let config = config.providers.zai?;
+  if config.models.is_empty() {
+    return None;
+  }
+  return Some(ZaiProvider::new(
     config.api_key.clone(),
     config.models.clone(),
   ));

@@ -50,6 +50,7 @@ impl Default for GeneralConfig {
 pub struct ProvidersConfig {
   pub openai_compatible: Option<OpenAICompatibleConfig>,
   pub open_router: Option<OpenRouterConfig>,
+  pub zai: Option<ZaiConfig>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -62,6 +63,12 @@ pub struct OpenAICompatibleConfig {
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct OpenRouterConfig {
+  pub api_key: Option<String>,
+  pub models: Vec<ProviderModel>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct ZaiConfig {
   pub api_key: Option<String>,
   pub models: Vec<ProviderModel>,
 }
