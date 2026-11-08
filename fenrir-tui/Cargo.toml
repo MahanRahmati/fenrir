@@ -7,9 +7,9 @@ license = "MIT"
 [dependencies]
 fenrir-core = { path = "../fenrir-core" }
 anyhow = "1.0.104"
-tokio = { version = "1.53.2", features = ["macros", "signal", "sync", "time"] }
+tokio = { version = "1.54.1", features = ["macros", "signal", "sync", "time"] }
 ratatui = { version = "0.30.2", features = ["unstable-rendered-line-info"] }
-uuid = { version = "1.27.0", features = ["v7"] }
+uuid = { version = "1.29.1", features = ["v7"] }
 
 [lints]
 workspace = true
