@@ -10,7 +10,7 @@ use ratatui::crossterm::event::{
   PushKeyboardEnhancementFlags,
 };
 use tokio::signal::unix::{SignalKind, signal};
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
 use fenrir_core::command::Command;
@@ -19,7 +19,7 @@ use fenrir_core::engine::protocol::{
   ClientRequest, PersonaInfo, PromptMode, ServerEvent, SessionSummary,
   SessionView, TurnOutcome,
 };
-use fenrir_core::persona_manager::{DEFAULT_PERSONA, REVIEWER_PERSONA};
+use fenrir_core::persona_manager::DEFAULT_PERSONA;
 use fenrir_core::provider_manager::Model;
 
 use crate::tui::Tui;
@@ -50,7 +50,7 @@ struct Adapter {
   client: ClientHandle,
   tui: Tui,
   terminal: ratatui::DefaultTerminal,
-  input: mpsc::Receiver<Event>,
+  input: Receiver<Event>,
   input_open: bool,
   mode: Mode,
   approvals: VecDeque<PendingApproval>,
@@ -65,7 +65,6 @@ struct Adapter {
   prediction_pending: bool,
   predict_after_turn: bool,
   predict_enabled: bool,
-  review_pending: bool,
   server_queue: Vec<String>,
   exiting: bool,
 }
@@ -96,7 +95,6 @@ pub async fn run(broker: &BrokerHandle, predict_enabled: bool) -> Result<()> {
     prediction_pending: false,
     predict_after_turn: false,
     predict_enabled,
-    review_pending: false,
     server_queue: Vec::new(),
     exiting: false,
   };
@@ -248,11 +246,6 @@ impl Adapter {
       return Ok(());
     }
 
-    if command == Command::Review {
-      self.review_pending = true;
-      self.tui.set_persona(REVIEWER_PERSONA.name());
-    }
-
     let request_id = self.take_request_id();
     self.pending_request_ids.insert(request_id);
     self.busy = true;
@@ -278,9 +271,6 @@ impl Adapter {
         self.busy = false;
         self.creating_session = false;
         self.switch_session(&session).await?;
-        if self.review_pending {
-          self.tui.set_persona(REVIEWER_PERSONA.name());
-        }
       }
       ServerEvent::SessionLoaded {
         request_id,
@@ -369,7 +359,6 @@ impl Adapter {
         }
         self.active_turn = Some(correlation.turn_id);
         self.busy = false;
-        self.review_pending = false;
         self.prediction_pending = false;
         self.predict_after_turn = false;
         self.tui.set_processing(true);
@@ -491,7 +480,6 @@ impl Adapter {
           self.active_turn = None;
         }
         self.busy = false;
-        self.review_pending = false;
         self.tui.set_processing(false);
         self.tui.reset_subagents();
         self.clear_approvals(correlation.session_id, correlation.turn_id);
@@ -511,7 +499,6 @@ impl Adapter {
             self.creating_session = false;
           }
         }
-        self.review_pending = false;
         self.tui.add_message(format!("Error: {message}"));
       }
       ServerEvent::SessionStopped { session_id } => {
@@ -780,7 +767,7 @@ impl Adapter {
   }
 }
 
-fn spawn_input_task(tx: mpsc::Sender<Event>) {
+fn spawn_input_task(tx: Sender<Event>) {
   std::thread::spawn(move || {
     loop {
       match event::poll(INPUT_POLL_INTERVAL) {

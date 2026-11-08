@@ -150,10 +150,6 @@ impl Session {
     return self.parent_id.is_some();
   }
 
-  pub fn last_message(&self) -> Option<&Message> {
-    return self.messages.last();
-  }
-
   pub fn has_system_message(&self) -> bool {
     return self.messages.iter().any(|message| message.role == "system");
   }

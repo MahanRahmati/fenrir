@@ -12,7 +12,7 @@ use fenrir_core::engine::protocol::{
   ClientRequest, CommandInfo, PersonaInfo, PromptMode, ServerEvent,
   SessionSummary, SessionView, TurnOutcome,
 };
-use fenrir_core::persona_manager::{DEFAULT_PERSONA, REVIEWER_PERSONA};
+use fenrir_core::persona_manager::DEFAULT_PERSONA;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::Message;
 use fenrir_core::tool_manager::SUBAGENT_TOOL_NAME;
@@ -265,9 +265,6 @@ impl Adapter {
     self.busy = true;
     if command == Command::New {
       self.new_session_request = Some(request_id);
-    }
-    if command == Command::Review {
-      println!("Persona set to: {}", REVIEWER_PERSONA.name());
     }
     self
       .client

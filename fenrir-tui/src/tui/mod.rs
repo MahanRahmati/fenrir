@@ -456,10 +456,6 @@ impl Tui {
     return self.sessions_popup.is_open();
   }
 
-  pub fn handle_sessions_event(&mut self, key: KeyCode) -> bool {
-    return self.sessions_popup.handle_input(key);
-  }
-
   pub fn open_personas_popup(
     &mut self,
     personas: &[PersonaInfo],
@@ -478,10 +474,6 @@ impl Tui {
     return self.personas_popup.is_open();
   }
 
-  pub fn handle_personas_event(&mut self, key: KeyCode) -> bool {
-    return self.personas_popup.handle_input(key);
-  }
-
   pub fn open_models_popup(
     &mut self,
     models: Vec<Model>,
@@ -498,10 +490,6 @@ impl Tui {
     return self.models_popup.get_selected_model();
   }
 
-  pub fn handle_models_event(&mut self, key: KeyCode) -> bool {
-    return self.models_popup.handle_input(key);
-  }
-
   pub fn open_confirm_popup(&mut self, message: String) {
     self.confirm_popup.open_confirm_popup(message);
   }
@@ -516,10 +504,6 @@ impl Tui {
 
   pub fn confirm_popup_open(&self) -> bool {
     return self.confirm_popup.is_open();
-  }
-
-  pub fn handle_confirm_event(&mut self, key: KeyCode) -> bool {
-    return self.confirm_popup.handle_input(key);
   }
 
   pub fn quit(&mut self) {

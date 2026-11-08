@@ -23,6 +23,7 @@ pub struct SessionHandle {
 
 pub enum SessionRequest {
   Turn {
+    request_id: Option<u64>,
     client_id: Uuid,
     mode: PromptMode,
     text: Option<String>,
@@ -50,6 +51,13 @@ pub enum Control {
 }
 
 type TurnFuture = Pin<Box<dyn Future<Output = TurnResult> + Send>>;
+
+struct TurnStart {
+  request_id: Option<u64>,
+  client_id: Uuid,
+  mode: PromptMode,
+  text: Option<String>,
+}
 
 struct TurnResult {
   session: Session,
@@ -126,6 +134,7 @@ impl SessionActor {
           };
           match request {
             SessionRequest::Turn {
+              request_id,
               client_id,
               mode,
               text,
@@ -134,12 +143,25 @@ impl SessionActor {
                 continue;
               }
               if turn.is_some() {
-                self.enqueue_prompt(text).await;
+                match mode {
+                  PromptMode::Normal => self.enqueue_prompt(text).await,
+                  PromptMode::Review => {
+                    self.emit(ServerEvent::Error {
+                      request_id,
+                      session_id: Some(self.id),
+                      message: "Session is busy; retry review when the turn finishes."
+                        .to_string(),
+                    }).await;
+                  }
+                }
               } else {
                 self.start_turn(
-                  client_id,
-                  mode,
-                  text,
+                  TurnStart {
+                    request_id,
+                    client_id,
+                    mode,
+                    text,
+                  },
                   &mut turn,
                   &mut current_turn,
                   &mut current_cancel,
@@ -326,13 +348,17 @@ impl SessionActor {
 
   async fn start_turn(
     &mut self,
-    client_id: Uuid,
-    mode: PromptMode,
-    text: Option<String>,
+    start: TurnStart,
     turn: &mut Option<TurnFuture>,
     current_turn: &mut Option<Uuid>,
     current_cancel: &mut Option<CancellationToken>,
   ) {
+    let TurnStart {
+      request_id,
+      client_id,
+      mode,
+      text,
+    } = start;
     let Some(mut session) = self.session.take() else {
       return;
     };
@@ -364,8 +390,16 @@ impl SessionActor {
         events: &events,
         cancel: &cancel,
       };
-      let outcome =
-        run_turn(&mut session, turn_id, client_id, mode, text, &context).await;
+      let outcome = run_turn(
+        &mut session,
+        turn_id,
+        request_id,
+        client_id,
+        mode,
+        text,
+        &context,
+      )
+      .await;
       TurnResult {
         session,
         turn_id,
@@ -549,9 +583,12 @@ impl SessionActor {
     self.emit_queue().await;
     self
       .start_turn(
-        Uuid::nil(),
-        PromptMode::Normal,
-        Some(message.content),
+        TurnStart {
+          request_id: None,
+          client_id: Uuid::nil(),
+          mode: PromptMode::Normal,
+          text: Some(message.content),
+        },
         turn,
         current_turn,
         current_cancel,

@@ -14,6 +14,7 @@ use crate::session_manager::session::Session;
 pub async fn run_turn(
   session: &mut Session,
   turn_id: Uuid,
+  request_id: Option<u64>,
   client_id: Uuid,
   mode: PromptMode,
   text: Option<String>,
@@ -55,6 +56,16 @@ pub async fn run_turn(
         session.persona_manager.current(),
         &session.cwd,
       ));
+      if let Some(request_id) = request_id {
+        let _ = context
+          .events
+          .send(SessionEvent::Event(ServerEvent::PersonaUpdated {
+            request_id,
+            session_id: Some(session.id),
+            persona: session.persona.clone(),
+          }))
+          .await;
+      }
       prompt
     }
   };

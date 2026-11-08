@@ -405,6 +405,7 @@ impl Broker {
         handle
           .requests
           .send(SessionRequest::Turn {
+            request_id: Some(request_id),
             client_id,
             mode,
             text,
@@ -622,6 +623,7 @@ impl Broker {
         handle
           .requests
           .send(SessionRequest::Turn {
+            request_id: Some(request_id),
             client_id,
             mode: PromptMode::Review,
             text: None,
