@@ -9,6 +9,7 @@ pub use crate::provider_manager::provider::Model;
 pub use crate::provider_manager::provider::ToolCall;
 use crate::provider_manager::provider::{ChatResponse, ChatStream, Provider};
 use crate::provider_manager::providers::openai_compatible::OpenAICompatibleProvider;
+use crate::provider_manager::providers::openrouter::OpenRouterProvider;
 use crate::session_manager::Message;
 use crate::tool_manager::tool::ToolSpec;
 use crate::vlog;
@@ -24,7 +25,9 @@ impl ProviderManager {
     if let Some(provider) = setup_openai_compatible(config.clone()) {
       providers.push(Box::new(provider));
     }
-
+    if let Some(provider) = setup_openrouter(config.clone()) {
+      providers.push(Box::new(provider));
+    }
     let default_model = resolve_default_model(&config, &providers);
     return Self {
       providers,
@@ -146,6 +149,17 @@ fn setup_openai_compatible(config: Config) -> Option<OpenAICompatibleProvider> {
   return Some(OpenAICompatibleProvider::new(
     url.clone(),
     config.name.clone(),
+    config.api_key.clone(),
+    config.models.clone(),
+  ));
+}
+
+fn setup_openrouter(config: Config) -> Option<OpenRouterProvider> {
+  let config = config.providers.open_router?;
+  if config.models.is_empty() {
+    return None;
+  }
+  return Some(OpenRouterProvider::new(
     config.api_key.clone(),
     config.models.clone(),
   ));
