@@ -7,13 +7,14 @@ use uuid::Uuid;
 
 use crate::command::{Command, Effect};
 use crate::config::Config;
+use crate::engine::control::Control;
 use crate::engine::protocol::{
   ApprovalDecision, BrokerRequest, ClientRequest, PersonaInfo, PromptMode,
   ServerEvent, SessionEvent, SessionView,
 };
 use crate::engine::repo_actor::{RepoHandle, summary_of};
 use crate::engine::session_actor::{
-  Control, SessionActor, SessionHandle, SessionRequest,
+  SessionActor, SessionHandle, SessionRequest,
 };
 use crate::persona_manager::{DEFAULT_PERSONA, PersonaManager};
 use crate::provider_manager::{Model, ProviderManager};

@@ -4,11 +4,12 @@ use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 
 use crate::agent::{AgentContext, run_agent_loop};
+use crate::engine::jobs;
 use crate::engine::protocol::{
   Correlation, PromptMode, ServerEvent, SessionEvent, TurnOutcome,
 };
 use crate::persona_manager::REVIEWER_PERSONA;
-use crate::prompt::{compaction, review, system, title};
+use crate::prompt::{compaction, review, system};
 use crate::session_manager::session::Session;
 
 pub async fn run_turn(
@@ -94,7 +95,7 @@ pub async fn run_turn(
     Err(e) => return failed(context.events, correlation, e).await,
   };
 
-  title::spawn_if_needed(session, context.config, context.repo, context.events);
+  jobs::spawn_title(session, context.config, context.repo, context.events);
 
   if let Err(e) = compaction::run_if_needed(
     session,

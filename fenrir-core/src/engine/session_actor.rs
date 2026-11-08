@@ -8,6 +8,8 @@ use uuid::Uuid;
 
 use crate::agent::{AgentContext, run_compact, run_turn};
 use crate::config::Config;
+use crate::engine::control::Control;
+use crate::engine::jobs;
 use crate::engine::protocol::{
   Correlation, PromptMode, ServerEvent, SessionEvent, TurnOutcome,
 };
@@ -44,10 +46,6 @@ pub enum SessionRequest {
   Shutdown {
     reply: Option<oneshot::Sender<()>>,
   },
-}
-
-pub enum Control {
-  Cancel { turn_id: Option<Uuid> },
 }
 
 type TurnFuture = Pin<Box<dyn Future<Output = TurnResult> + Send>>;
@@ -238,11 +236,7 @@ impl SessionActor {
               let Some(session) = self.session.as_ref() else {
                 continue;
               };
-              crate::prompt::prediction::spawn(
-                session,
-                &self.config,
-                self.events.clone(),
-              );
+              jobs::spawn_prediction(session, &self.config, self.events.clone());
             }
             SessionRequest::Shutdown { reply } => {
               shutting_down = true;
