@@ -19,6 +19,7 @@ pub struct Config {
   pub hooks: HooksConfig,
   pub compaction: CompactionConfig,
   pub subagent: SubagentConfig,
+  pub server: ServerConfig,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -176,6 +177,22 @@ impl Default for SubagentConfig {
     return Self {
       enabled: true,
       max_iterations: 100,
+    };
+  }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct ServerConfig {
+  pub host: String,
+  pub port: u16,
+}
+
+impl Default for ServerConfig {
+  fn default() -> Self {
+    return Self {
+      host: "127.0.0.1".to_string(),
+      port: 12345,
     };
   }
 }

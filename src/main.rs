@@ -77,6 +77,13 @@ async fn main() {
       let broker = broker::spawn(config, secrets, repo);
       fenrir_tui::run(&broker, predict_enabled).await
     }
+    Some(Commands::Serve) => {
+      set_print_enabled(true);
+      let repository = SessionRepository::new(db);
+      let repo = RepoActor::spawn(repository, config.clone());
+      let broker = broker::spawn(config.clone(), secrets, repo);
+      fenrir_server::run(&broker, config.server).await
+    }
     None => {
       set_print_enabled(true);
       let repository = SessionRepository::new(db);

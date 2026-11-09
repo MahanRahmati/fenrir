@@ -23,4 +23,6 @@ pub enum Commands {
   },
   /// Run the application in TUI mode
   Tui,
+  /// Run the application as an HTTP server
+  Serve,
 }

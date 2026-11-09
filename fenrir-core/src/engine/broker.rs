@@ -33,6 +33,25 @@ pub struct ClientHandle {
 }
 
 impl ClientHandle {
+  pub fn sender(&self) -> ClientSender {
+    return ClientSender {
+      id: self.id,
+      requests: self.requests.clone(),
+    };
+  }
+
+  pub async fn send(&self, request: ClientRequest) -> Result<()> {
+    return self.sender().send(request).await;
+  }
+}
+
+#[derive(Clone)]
+pub struct ClientSender {
+  pub id: Uuid,
+  requests: Sender<BrokerRequest>,
+}
+
+impl ClientSender {
   pub async fn send(&self, request: ClientRequest) -> Result<()> {
     return self
       .requests
