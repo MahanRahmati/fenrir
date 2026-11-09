@@ -207,8 +207,13 @@ impl Adapter {
       }
     };
 
+    let queueable = match command {
+      None => true,
+      Some(Command::Compact | Command::Review) => true,
+      Some(_) => false,
+    };
     if self.creating_session
-      || (command.is_some() && (self.active_turn.is_some() || self.busy))
+      || (queueable && (self.active_turn.is_some() || self.busy))
     {
       self.pending_lines.push_back(line.to_string());
       self.refresh_queue_display();
