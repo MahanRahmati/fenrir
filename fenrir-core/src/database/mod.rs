@@ -1,6 +1,8 @@
 mod migrations;
 mod queries;
 
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use chrono::Utc;
 use turso::{Database, Rows};
@@ -96,7 +98,7 @@ impl DB {
   fn connect(&self) -> Result<turso::Connection> {
     let conn = self.db.connect().context("Failed to connect to database")?;
     conn
-      .busy_timeout(std::time::Duration::from_millis(500))
+      .busy_timeout(Duration::from_millis(500))
       .context("Failed to set database busy timeout")?;
     return Ok(conn);
   }
