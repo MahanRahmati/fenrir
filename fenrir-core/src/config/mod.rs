@@ -1,3 +1,5 @@
+pub mod secrets;
+
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -57,19 +59,16 @@ pub struct ProvidersConfig {
 pub struct OpenAICompatibleConfig {
   pub url: Option<String>,
   pub name: String,
-  pub api_key: Option<String>,
   pub models: Vec<ProviderModel>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct OpenRouterConfig {
-  pub api_key: Option<String>,
   pub models: Vec<ProviderModel>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ZaiConfig {
-  pub api_key: Option<String>,
   pub models: Vec<ProviderModel>,
 }
 

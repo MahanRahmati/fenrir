@@ -95,7 +95,13 @@ pub async fn run_turn(
     Err(e) => return failed(context.events, correlation, e).await,
   };
 
-  jobs::spawn_title(session, context.config, context.repo, context.events);
+  jobs::spawn_title(
+    session,
+    context.config,
+    context.secrets,
+    context.repo,
+    context.events,
+  );
 
   if let Err(e) = compaction::run_if_needed(
     session,

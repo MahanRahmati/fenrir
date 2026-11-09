@@ -3,6 +3,7 @@ mod cli;
 use clap::Parser;
 use fenrir_cli::input::confirm_with;
 use fenrir_core::config::Config;
+use fenrir_core::config::secrets::Secrets;
 use fenrir_core::database::DB;
 use fenrir_core::engine::broker;
 use fenrir_core::engine::repo_actor::RepoActor;
@@ -27,6 +28,14 @@ async fn main() {
     Ok(config) => config,
     Err(e) => {
       eprintln!("Configuration Error: {e}");
+      std::process::exit(1);
+    }
+  };
+
+  let secrets = match Secrets::load().await {
+    Ok(secrets) => secrets,
+    Err(e) => {
+      eprintln!("Failed to load secrets: {e}");
       std::process::exit(1);
     }
   };
@@ -65,14 +74,14 @@ async fn main() {
       let predict_enabled = config.general.predict_next_prompt;
       let repository = SessionRepository::new(db);
       let repo = RepoActor::spawn(repository, config.clone());
-      let broker = broker::spawn(config, repo);
+      let broker = broker::spawn(config, secrets, repo);
       fenrir_tui::run(&broker, predict_enabled).await
     }
     None => {
       set_print_enabled(true);
       let repository = SessionRepository::new(db);
       let repo = RepoActor::spawn(repository, config.clone());
-      let broker = broker::spawn(config, repo);
+      let broker = broker::spawn(config, secrets, repo);
       fenrir_cli::run(&broker).await
     }
   };

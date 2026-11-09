@@ -7,6 +7,7 @@ use tokio_util::sync::CancellationToken;
 pub use turn::{run_compact, run_turn};
 
 use crate::config::Config;
+use crate::config::secrets::Secrets;
 use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
 use crate::engine::repo_actor::RepoHandle;
 use crate::hook_manager::hook::{
@@ -23,6 +24,7 @@ use crate::vlog;
 
 pub struct AgentContext<'a> {
   pub config: &'a Config,
+  pub secrets: &'a Secrets,
   pub providers: &'a ProviderManager,
   pub repo: &'a RepoHandle,
   pub events: &'a Sender<SessionEvent>,
@@ -191,6 +193,7 @@ async fn execute_tool_calls(
     let outcome = {
       let mut tool_context = ToolContext {
         config: context.config,
+        secrets: context.secrets,
         persona: session.persona_manager.current(),
         model,
         provider_manager: context.providers,
@@ -332,6 +335,7 @@ impl Session {
 
     let agent_context = AgentContext {
       config: context.config,
+      secrets: context.secrets,
       providers: context.provider_manager,
       repo: context.repository,
       events: context.events,

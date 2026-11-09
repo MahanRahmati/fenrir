@@ -4,6 +4,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::config::secrets::Secrets;
 use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
 use crate::persona_manager::PREDICTION_PERSONA;
 use crate::prompt::{PromptExecutor, PromptKind, PromptSpec, system};
@@ -106,7 +107,12 @@ pub fn truncate(content: &str, max_chars: usize) -> String {
   return truncated;
 }
 
-pub fn spawn(session: &Session, config: &Config, events: Sender<SessionEvent>) {
+pub fn spawn(
+  session: &Session,
+  config: &Config,
+  secrets: &Secrets,
+  events: Sender<SessionEvent>,
+) {
   let session_id = session.id;
   let model = session.model.clone();
   let messages = if session.is_subagent() {
@@ -120,10 +126,11 @@ pub fn spawn(session: &Session, config: &Config, events: Sender<SessionEvent>) {
     .map(|summary| summary.content.clone());
   let cwd = session.cwd.clone();
   let config = config.clone();
+  let secrets = secrets.clone();
   tokio::spawn(async move {
     let text = match model {
       Some(model) if !messages.is_empty() => {
-        match run(&config, &model, &cwd, messages, summary).await {
+        match run(&config, &secrets, &model, &cwd, messages, summary).await {
           Ok(text) => text,
           Err(e) => {
             vlog!("Failed to predict next prompt: {e}");
@@ -144,6 +151,7 @@ pub fn spawn(session: &Session, config: &Config, events: Sender<SessionEvent>) {
 
 async fn run(
   config: &Config,
+  secrets: &Secrets,
   model: &Model,
   cwd: &str,
   messages: Vec<Message>,
@@ -154,7 +162,7 @@ async fn run(
     return Ok(String::new());
   }
 
-  let providers = ProviderManager::new(config.clone());
+  let providers = ProviderManager::new(config.clone(), secrets.clone());
   let (events, _events_rx) = mpsc::channel(1);
   let correlation = Correlation {
     session_id: Uuid::nil(),

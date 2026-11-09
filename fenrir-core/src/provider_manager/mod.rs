@@ -4,6 +4,7 @@ mod providers;
 use anyhow::{Context, Result, bail};
 
 use crate::config::Config;
+use crate::config::secrets::Secrets;
 pub use crate::provider_manager::provider::ChatUsage;
 pub use crate::provider_manager::provider::Model;
 pub use crate::provider_manager::provider::ToolCall;
@@ -21,15 +22,20 @@ pub struct ProviderManager {
 }
 
 impl ProviderManager {
-  pub fn new(config: Config) -> Self {
+  pub fn new(config: Config, secrets: Secrets) -> Self {
     let mut providers: Vec<Box<dyn Provider>> = Vec::new();
-    if let Some(provider) = setup_openai_compatible(config.clone()) {
+    if let Some(provider) = setup_openai_compatible(
+      config.clone(),
+      secrets.openai_compatible_key.clone(),
+    ) {
       providers.push(Box::new(provider));
     }
-    if let Some(provider) = setup_openrouter(config.clone()) {
+    if let Some(provider) =
+      setup_openrouter(config.clone(), secrets.open_router_key.clone())
+    {
       providers.push(Box::new(provider));
     }
-    if let Some(provider) = setup_zai(config.clone()) {
+    if let Some(provider) = setup_zai(config.clone(), secrets.zai_key.clone()) {
       providers.push(Box::new(provider));
     }
     let default_model = resolve_default_model(&config, &providers);
@@ -144,7 +150,10 @@ fn resolve_default_model(
   return model;
 }
 
-fn setup_openai_compatible(config: Config) -> Option<OpenAICompatibleProvider> {
+fn setup_openai_compatible(
+  config: Config,
+  api_key: Option<String>,
+) -> Option<OpenAICompatibleProvider> {
   let config = config.providers.openai_compatible?;
   let url = config.url.as_ref()?;
   if config.models.is_empty() {
@@ -153,29 +162,26 @@ fn setup_openai_compatible(config: Config) -> Option<OpenAICompatibleProvider> {
   return Some(OpenAICompatibleProvider::new(
     url.clone(),
     config.name.clone(),
-    config.api_key.clone(),
+    api_key,
     config.models.clone(),
   ));
 }
 
-fn setup_openrouter(config: Config) -> Option<OpenRouterProvider> {
+fn setup_openrouter(
+  config: Config,
+  api_key: Option<String>,
+) -> Option<OpenRouterProvider> {
   let config = config.providers.open_router?;
   if config.models.is_empty() {
     return None;
   }
-  return Some(OpenRouterProvider::new(
-    config.api_key.clone(),
-    config.models.clone(),
-  ));
+  return Some(OpenRouterProvider::new(api_key, config.models.clone()));
 }
 
-fn setup_zai(config: Config) -> Option<ZaiProvider> {
+fn setup_zai(config: Config, api_key: Option<String>) -> Option<ZaiProvider> {
   let config = config.providers.zai?;
   if config.models.is_empty() {
     return None;
   }
-  return Some(ZaiProvider::new(
-    config.api_key.clone(),
-    config.models.clone(),
-  ));
+  return Some(ZaiProvider::new(api_key, config.models.clone()));
 }

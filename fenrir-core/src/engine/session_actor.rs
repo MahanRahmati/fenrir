@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::agent::{AgentContext, run_compact, run_turn};
 use crate::config::Config;
+use crate::config::secrets::Secrets;
 use crate::engine::control::Control;
 use crate::engine::jobs;
 use crate::engine::protocol::{
@@ -67,6 +68,7 @@ pub struct SessionActor {
   id: Uuid,
   session: Option<Session>,
   config: Config,
+  secrets: Secrets,
   repo: RepoHandle,
   events: Sender<SessionEvent>,
   inbox: Receiver<SessionRequest>,
@@ -78,6 +80,7 @@ impl SessionActor {
   pub fn spawn(
     session: Session,
     config: Config,
+    secrets: Secrets,
     repo: RepoHandle,
     events: Sender<SessionEvent>,
   ) -> SessionHandle {
@@ -88,6 +91,7 @@ impl SessionActor {
       id,
       session: Some(session),
       config,
+      secrets,
       repo,
       events,
       inbox: request_rx,
@@ -236,7 +240,7 @@ impl SessionActor {
               let Some(session) = self.session.as_ref() else {
                 continue;
               };
-              jobs::spawn_prediction(session, &self.config, self.events.clone());
+              jobs::spawn_prediction(session, &self.config, &self.secrets, self.events.clone());
             }
             SessionRequest::Shutdown { reply } => {
               shutting_down = true;
@@ -303,7 +307,7 @@ impl SessionActor {
               .and_then(|session| session.model.clone())
             {
               Some(model) => {
-                ProviderManager::new(self.config.clone())
+                ProviderManager::new(self.config.clone(), self.secrets.clone())
                   .context_window(&model)
                   .await
               }
@@ -372,13 +376,15 @@ impl SessionActor {
       .await;
 
     let config = self.config.clone();
+    let secrets = self.secrets.clone();
     let repo = self.repo.clone();
     let events = self.events.clone();
-    let providers = ProviderManager::new(config.clone());
+    let providers = ProviderManager::new(config.clone(), secrets.clone());
 
     *turn = Some(Box::pin(async move {
       let context = AgentContext {
         config: &config,
+        secrets: &secrets,
         providers: &providers,
         repo: &repo,
         events: &events,
@@ -429,13 +435,15 @@ impl SessionActor {
       .await;
 
     let config = self.config.clone();
+    let secrets = self.secrets.clone();
     let repo = self.repo.clone();
     let events = self.events.clone();
-    let providers = ProviderManager::new(config.clone());
+    let providers = ProviderManager::new(config.clone(), secrets.clone());
 
     *turn = Some(Box::pin(async move {
       let context = AgentContext {
         config: &config,
+        secrets: &secrets,
         providers: &providers,
         repo: &repo,
         events: &events,

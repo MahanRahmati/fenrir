@@ -3,6 +3,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::config::secrets::Secrets;
 use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
 use crate::engine::repo_actor::RepoHandle;
 use crate::mentions::strip_mentions;
@@ -33,6 +34,7 @@ pub fn build(
 pub fn spawn_if_needed(
   session: &mut Session,
   config: &Config,
+  secrets: &Secrets,
   repo: &RepoHandle,
   events: &Sender<SessionEvent>,
 ) {
@@ -56,6 +58,7 @@ pub fn spawn_if_needed(
   let session_id = session.id;
   let cwd = session.cwd.clone();
   let config = config.clone();
+  let secrets = secrets.clone();
   let repo = repo.clone();
   let events = events.clone();
 
@@ -70,7 +73,7 @@ pub fn spawn_if_needed(
       tool_calls: None,
       timestamp: now,
     };
-    let providers = ProviderManager::new(config.clone());
+    let providers = ProviderManager::new(config.clone(), secrets.clone());
     let spec = build(&config, &cwd, &model, message);
     let correlation = Correlation {
       session_id,

@@ -6,6 +6,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::config::secrets::Secrets;
 use crate::engine::protocol::{Correlation, SessionEvent};
 use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::Persona;
@@ -16,6 +17,7 @@ pub type ToolParams = HashMap<String, String>;
 
 pub struct ToolContext<'a> {
   pub config: &'a Config,
+  pub secrets: &'a Secrets,
   pub persona: &'a Persona,
   pub model: &'a Model,
   pub provider_manager: &'a ProviderManager,

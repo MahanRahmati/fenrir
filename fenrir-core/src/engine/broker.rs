@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::command::{Command, Effect};
 use crate::config::Config;
+use crate::config::secrets::Secrets;
 use crate::engine::control::Control;
 use crate::engine::protocol::{
   ApprovalDecision, BrokerRequest, ClientRequest, PersonaInfo, PromptMode,
@@ -78,6 +79,7 @@ struct PendingApproval {
 
 struct Broker {
   config: Config,
+  secrets: Secrets,
   repo: RepoHandle,
   requests: Receiver<BrokerRequest>,
   session_events: Receiver<SessionEvent>,
@@ -90,12 +92,18 @@ struct Broker {
   default_model: Option<Model>,
 }
 
-pub fn spawn(config: Config, repo: RepoHandle) -> BrokerHandle {
+pub fn spawn(
+  config: Config,
+  secrets: Secrets,
+  repo: RepoHandle,
+) -> BrokerHandle {
   let (request_tx, request_rx) = mpsc::channel(256);
   let (event_tx, event_rx) = mpsc::channel(512);
-  let default_model = ProviderManager::new(config.clone()).default_model();
+  let default_model =
+    ProviderManager::new(config.clone(), secrets.clone()).default_model();
   let broker = Broker {
     config,
+    secrets,
     repo,
     requests: request_rx,
     session_events: event_rx,
@@ -262,7 +270,8 @@ impl Broker {
         request_id,
         session_id,
       } => {
-        let providers = ProviderManager::new(self.config.clone());
+        let providers =
+          ProviderManager::new(self.config.clone(), self.secrets.clone());
         let current = self.current_model(session_id).await?;
         self.send_to(
           client_id,
@@ -567,7 +576,8 @@ impl Broker {
         return Ok(());
       }
       Effect::ListModels => {
-        let providers = ProviderManager::new(self.config.clone());
+        let providers =
+          ProviderManager::new(self.config.clone(), self.secrets.clone());
         let current = self.current_model(session_id).await?;
         self.send_to(
           client_id,
@@ -682,6 +692,7 @@ impl Broker {
     let handle = SessionActor::spawn(
       session,
       self.config.clone(),
+      self.secrets.clone(),
       self.repo.clone(),
       self.session_event_tx.clone(),
     );
