@@ -6,6 +6,7 @@ use uuid::Uuid;
 pub struct ToolApprovalRequest {
   pub tool_call_id: String,
   pub session_id: Uuid,
+  pub turn_id: Option<Uuid>,
   pub tool_name: String,
   pub message: String,
   pub created_at: i64,
@@ -15,6 +16,7 @@ impl ToolApprovalRequest {
   pub fn new(
     tool_call_id: String,
     session_id: Uuid,
+    turn_id: Option<Uuid>,
     tool_name: String,
     message: String,
   ) -> Self {
@@ -22,6 +24,7 @@ impl ToolApprovalRequest {
     return Self {
       tool_call_id,
       session_id,
+      turn_id,
       tool_name,
       message,
       created_at: now,

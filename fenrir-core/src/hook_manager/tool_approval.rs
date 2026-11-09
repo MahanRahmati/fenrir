@@ -80,6 +80,7 @@ impl PreToolHook for ToolApprovalHook {
     let request = ToolApprovalRequest::new(
       tool_call_id.clone(),
       context.session_id,
+      Some(context.correlation.turn_id),
       tool_call.name.to_string(),
       message.clone(),
     );

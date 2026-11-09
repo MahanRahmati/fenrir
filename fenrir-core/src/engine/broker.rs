@@ -10,8 +10,8 @@ use crate::config::Config;
 use crate::config::secrets::Secrets;
 use crate::engine::control::Control;
 use crate::engine::protocol::{
-  ApprovalDecision, BrokerRequest, ClientRequest, PersonaInfo, PromptMode,
-  ServerEvent, SessionEvent, SessionView,
+  ApprovalDecision, BrokerRequest, ClientRequest, Correlation, PersonaInfo,
+  PromptMode, ServerEvent, SessionEvent, SessionView,
 };
 use crate::engine::repo_actor::{RepoHandle, summary_of};
 use crate::engine::session_actor::{
@@ -19,7 +19,9 @@ use crate::engine::session_actor::{
 };
 use crate::persona_manager::{DEFAULT_PERSONA, PersonaManager};
 use crate::provider_manager::{Model, ProviderManager};
+use crate::session_manager::ToolApprovalStatus;
 use crate::session_manager::session::Session;
+use crate::vlog;
 
 #[derive(Clone)]
 pub struct BrokerHandle {
@@ -92,7 +94,6 @@ struct ClientState {
 }
 
 struct PendingApproval {
-  event: ServerEvent,
   reply: oneshot::Sender<ApprovalDecision>,
 }
 
@@ -260,7 +261,7 @@ impl Broker {
           },
         );
         self.send_queue(client_id, session_id).await;
-        self.send_pending_approvals(client_id, session_id);
+        self.send_pending_approvals(client_id, session_id).await;
         return Ok(());
       }
       ClientRequest::ListSessions { request_id } => {
@@ -376,21 +377,12 @@ impl Broker {
           .or_default()
           .insert(client_id);
         self.send_queue(client_id, session_id).await;
-        self.send_pending_approvals(client_id, session_id);
+        self.send_pending_approvals(client_id, session_id).await;
         return Ok(());
       }
       ClientRequest::Unsubscribe { session_id } => {
-        let orphaned = match self.subscriptions.get_mut(&session_id) {
-          Some(set) => {
-            set.remove(&client_id);
-            set.is_empty()
-          }
-          None => false,
-        };
-        if orphaned {
-          self
-            .pending_approvals
-            .retain(|(id, _, _), _| *id != session_id);
+        if let Some(set) = self.subscriptions.get_mut(&session_id) {
+          set.remove(&client_id);
         }
         return Ok(());
       }
@@ -500,30 +492,49 @@ impl Broker {
         approved,
       } => {
         self.require_subscription(client_id, session_id)?;
-        let key = (session_id, turn_id, tool_call_id);
-        return match self.pending_approvals.remove(&key) {
-          Some(pending) => {
-            let decision = if approved {
-              ApprovalDecision::Approved
-            } else {
-              ApprovalDecision::Denied
-            };
-            let _ = pending.reply.send(decision);
-            Ok(())
-          }
-          None => {
-            self.send_to(
-              client_id,
-              ServerEvent::Error {
-                request_id: None,
-                session_id: Some(session_id),
-                message: "Approval request is already resolved or unknown."
-                  .to_string(),
-              },
-            );
-            Ok(())
-          }
+        let key = (session_id, turn_id, tool_call_id.clone());
+        let decision = if approved {
+          ApprovalDecision::Approved
+        } else {
+          ApprovalDecision::Denied
         };
+        if let Some(pending) = self.pending_approvals.remove(&key) {
+          let _ = pending.reply.send(decision);
+          return Ok(());
+        }
+
+        let status = if approved {
+          ToolApprovalStatus::Approved
+        } else {
+          ToolApprovalStatus::Denied
+        };
+        if let Err(error) = self
+          .repo
+          .resolve_tool_approval(&tool_call_id, status.clone())
+          .await
+        {
+          self.send_to(
+            client_id,
+            ServerEvent::Error {
+              request_id: None,
+              session_id: Some(session_id),
+              message: format!("Failed to resolve tool approval: {error}"),
+            },
+          );
+          return Ok(());
+        }
+        self.broadcast(
+          session_id,
+          ServerEvent::ToolApprovalResult {
+            correlation: Correlation {
+              session_id,
+              turn_id,
+            },
+            tool_call_id,
+            status,
+          },
+        );
+        return Ok(());
       }
       ClientRequest::Shutdown => return Ok(()),
     }
@@ -771,10 +782,7 @@ impl Broker {
               correlation.turn_id,
               tool_call_id.clone(),
             ),
-            PendingApproval {
-              event: event.clone(),
-              reply,
-            },
+            PendingApproval { reply },
           );
         }
         self.broadcast_event(event);
@@ -805,15 +813,35 @@ impl Broker {
     );
   }
 
-  fn send_pending_approvals(&mut self, client_id: Uuid, session_id: Uuid) {
-    let events: Vec<ServerEvent> = self
-      .pending_approvals
-      .iter()
-      .filter(|((id, _, _), _)| *id == session_id)
-      .map(|(_, pending)| pending.event.clone())
-      .collect();
-    for event in events {
-      self.send_to(client_id, event);
+  async fn send_pending_approvals(
+    &mut self,
+    client_id: Uuid,
+    session_id: Uuid,
+  ) {
+    let approvals =
+      match self.repo.load_pending_tool_approvals(session_id).await {
+        Ok(approvals) => approvals,
+        Err(error) => {
+          vlog!("Failed to load pending tool approvals: {error}");
+          return;
+        }
+      };
+    for approval in approvals {
+      let Some(turn_id) = approval.turn_id else {
+        continue;
+      };
+      self.send_to(
+        client_id,
+        ServerEvent::ToolApprovalRequest {
+          correlation: Correlation {
+            session_id,
+            turn_id,
+          },
+          tool_call_id: approval.tool_call_id,
+          tool_name: approval.tool_name,
+          message: approval.message,
+        },
+      );
     }
   }
 

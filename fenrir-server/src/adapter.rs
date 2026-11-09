@@ -8,11 +8,10 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 
+use fenrir_core::client::Client;
 use fenrir_core::config::ServerConfig;
-use fenrir_core::engine::broker::{BrokerHandle, ClientHandle};
-use fenrir_core::engine::protocol::{
-  ClientRequest, ServerEvent, SessionSummary,
-};
+use fenrir_core::engine::broker::BrokerHandle;
+use fenrir_core::engine::protocol::{ServerEvent, SessionSummary};
 use fenrir_core::vlog;
 use tokio::time;
 
@@ -27,31 +26,23 @@ enum AdapterRequest {
   },
 }
 
-enum Pending {
-  ListSessions {
-    reply: oneshot::Sender<Result<Vec<SessionSummary>>>,
-  },
-}
-
 struct Adapter {
-  client: ClientHandle,
+  client: Client,
   requests: Receiver<AdapterRequest>,
-  pending: HashMap<u64, Pending>,
-  next_request_id: u64,
+  pending: HashMap<u64, oneshot::Sender<Result<Vec<SessionSummary>>>>,
 }
 
 pub async fn run(broker: &BrokerHandle, config: ServerConfig) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|path| path.display().to_string())
     .unwrap_or_default();
-  let client = broker.connect(&cwd).await?;
+  let client = Client::connect(broker, &cwd).await?;
   let (requests, inbox) = mpsc::channel(64);
   let handle = AdapterHandle { requests };
   let mut adapter = Adapter {
     client,
     requests: inbox,
     pending: HashMap::new(),
-    next_request_id: 1,
   };
   let app = routes::router().with_state(handle);
 
@@ -104,7 +95,7 @@ impl Adapter {
           };
           self.handle_request(request).await;
         }
-        event = self.client.events.recv() => {
+        event = self.client.recv() => {
           let Some(event) = event else {
             break;
           };
@@ -117,17 +108,13 @@ impl Adapter {
   async fn handle_request(&mut self, request: AdapterRequest) {
     match request {
       AdapterRequest::ListSessions { reply } => {
-        let request_id = self.next_request_id;
-        self.next_request_id += 1;
-        self
-          .pending
-          .insert(request_id, Pending::ListSessions { reply });
-        if let Err(error) = self
-          .client
-          .send(ClientRequest::ListSessions { request_id })
-          .await
-        {
-          self.fail(request_id, error);
+        match self.client.list_sessions().await {
+          Ok(request_id) => {
+            self.pending.insert(request_id, reply);
+          }
+          Err(error) => {
+            let _ = reply.send(Err(error));
+          }
         }
       }
     }
@@ -135,59 +122,31 @@ impl Adapter {
 
   fn handle_event(&mut self, event: ServerEvent) {
     vlog!("[server] event: {event:?}");
-    let Some(request_id) = event_request_id(&event) else {
-      return;
-    };
-    let Some(pending) = self.pending.remove(&request_id) else {
-      return;
-    };
-    match pending {
-      Pending::ListSessions { reply } => {
-        let result = match event {
-          ServerEvent::SessionsListed { sessions, .. } => Ok(sessions),
-          ServerEvent::Error { message, .. } => Err(anyhow!(message)),
-          other => {
-            Err(anyhow!("Unexpected response to list sessions: {other:?}"))
-          }
-        };
-        let _ = reply.send(result);
+    match event {
+      ServerEvent::SessionsListed {
+        request_id,
+        sessions,
+      } => {
+        if let Some(reply) = self.pending.remove(&request_id) {
+          let _ = reply.send(Ok(sessions));
+        }
       }
-    }
-  }
-
-  fn fail(&mut self, request_id: u64, error: anyhow::Error) {
-    let Some(pending) = self.pending.remove(&request_id) else {
-      return;
-    };
-    match pending {
-      Pending::ListSessions { reply } => {
-        let _ = reply.send(Err(error));
+      ServerEvent::Error {
+        request_id: Some(request_id),
+        message,
+        ..
+      } => {
+        if let Some(reply) = self.pending.remove(&request_id) {
+          let _ = reply.send(Err(anyhow!(message)));
+        }
       }
+      _ => {}
     }
   }
 
   async fn shutdown(&mut self) {
-    let _ = time::timeout(
-      SHUTDOWN_TIMEOUT,
-      self.client.send(ClientRequest::Shutdown),
-    )
-    .await;
+    let _ = time::timeout(SHUTDOWN_TIMEOUT, self.client.shutdown()).await;
   }
-}
-
-fn event_request_id(event: &ServerEvent) -> Option<u64> {
-  return match event {
-    ServerEvent::SessionCreated { request_id, .. }
-    | ServerEvent::SessionLoaded { request_id, .. }
-    | ServerEvent::SessionsListed { request_id, .. }
-    | ServerEvent::PersonasListed { request_id, .. }
-    | ServerEvent::ModelsListed { request_id, .. }
-    | ServerEvent::PersonaUpdated { request_id, .. }
-    | ServerEvent::ModelUpdated { request_id, .. }
-    | ServerEvent::CommandCatalog { request_id, .. } => Some(*request_id),
-    ServerEvent::Error { request_id, .. } => *request_id,
-    _ => None,
-  };
 }
 
 async fn shutdown_signal() {

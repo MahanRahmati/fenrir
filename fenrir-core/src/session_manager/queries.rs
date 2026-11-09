@@ -13,6 +13,8 @@ pub const INSERT_SUMMARY: &str = include_str!("queries/insert_summary.sql");
 pub const LOAD_SUMMARIES: &str = include_str!("queries/load_summaries.sql");
 pub const INSERT_TOOL_APPROVAL: &str =
   include_str!("queries/insert_tool_approval.sql");
+pub const LOAD_PENDING_TOOL_APPROVALS: &str =
+  include_str!("queries/load_pending_tool_approvals.sql");
 pub const RESOLVE_TOOL_APPROVAL: &str =
   include_str!("queries/resolve_tool_approval.sql");
 pub const INSERT_QUEUED_MESSAGE: &str =

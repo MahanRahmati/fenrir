@@ -87,6 +87,10 @@ pub enum RepoRequest {
     request: ToolApprovalRequest,
     reply: oneshot::Sender<Result<()>>,
   },
+  LoadPendingToolApprovals {
+    session_id: Uuid,
+    reply: oneshot::Sender<Result<Vec<ToolApprovalRequest>>>,
+  },
   ResolveToolApproval {
     tool_call_id: String,
     status: ToolApprovalStatus,
@@ -301,6 +305,18 @@ impl RepoHandle {
     return rx.await?;
   }
 
+  pub async fn load_pending_tool_approvals(
+    &self,
+    session_id: Uuid,
+  ) -> Result<Vec<ToolApprovalRequest>> {
+    let (reply, rx) = oneshot::channel();
+    self
+      .tx
+      .send(RepoRequest::LoadPendingToolApprovals { session_id, reply })
+      .await?;
+    return rx.await?;
+  }
+
   pub async fn resolve_tool_approval(
     &self,
     tool_call_id: &str,
@@ -453,6 +469,10 @@ impl RepoActor {
       }
       RepoRequest::InsertToolApproval { request, reply } => {
         let result = self.repo.insert_tool_approval(&request).await;
+        let _ = reply.send(result);
+      }
+      RepoRequest::LoadPendingToolApprovals { session_id, reply } => {
+        let result = self.repo.load_pending_tool_approvals(session_id).await;
         let _ = reply.send(result);
       }
       RepoRequest::ResolveToolApproval {

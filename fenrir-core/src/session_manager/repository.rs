@@ -351,6 +351,7 @@ impl SessionRepository {
         (
           request.tool_call_id.as_str(),
           request.session_id.to_string(),
+          request.turn_id.map(|id| id.to_string()),
           request.tool_name.as_str(),
           request.message.as_str(),
           request.created_at,
@@ -362,6 +363,52 @@ impl SessionRepository {
         request.tool_call_id
       ))?;
     return Ok(());
+  }
+
+  pub async fn load_pending_tool_approvals(
+    &self,
+    session_id: Uuid,
+  ) -> Result<Vec<ToolApprovalRequest>> {
+    let mut rows = self
+      .db
+      .query(LOAD_PENDING_TOOL_APPROVALS, (session_id.to_string(),))
+      .await
+      .context(format!(
+        "Failed to load pending tool approvals for session '{session_id}'"
+      ))?;
+
+    let mut approvals = Vec::new();
+    while let Ok(Some(row)) = rows.next().await {
+      let tool_call_id: String = match row.get(0) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let turn_id: Option<String> = row.get(2).ok();
+      let turn_id = turn_id.and_then(|id| Uuid::parse_str(&id).ok());
+      let tool_name: String = match row.get(3) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let message: String = match row.get(4) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      let created_at: i64 = match row.get(6) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+
+      approvals.push(ToolApprovalRequest {
+        tool_call_id,
+        session_id,
+        turn_id,
+        tool_name,
+        message,
+        created_at,
+      });
+    }
+
+    return Ok(approvals);
   }
 
   pub async fn resolve_tool_approval(

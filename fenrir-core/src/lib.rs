@@ -2,6 +2,7 @@
 
 pub mod agent;
 mod capability;
+pub mod client;
 pub mod command;
 pub mod config;
 pub mod database;

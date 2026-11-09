@@ -6,11 +6,11 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
+use fenrir_core::client::Client;
 use fenrir_core::command::Command;
-use fenrir_core::engine::broker::{BrokerHandle, ClientHandle};
+use fenrir_core::engine::broker::BrokerHandle;
 use fenrir_core::engine::protocol::{
-  ClientRequest, CommandInfo, PersonaInfo, PromptMode, ServerEvent,
-  SessionSummary, SessionView, TurnOutcome,
+  CommandInfo, PersonaInfo, ServerEvent, SessionSummary, SessionView,
 };
 use fenrir_core::persona_manager::DEFAULT_PERSONA;
 use fenrir_core::provider_manager::Model;
@@ -40,17 +40,11 @@ enum Mode {
 }
 
 struct Adapter {
-  client: ClientHandle,
+  client: Client,
   input: Receiver<Option<String>>,
   input_queue: VecDeque<String>,
   eof: bool,
   mode: Mode,
-  active_session: Option<Uuid>,
-  active_turn: Option<Uuid>,
-  awaiting_usage: Option<Uuid>,
-  busy: bool,
-  next_request_id: u64,
-  pending_request_ids: HashSet<u64>,
   new_session_request: Option<u64>,
   reasoning_open: bool,
   reasoning_ends_with_newline: bool,
@@ -60,7 +54,7 @@ pub async fn run(broker: &BrokerHandle) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|path| path.display().to_string())
     .unwrap_or_default();
-  let client = broker.connect(&cwd).await?;
+  let client = Client::connect(broker, &cwd).await?;
   let (input_tx, input_rx) = mpsc::channel(32);
   spawn_input_task(input_tx);
   let mut adapter = Adapter {
@@ -69,12 +63,6 @@ pub async fn run(broker: &BrokerHandle) -> Result<()> {
     input_queue: VecDeque::new(),
     eof: false,
     mode: Mode::Idle,
-    active_session: None,
-    active_turn: None,
-    awaiting_usage: None,
-    busy: false,
-    next_request_id: 1,
-    pending_request_ids: HashSet::new(),
     new_session_request: None,
     reasoning_open: false,
     reasoning_ends_with_newline: false,
@@ -92,7 +80,7 @@ impl Adapter {
     loop {
       tokio::select! {
         biased;
-        event = self.client.events.recv() => {
+        event = self.client.recv() => {
           match event {
             Some(event) => {
               if self.handle_event(event).await? {
@@ -109,7 +97,9 @@ impl Adapter {
           }
         }
         _ = sigint.recv() => {
-          if self.active_turn.is_some() || self.busy {
+          if self.client.state().active_turn.is_some()
+            || self.client.state().is_pending()
+          {
             self.cancel_turn().await?;
           } else {
             self.shutdown().await?;
@@ -128,9 +118,8 @@ impl Adapter {
 
       if self.eof
         && self.input_queue.is_empty()
-        && !self.busy
-        && self.active_turn.is_none()
-        && self.awaiting_usage.is_none()
+        && !self.client.state().is_busy()
+        && self.client.state().awaiting_usage.is_none()
         && matches!(self.mode, Mode::Idle)
       {
         self.shutdown().await?;
@@ -144,9 +133,8 @@ impl Adapter {
   async fn process_input(&mut self) -> Result<bool> {
     loop {
       if matches!(self.mode, Mode::Idle)
-        && (self.busy
-          || self.active_turn.is_some()
-          || self.awaiting_usage.is_some())
+        && (self.client.state().is_busy()
+          || self.client.state().awaiting_usage.is_some())
       {
         return Ok(false);
       }
@@ -163,58 +151,32 @@ impl Adapter {
         } => {
           self
             .client
-            .send(ClientRequest::ApproveTool {
-              session_id,
-              turn_id,
-              tool_call_id,
-              approved: is_yes(&line),
-            })
+            .approve_tool(session_id, turn_id, tool_call_id, is_yes(&line))
             .await?;
           false
         }
         Mode::Sessions { sessions } => {
           if let Some(index) = parse_index(&line, sessions.len(), "session") {
-            let request_id = self.take_request_id();
-            self.pending_request_ids.insert(request_id);
-            self.busy = true;
-            self
-              .client
-              .send(ClientRequest::LoadSession {
-                request_id,
-                session_id: sessions[index].id,
-              })
-              .await?;
+            self.client.load_session(sessions[index].id).await?;
           }
           false
         }
         Mode::Personas { personas } => {
           if let Some(index) = parse_index(&line, personas.len(), "persona") {
-            let request_id = self.take_request_id();
-            self.pending_request_ids.insert(request_id);
-            self.busy = true;
+            let session_id = self.client.state().active_session;
             self
               .client
-              .send(ClientRequest::SetPersona {
-                request_id,
-                session_id: self.active_session,
-                name: personas[index].name.clone(),
-              })
+              .set_persona_for(session_id, personas[index].name.clone())
               .await?;
           }
           false
         }
         Mode::Models { models } => {
           if let Some(index) = parse_index(&line, models.len(), "model") {
-            let request_id = self.take_request_id();
-            self.pending_request_ids.insert(request_id);
-            self.busy = true;
+            let session_id = self.client.state().active_session;
             self
               .client
-              .send(ClientRequest::SetModel {
-                request_id,
-                session_id: self.active_session,
-                model: models[index].clone(),
-              })
+              .set_model_for(session_id, models[index].clone())
               .await?;
           }
           false
@@ -234,18 +196,7 @@ impl Adapter {
     let command = match Command::parse(line) {
       Ok(Some(command)) => command,
       Ok(None) => {
-        let request_id = self.take_request_id();
-        self.pending_request_ids.insert(request_id);
-        self.busy = true;
-        self
-          .client
-          .send(ClientRequest::SendPrompt {
-            request_id,
-            session_id: self.active_session,
-            mode: PromptMode::Normal,
-            text: Some(line.to_string()),
-          })
-          .await?;
+        self.client.send_prompt(line.to_string()).await?;
         return Ok(false);
       }
       Err(e) => {
@@ -260,20 +211,10 @@ impl Adapter {
       return Ok(true);
     }
 
-    let request_id = self.take_request_id();
-    self.pending_request_ids.insert(request_id);
-    self.busy = true;
+    let request_id = self.client.run_command(command).await?;
     if command == Command::New {
       self.new_session_request = Some(request_id);
     }
-    self
-      .client
-      .send(ClientRequest::RunCommand {
-        request_id,
-        session_id: self.active_session,
-        command,
-      })
-      .await?;
     return Ok(false);
   }
 
@@ -282,79 +223,40 @@ impl Adapter {
       ServerEvent::Connected { .. } => {}
       ServerEvent::SessionCreated {
         request_id,
-        session,
+        session: _,
       } => {
-        self.pending_request_ids.remove(&request_id);
-        self.active_session = Some(session.summary.id);
         if self.new_session_request == Some(request_id) {
           self.new_session_request = None;
-          self.busy = false;
           println!("Persona set to: {}", DEFAULT_PERSONA.name());
         }
       }
-      ServerEvent::SessionLoaded {
-        request_id,
-        session,
-      } => {
-        self.pending_request_ids.remove(&request_id);
-        self.busy = false;
-        self.active_session = Some(session.summary.id);
+      ServerEvent::SessionLoaded { session, .. } => {
         print_session(&session);
       }
-      ServerEvent::SessionsListed {
-        request_id,
-        sessions,
-      } => {
-        self.pending_request_ids.remove(&request_id);
-        self.busy = false;
+      ServerEvent::SessionsListed { sessions, .. } => {
         self.open_sessions(sessions);
       }
       ServerEvent::PersonasListed {
-        request_id,
-        personas,
-        current,
+        personas, current, ..
       } => {
-        self.pending_request_ids.remove(&request_id);
-        self.busy = false;
         self.open_personas(personas, current);
       }
       ServerEvent::ModelsListed {
-        request_id,
-        models,
-        current,
+        models, current, ..
       } => {
-        self.pending_request_ids.remove(&request_id);
-        self.busy = false;
         self.open_models(models, current);
       }
-      ServerEvent::PersonaUpdated {
-        request_id,
-        persona,
-        ..
-      } => {
-        self.pending_request_ids.remove(&request_id);
-        self.busy = false;
+      ServerEvent::PersonaUpdated { persona, .. } => {
         println!("Persona set to: {persona}");
       }
-      ServerEvent::ModelUpdated {
-        request_id, model, ..
-      } => {
-        self.pending_request_ids.remove(&request_id);
-        self.busy = false;
+      ServerEvent::ModelUpdated { model, .. } => {
         println!("Model set to: {}", model.label());
       }
-      ServerEvent::CommandCatalog {
-        request_id,
-        commands,
-      } => {
-        self.pending_request_ids.remove(&request_id);
-        self.busy = false;
+      ServerEvent::CommandCatalog { commands, .. } => {
         print_commands(&commands);
       }
       ServerEvent::UserMessage { .. } => {}
-      ServerEvent::TurnStarted { correlation, .. } => {
-        self.busy = true;
-        self.active_turn = Some(correlation.turn_id);
+      ServerEvent::TurnStarted { .. } => {
         println!("[Processing...]");
         flush();
       }
@@ -402,14 +304,10 @@ impl Adapter {
         flush();
       }
       ServerEvent::Usage {
-        correlation,
         usage,
         context_window,
         ..
       } => {
-        if self.awaiting_usage == Some(correlation.turn_id) {
-          self.awaiting_usage = None;
-        }
         let usage = usage
           .and_then(|usage| format_usage(usage.prompt_tokens, context_window));
         if let Some(usage) = usage {
@@ -424,18 +322,7 @@ impl Adapter {
       ServerEvent::Prediction { .. } => {}
       ServerEvent::TitleUpdated { .. } => {}
       ServerEvent::QueueUpdated { .. } => {}
-      ServerEvent::TurnFinished {
-        correlation,
-        outcome,
-      } => {
-        if self.active_turn == Some(correlation.turn_id) {
-          self.active_turn = None;
-        }
-        self.awaiting_usage = match outcome {
-          TurnOutcome::Completed { .. } => Some(correlation.turn_id),
-          TurnOutcome::Cancelled | TurnOutcome::Failed { .. } => None,
-        };
-        self.busy = false;
+      ServerEvent::TurnFinished { .. } => {
         println!();
         flush();
       }
@@ -444,24 +331,13 @@ impl Adapter {
         message,
         ..
       } => {
-        if let Some(request_id) = request_id {
-          self.pending_request_ids.remove(&request_id);
-          if self.new_session_request == Some(request_id) {
-            self.new_session_request = None;
-          }
-          if self.active_turn.is_none() {
-            self.busy = false;
-          }
+        if request_id.is_some() && self.new_session_request == request_id {
+          self.new_session_request = None;
         }
         println!("\nError: {message}");
         flush();
       }
-      ServerEvent::SessionStopped { session_id } => {
-        if self.active_session == Some(session_id) {
-          self.active_session = None;
-          self.awaiting_usage = None;
-        }
-      }
+      ServerEvent::SessionStopped { .. } => {}
       ServerEvent::Exited => return Ok(true),
     }
     return Ok(false);
@@ -496,10 +372,11 @@ impl Adapter {
       println!("No sessions found.");
       return;
     }
+    let active_session = self.client.state().active_session;
     let lines: Vec<String> = sessions
       .iter()
       .map(|session| {
-        let marker = match self.active_session {
+        let marker = match active_session {
           Some(id) if id == session.id => "*",
           _ => " ",
         };
@@ -559,30 +436,15 @@ impl Adapter {
   }
 
   async fn cancel_turn(&mut self) -> Result<()> {
-    let Some(session_id) = self.active_session else {
-      return Ok(());
-    };
     println!("\n[cancelling]");
     flush();
-    self
-      .client
-      .send(ClientRequest::Cancel {
-        session_id,
-        turn_id: None,
-      })
-      .await?;
+    self.client.cancel(None).await?;
     return Ok(());
   }
 
   async fn shutdown(&mut self) -> Result<()> {
-    let _ = self.client.send(ClientRequest::Shutdown).await;
+    let _ = self.client.shutdown().await;
     return Ok(());
-  }
-
-  fn take_request_id(&mut self) -> u64 {
-    let request_id = self.next_request_id;
-    self.next_request_id += 1;
-    return request_id;
   }
 }
 
