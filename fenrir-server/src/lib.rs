@@ -1,5 +1,5 @@
-pub mod api_response;
+mod adapter;
+mod api_response;
 mod routes;
-mod server;
 
-pub use server::run;
+pub use adapter::run;

@@ -1,3 +1,4 @@
+use anyhow::Error;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -45,6 +46,12 @@ impl ApiError {
       status,
       message: message.into(),
     };
+  }
+}
+
+impl From<Error> for ApiError {
+  fn from(error: Error) -> Self {
+    return Self::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string());
   }
 }
 
