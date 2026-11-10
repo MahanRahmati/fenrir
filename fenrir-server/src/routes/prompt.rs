@@ -13,7 +13,7 @@ use fenrir_core::engine::protocol::ServerEvent;
 
 use crate::adapter::{AdapterHandle, next_event};
 use crate::api_request::ApiRequest;
-use crate::api_response::ApiError;
+use crate::api_response::{ApiError, ApiStreamResult};
 use crate::sse::{self, SseEvent};
 
 #[derive(Debug, Deserialize)]
@@ -37,7 +37,7 @@ pub async fn prompt(
   State(adapter): State<AdapterHandle>,
   Path(session_id): Path<Uuid>,
   Json(request): Json<PromptRequest>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> ApiStreamResult<impl IntoResponse> {
   request.validate()?;
 
   let mut client = adapter.connect().await?;

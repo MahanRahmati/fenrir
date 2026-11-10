@@ -4,7 +4,7 @@ use serde::Serialize;
 use fenrir_core::engine::protocol::SessionSummary;
 
 use crate::adapter::AdapterHandle;
-use crate::api_response::{ApiError, ApiResponse};
+use crate::api_response::{ApiResponse, ApiResult};
 
 #[derive(Debug, Serialize)]
 pub struct SessionsData {
@@ -13,7 +13,7 @@ pub struct SessionsData {
 
 pub async fn list_sessions(
   State(adapter): State<AdapterHandle>,
-) -> Result<ApiResponse<SessionsData>, ApiError> {
+) -> ApiResult<SessionsData> {
   let sessions = adapter.list_sessions().await?;
   return Ok(ApiResponse::success(
     SessionsData { sessions },

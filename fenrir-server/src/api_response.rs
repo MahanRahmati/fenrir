@@ -40,6 +40,10 @@ pub struct ApiError {
   pub message: String,
 }
 
+pub type ApiResult<T> = Result<ApiResponse<T>, ApiError>;
+
+pub type ApiStreamResult<T> = Result<T, ApiError>;
+
 impl ApiError {
   pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
     return Self {
