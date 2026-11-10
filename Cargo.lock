@@ -1115,6 +1115,7 @@ dependencies = [
  "axum",
  "chrono",
  "fenrir-core",
+ "futures",
  "serde",
  "tokio",
  "uuid",

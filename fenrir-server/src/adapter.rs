@@ -1,50 +1,36 @@
-use std::collections::HashMap;
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use axum::serve;
 use tokio::net::TcpListener;
 use tokio::signal::unix::{SignalKind, signal};
-use tokio::sync::mpsc::{self, Receiver, Sender};
-use tokio::sync::oneshot;
+use tokio::time;
 
 use fenrir_core::client::Client;
 use fenrir_core::config::ServerConfig;
 use fenrir_core::engine::broker::BrokerHandle;
 use fenrir_core::engine::protocol::{ServerEvent, SessionSummary};
-use fenrir_core::vlog;
-use tokio::time;
 
 use crate::routes;
 
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 
-enum AdapterRequest {
-  ListSessions {
-    reply: oneshot::Sender<Result<Vec<SessionSummary>>>,
-  },
-}
-
-struct Adapter {
-  client: Client,
-  requests: Receiver<AdapterRequest>,
-  pending: HashMap<u64, oneshot::Sender<Result<Vec<SessionSummary>>>>,
+#[derive(Clone)]
+pub struct AdapterHandle {
+  broker: BrokerHandle,
+  cwd: String,
 }
 
 pub async fn run(broker: &BrokerHandle, config: ServerConfig) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|path| path.display().to_string())
     .unwrap_or_default();
-  let client = Client::connect(broker, &cwd).await?;
-  let (requests, inbox) = mpsc::channel(64);
-  let handle = AdapterHandle { requests };
-  let mut adapter = Adapter {
-    client,
-    requests: inbox,
-    pending: HashMap::new(),
+  let handle = AdapterHandle {
+    broker: broker.clone(),
+    cwd,
   };
-  let app = routes::router().with_state(handle);
+  let app = routes::router().with_state(handle.clone());
 
   let address = format!("{}:{}", config.host, config.port);
   let listener = TcpListener::bind(&address)
@@ -55,98 +41,61 @@ pub async fn run(broker: &BrokerHandle, config: ServerConfig) -> Result<()> {
     .context("Failed to read server address")?;
   println!("Fenrir server listening on http://{local_address}");
 
-  let server = serve(listener, app).with_graceful_shutdown(shutdown_signal());
-  tokio::select! {
-    result = server => result.context("Server failed")?,
-    _ = adapter.run() => {}
-  }
-
-  adapter.shutdown().await;
+  let shutdown = async move {
+    shutdown_signal().await;
+    handle.shutdown().await;
+  };
+  let server = serve(listener, app).with_graceful_shutdown(shutdown);
+  server.await.context("Server failed")?;
   return Ok(());
 }
 
-#[derive(Clone)]
-pub struct AdapterHandle {
-  requests: Sender<AdapterRequest>,
-}
-
 impl AdapterHandle {
+  pub async fn connect(&self) -> Result<Client> {
+    return Client::connect(&self.broker, &self.cwd).await;
+  }
+
   pub async fn list_sessions(&self) -> Result<Vec<SessionSummary>> {
-    let (reply, response) = oneshot::channel();
-    self
-      .requests
-      .send(AdapterRequest::ListSessions { reply })
-      .await
-      .context("Adapter is not running")?;
-    return match time::timeout(RESPONSE_TIMEOUT, response).await {
-      Ok(result) => result.context("Adapter response channel closed")?,
-      Err(_) => Err(anyhow!("Timed out waiting for broker response")),
+    let mut client = self.connect().await?;
+    let result = list_sessions_with(&mut client).await;
+    let _ = client.disconnect().await;
+    return result;
+  }
+
+  async fn shutdown(&self) {
+    let Ok(mut client) = self.connect().await else {
+      return;
     };
+    let _ = time::timeout(SHUTDOWN_TIMEOUT, client.shutdown()).await;
   }
 }
 
-impl Adapter {
-  async fn run(&mut self) {
-    loop {
-      tokio::select! {
-        request = self.requests.recv() => {
-          let Some(request) = request else {
-            break;
-          };
-          self.handle_request(request).await;
-        }
-        event = self.client.recv() => {
-          let Some(event) = event else {
-            break;
-          };
-          self.handle_event(event);
-        }
-      }
-    }
-  }
-
-  async fn handle_request(&mut self, request: AdapterRequest) {
-    match request {
-      AdapterRequest::ListSessions { reply } => {
-        match self.client.list_sessions().await {
-          Ok(request_id) => {
-            self.pending.insert(request_id, reply);
-          }
-          Err(error) => {
-            let _ = reply.send(Err(error));
-          }
-        }
-      }
-    }
-  }
-
-  fn handle_event(&mut self, event: ServerEvent) {
-    vlog!("[server] event: {event:?}");
-    match event {
+async fn list_sessions_with(
+  client: &mut Client,
+) -> Result<Vec<SessionSummary>> {
+  let request_id = client.list_sessions().await?;
+  loop {
+    match next_event(client).await? {
       ServerEvent::SessionsListed {
-        request_id,
+        request_id: id,
         sessions,
-      } => {
-        if let Some(reply) = self.pending.remove(&request_id) {
-          let _ = reply.send(Ok(sessions));
-        }
-      }
+      } if id == request_id => return Ok(sessions),
       ServerEvent::Error {
-        request_id: Some(request_id),
+        request_id: Some(id),
         message,
         ..
-      } => {
-        if let Some(reply) = self.pending.remove(&request_id) {
-          let _ = reply.send(Err(anyhow!(message)));
-        }
-      }
+      } if id == request_id => bail!("{message}"),
       _ => {}
     }
   }
+}
 
-  async fn shutdown(&mut self) {
-    let _ = time::timeout(SHUTDOWN_TIMEOUT, self.client.shutdown()).await;
-  }
+pub async fn next_event(client: &mut Client) -> Result<ServerEvent> {
+  return match time::timeout(RESPONSE_TIMEOUT, client.recv()).await {
+    Ok(Some(event)) => Ok(event),
+    Ok(None) => Err(anyhow!("Broker connection closed")),
+    Err(_) => Err(anyhow!("Timed out waiting for broker response")),
+  };
 }
 
 async fn shutdown_signal() {

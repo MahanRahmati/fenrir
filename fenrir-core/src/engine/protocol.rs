@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
@@ -252,6 +253,51 @@ pub enum ServerEvent {
     session_id: Uuid,
   },
   Exited,
+}
+
+impl ServerEvent {
+  pub fn name(&self) -> &'static str {
+    return match self {
+      ServerEvent::Connected { .. } => "connected",
+      ServerEvent::SessionCreated { .. } => "session_created",
+      ServerEvent::SessionLoaded { .. } => "session_loaded",
+      ServerEvent::SessionsListed { .. } => "sessions_listed",
+      ServerEvent::PersonasListed { .. } => "personas_listed",
+      ServerEvent::ModelsListed { .. } => "models_listed",
+      ServerEvent::PersonaUpdated { .. } => "persona_updated",
+      ServerEvent::ModelUpdated { .. } => "model_updated",
+      ServerEvent::CommandCatalog { .. } => "command_catalog",
+      ServerEvent::UserMessage { .. } => "user_message",
+      ServerEvent::TurnStarted { .. } => "turn_started",
+      ServerEvent::Token { .. } => "token",
+      ServerEvent::ToolCall { .. } => "tool_call",
+      ServerEvent::ToolApprovalRequest { .. } => "tool_approval_request",
+      ServerEvent::ToolApprovalResult { .. } => "tool_approval_result",
+      ServerEvent::ToolResult { .. } => "tool_result",
+      ServerEvent::Usage { .. } => "usage",
+      ServerEvent::Subagents { .. } => "subagents",
+      ServerEvent::Retrying { .. } => "retrying",
+      ServerEvent::Compacted { .. } => "compacted",
+      ServerEvent::Prediction { .. } => "prediction",
+      ServerEvent::TitleUpdated { .. } => "title_updated",
+      ServerEvent::QueueUpdated { .. } => "queue_updated",
+      ServerEvent::TurnFinished { .. } => "turn_finished",
+      ServerEvent::Error { .. } => "error",
+      ServerEvent::SessionStopped { .. } => "session_stopped",
+      ServerEvent::Exited => "exited",
+    };
+  }
+
+  pub fn data(&self) -> Value {
+    return match serde_json::to_value(self) {
+      Ok(Value::Object(map)) => map
+        .into_iter()
+        .next()
+        .map(|(_, value)| value)
+        .unwrap_or(Value::Null),
+      Ok(_) | Err(_) => Value::Null,
+    };
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
