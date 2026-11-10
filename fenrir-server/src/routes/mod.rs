@@ -5,6 +5,7 @@ mod events;
 mod health;
 mod models;
 mod personas;
+mod predict;
 mod prompt;
 mod request;
 mod sessions;
@@ -38,6 +39,7 @@ pub fn router() -> Router<AdapterHandle> {
       "/api/sessions/{session_id}/approval",
       post(approval::approve),
     )
+    .route("/api/sessions/{session_id}/predict", post(predict::predict))
     .route("/api/sessions/{session_id}/command", post(command::command))
     .route("/api/sessions/{session_id}/compact", post(command::compact))
     .route("/api/models", get(models::list_models))

@@ -11,6 +11,7 @@ use crate::sse::{self, SseEvent};
 
 pub enum StreamEnd {
   Live,
+  Prediction { session_id: Uuid },
   Session { request_id: u64 },
   Request { request_id: u64 },
   Turn { request_id: u64, client_id: Uuid },
@@ -75,7 +76,7 @@ fn should_close_stream(
     return true;
   }
   let request_id = match end {
-    StreamEnd::Live => None,
+    StreamEnd::Live | StreamEnd::Prediction { .. } => None,
     StreamEnd::Session { request_id }
     | StreamEnd::Request { request_id }
     | StreamEnd::Turn { request_id, .. } => Some(*request_id),
@@ -93,6 +94,13 @@ fn should_close_stream(
   }
   return match end {
     StreamEnd::Live | StreamEnd::Session { .. } => false,
+    StreamEnd::Prediction { session_id } => matches!(
+      event,
+      ServerEvent::Prediction {
+        session_id: id,
+        ..
+      } if *id == *session_id
+    ),
     StreamEnd::Request { request_id } => {
       response_request_id(event) == Some(*request_id)
     }
