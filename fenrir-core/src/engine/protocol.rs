@@ -292,5 +292,6 @@ pub enum SessionEvent {
   },
   Stopped {
     session_id: Uuid,
+    actor_id: Uuid,
   },
 }

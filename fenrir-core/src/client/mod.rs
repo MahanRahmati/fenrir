@@ -234,6 +234,7 @@ impl Client {
   }
 
   pub async fn subscribe(&mut self, session_id: Uuid) -> Result<()> {
+    self.state.ensure_session(session_id);
     return self
       .handle
       .send(ClientRequest::Subscribe { session_id })

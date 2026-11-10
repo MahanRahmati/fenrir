@@ -15,7 +15,7 @@ use crate::engine::protocol::{
 };
 use crate::engine::repo_actor::{RepoHandle, summary_of};
 use crate::engine::session_actor::{
-  SessionActor, SessionHandle, SessionRequest,
+  SessionActor, SessionHandle, SessionRequest, TokenChunk,
 };
 use crate::persona_manager::{DEFAULT_PERSONA, PersonaManager};
 use crate::provider_manager::{Model, ProviderManager};
@@ -115,6 +115,7 @@ struct Broker {
   sessions: HashMap<Uuid, SessionHandle>,
   subscriptions: HashMap<Uuid, HashSet<Uuid>>,
   pending_approvals: HashMap<(Uuid, Uuid, String), PendingApproval>,
+  evict_candidates: HashSet<Uuid>,
   default_model: Option<Model>,
 }
 
@@ -138,6 +139,7 @@ pub fn spawn(
     sessions: HashMap::new(),
     subscriptions: HashMap::new(),
     pending_approvals: HashMap::new(),
+    evict_candidates: HashSet::new(),
     default_model,
   };
   tokio::spawn(broker.run());
@@ -195,6 +197,7 @@ impl Broker {
         }
         else => break,
       }
+      self.evict_idle_sessions().await;
     }
 
     for (_, handle) in self.sessions.drain() {
@@ -249,6 +252,10 @@ impl Broker {
         request_id,
         session_id,
       } => {
+        let already_subscribed = self
+          .subscriptions
+          .get(&session_id)
+          .is_some_and(|subscribers| subscribers.contains(&client_id));
         self
           .subscriptions
           .entry(session_id)
@@ -274,6 +281,7 @@ impl Broker {
         );
         self.send_queue(client_id, session_id).await;
         self.send_pending_approvals(client_id, session_id).await;
+        self.replay_active_turn(client_id, session_id, already_subscribed);
         return Ok(());
       }
       ClientRequest::ListSessions { request_id } => {
@@ -386,6 +394,10 @@ impl Broker {
         return Ok(());
       }
       ClientRequest::Subscribe { session_id } => {
+        let already_subscribed = self
+          .subscriptions
+          .get(&session_id)
+          .is_some_and(|subscribers| subscribers.contains(&client_id));
         self.ensure_session(session_id).await?;
         self
           .subscriptions
@@ -394,11 +406,19 @@ impl Broker {
           .insert(client_id);
         self.send_queue(client_id, session_id).await;
         self.send_pending_approvals(client_id, session_id).await;
+        self.replay_active_turn(client_id, session_id, already_subscribed);
         return Ok(());
       }
       ClientRequest::Unsubscribe { session_id } => {
-        if let Some(set) = self.subscriptions.get_mut(&session_id) {
-          set.remove(&client_id);
+        let empty = match self.subscriptions.get_mut(&session_id) {
+          Some(subscribers) => {
+            subscribers.remove(&client_id);
+            subscribers.is_empty()
+          }
+          None => false,
+        };
+        if empty {
+          self.evict_candidates.insert(session_id);
         }
         return Ok(());
       }
@@ -751,6 +771,7 @@ impl Broker {
   fn handle_session_event(&mut self, event: SessionEvent) {
     match event {
       SessionEvent::Event(event) => {
+        self.track_turn_event(&event);
         match &event {
           ServerEvent::TurnFinished {
             correlation,
@@ -805,14 +826,160 @@ impl Broker {
         }
         self.broadcast_event(event);
       }
-      SessionEvent::Stopped { session_id } => {
+      SessionEvent::Stopped {
+        session_id,
+        actor_id,
+      } => {
+        let current = self
+          .sessions
+          .get(&session_id)
+          .is_some_and(|handle| handle.actor_id == actor_id);
+        if !current {
+          return;
+        }
         self.sessions.remove(&session_id);
         self.subscriptions.remove(&session_id);
+        self.evict_candidates.remove(&session_id);
         self
           .pending_approvals
           .retain(|(id, _, _), _| *id != session_id);
         self.broadcast_all(ServerEvent::SessionStopped { session_id });
       }
+    }
+  }
+
+  fn track_turn_event(&mut self, event: &ServerEvent) {
+    match event {
+      ServerEvent::TurnStarted { correlation, .. } => {
+        if let Some(handle) = self.sessions.get_mut(&correlation.session_id) {
+          handle.active_turn = Some(correlation.turn_id);
+          handle.active_tokens.clear();
+        }
+      }
+      ServerEvent::Token {
+        correlation,
+        text,
+        reasoning,
+      } => {
+        if let Some(handle) = self.sessions.get_mut(&correlation.session_id)
+          && handle.active_turn == Some(correlation.turn_id)
+        {
+          handle.active_tokens.push(TokenChunk {
+            text: text.clone(),
+            reasoning: *reasoning,
+          });
+        }
+      }
+      ServerEvent::ToolCall { correlation, .. } => {
+        if let Some(handle) = self.sessions.get_mut(&correlation.session_id)
+          && handle.active_turn == Some(correlation.turn_id)
+        {
+          handle.active_tokens.clear();
+        }
+      }
+      ServerEvent::TurnFinished { correlation, .. } => {
+        if let Some(handle) = self.sessions.get_mut(&correlation.session_id)
+          && handle.active_turn == Some(correlation.turn_id)
+        {
+          handle.active_turn = None;
+          handle.active_tokens.clear();
+        }
+        self.evict_candidates.insert(correlation.session_id);
+      }
+      ServerEvent::QueueUpdated {
+        session_id,
+        messages,
+      } if messages.is_empty() => {
+        self.evict_candidates.insert(*session_id);
+      }
+      _ => {}
+    }
+  }
+
+  async fn evict_idle_sessions(&mut self) {
+    if self.evict_candidates.is_empty() {
+      return;
+    }
+    let candidates: Vec<Uuid> = self.evict_candidates.drain().collect();
+    for session_id in candidates {
+      let has_subscribers = self
+        .subscriptions
+        .get(&session_id)
+        .is_some_and(|subscribers| !subscribers.is_empty());
+      if has_subscribers {
+        continue;
+      }
+      let Some(active_turn) = self
+        .sessions
+        .get(&session_id)
+        .map(|handle| handle.active_turn)
+      else {
+        continue;
+      };
+      if active_turn.is_some() {
+        continue;
+      }
+      match self.repo.has_queued_messages(session_id).await {
+        Ok(true) => continue,
+        Ok(false) => {}
+        Err(error) => {
+          vlog!("Failed to check queued messages: {error}");
+          continue;
+        }
+      }
+      let Some(handle) = self.sessions.remove(&session_id) else {
+        continue;
+      };
+      let _ = handle
+        .requests
+        .send(SessionRequest::Shutdown { reply: None })
+        .await;
+      self.subscriptions.remove(&session_id);
+      self
+        .pending_approvals
+        .retain(|(id, _, _), _| *id != session_id);
+      vlog!("Evicted idle session {session_id}");
+    }
+  }
+
+  fn replay_active_turn(
+    &mut self,
+    client_id: Uuid,
+    session_id: Uuid,
+    already_subscribed: bool,
+  ) {
+    if already_subscribed {
+      return;
+    }
+    let Some((turn_id, tokens)) =
+      self.sessions.get(&session_id).and_then(|handle| {
+        handle
+          .active_turn
+          .map(|turn_id| (turn_id, handle.active_tokens.clone()))
+      })
+    else {
+      return;
+    };
+    let correlation = Correlation {
+      session_id,
+      turn_id,
+    };
+    self.send_to(
+      client_id,
+      ServerEvent::TurnStarted {
+        correlation,
+        client_id,
+      },
+    );
+    for token in tokens {
+      self.send_to(
+        client_id,
+        ServerEvent::Token {
+          correlation,
+          text: token.text,
+          reasoning: token.reasoning,
+        },
+      );
     }
   }
 
@@ -979,6 +1146,7 @@ impl Broker {
       }
     }
     for session_id in orphaned {
+      self.evict_candidates.insert(session_id);
       self
         .pending_approvals
         .retain(|(id, _, _), _| *id != session_id);

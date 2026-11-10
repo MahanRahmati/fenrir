@@ -508,6 +508,17 @@ impl SessionRepository {
     return Ok(messages);
   }
 
+  pub async fn has_queued_messages(&self, session_id: Uuid) -> Result<bool> {
+    let mut rows = self
+      .db
+      .query(HAS_QUEUED_MESSAGES, (session_id.to_string(),))
+      .await
+      .context(format!(
+        "Failed to check queued messages for session '{session_id}'"
+      ))?;
+    return Ok(matches!(rows.next().await, Ok(Some(_))));
+  }
+
   pub async fn claim_next_queued_message(
     &self,
     session_id: Uuid,

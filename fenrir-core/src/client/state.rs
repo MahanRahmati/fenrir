@@ -102,6 +102,10 @@ impl ClientState {
     return self.sessions.get(&session_id);
   }
 
+  pub fn ensure_session(&mut self, session_id: Uuid) {
+    self.sessions.entry(session_id).or_default();
+  }
+
   pub fn active_turn(&self) -> Option<Uuid> {
     return self
       .visible_session
@@ -210,7 +214,10 @@ impl ClientState {
         let session_id = session.summary.id;
         self.visible_session = Some(session_id);
         self.creating_session = false;
-        self.sessions.insert(session_id, SessionState::default());
+        let state = self.sessions.entry(session_id).or_default();
+        state.awaiting_usage = None;
+        state.queued_messages.clear();
+        state.approvals.clear();
       }
       ServerEvent::SessionsListed { request_id, .. }
       | ServerEvent::PersonasListed { request_id, .. }

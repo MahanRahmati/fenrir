@@ -71,6 +71,10 @@ pub enum RepoRequest {
     session_id: Uuid,
     reply: oneshot::Sender<Result<Vec<QueuedMessage>>>,
   },
+  HasQueuedMessages {
+    session_id: Uuid,
+    reply: oneshot::Sender<Result<bool>>,
+  },
   ClaimNextQueuedMessage {
     session_id: Uuid,
     reply: oneshot::Sender<Result<Option<QueuedMessage>>>,
@@ -256,6 +260,15 @@ impl RepoHandle {
     self
       .tx
       .send(RepoRequest::LoadQueuedMessages { session_id, reply })
+      .await?;
+    return rx.await?;
+  }
+
+  pub async fn has_queued_messages(&self, session_id: Uuid) -> Result<bool> {
+    let (reply, rx) = oneshot::channel();
+    self
+      .tx
+      .send(RepoRequest::HasQueuedMessages { session_id, reply })
       .await?;
     return rx.await?;
   }
@@ -452,6 +465,10 @@ impl RepoActor {
       }
       RepoRequest::LoadQueuedMessages { session_id, reply } => {
         let result = self.repo.load_queued_messages(session_id).await;
+        let _ = reply.send(result);
+      }
+      RepoRequest::HasQueuedMessages { session_id, reply } => {
+        let result = self.repo.has_queued_messages(session_id).await;
         let _ = reply.send(result);
       }
       RepoRequest::ClaimNextQueuedMessage { session_id, reply } => {

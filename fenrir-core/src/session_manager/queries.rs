@@ -23,6 +23,8 @@ pub const LOAD_QUEUED_MESSAGES: &str =
   include_str!("queries/load_queued_messages.sql");
 pub const LOAD_NEXT_QUEUED_MESSAGE: &str =
   include_str!("queries/load_next_queued_message.sql");
+pub const HAS_QUEUED_MESSAGES: &str =
+  include_str!("queries/has_queued_messages.sql");
 pub const CLAIM_QUEUED_MESSAGE: &str =
   include_str!("queries/claim_queued_message.sql");
 pub const DELETE_QUEUED_MESSAGE: &str =

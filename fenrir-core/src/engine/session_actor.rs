@@ -22,6 +22,15 @@ use crate::session_manager::session::Session;
 pub struct SessionHandle {
   pub requests: Sender<SessionRequest>,
   pub control: Sender<Control>,
+  pub actor_id: Uuid,
+  pub active_turn: Option<Uuid>,
+  pub active_tokens: Vec<TokenChunk>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TokenChunk {
+  pub text: String,
+  pub reasoning: bool,
 }
 
 pub enum SessionRequest {
@@ -66,6 +75,7 @@ struct TurnResult {
 
 pub struct SessionActor {
   id: Uuid,
+  actor_id: Uuid,
   session: Option<Session>,
   config: Config,
   secrets: Secrets,
@@ -85,10 +95,12 @@ impl SessionActor {
     events: Sender<SessionEvent>,
   ) -> SessionHandle {
     let id = session.id;
+    let actor_id = Uuid::now_v7();
     let (request_tx, request_rx) = mpsc::channel(64);
     let (control_tx, control_rx) = mpsc::channel(64);
     let actor = SessionActor {
       id,
+      actor_id,
       session: Some(session),
       config,
       secrets,
@@ -102,6 +114,9 @@ impl SessionActor {
     return SessionHandle {
       requests: request_tx,
       control: control_tx,
+      actor_id,
+      active_turn: None,
+      active_tokens: Vec::new(),
     };
   }
 
@@ -340,6 +355,7 @@ impl SessionActor {
       .events
       .send(SessionEvent::Stopped {
         session_id: self.id,
+        actor_id: self.actor_id,
       })
       .await;
   }
