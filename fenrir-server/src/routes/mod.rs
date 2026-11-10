@@ -30,6 +30,7 @@ pub fn router() -> Router<AdapterHandle> {
       post(sessions::set_model),
     )
     .route("/api/sessions/{session_id}/prompt", post(prompt::prompt))
+    .route("/api/sessions/{session_id}/cancel", post(sessions::cancel))
     .route("/api/sessions/{session_id}/command", post(command::command))
     .route("/api/sessions/{session_id}/compact", post(command::compact))
     .route("/api/models", get(models::list_models))

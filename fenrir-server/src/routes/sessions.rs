@@ -32,6 +32,11 @@ pub struct ModelData {
   pub model: Model,
 }
 
+#[derive(Debug, Serialize)]
+pub struct CancelData {
+  pub accepted: bool,
+}
+
 #[derive(Debug, Default, Deserialize)]
 pub struct CreateSessionRequest {
   pub persona: Option<String>,
@@ -209,4 +214,24 @@ pub async fn set_model(
 
   let model = result?;
   return Ok(ApiResponse::success(ModelData { model }, "Model updated"));
+}
+
+pub async fn cancel(
+  State(adapter): State<AdapterHandle>,
+  Path(session_id): Path<Uuid>,
+) -> ApiResult<CancelData> {
+  let mut client = adapter.connect().await?;
+  let result: Result<(), ApiError> = async {
+    request::load_session(&mut client, session_id).await?;
+    client.cancel(None).await?;
+    return Ok(());
+  }
+  .await;
+  let _ = client.disconnect().await;
+
+  result?;
+  return Ok(ApiResponse::success(
+    CancelData { accepted: true },
+    "Turn cancellation requested",
+  ));
 }
