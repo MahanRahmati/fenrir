@@ -1,4 +1,5 @@
 mod command;
+mod commands;
 mod health;
 mod models;
 mod personas;
@@ -33,5 +34,6 @@ pub fn router() -> Router<AdapterHandle> {
     .route("/api/sessions/{session_id}/compact", post(command::compact))
     .route("/api/models", get(models::list_models))
     .route("/api/models/default", get(models::default_model))
-    .route("/api/personas", get(personas::list_personas));
+    .route("/api/personas", get(personas::list_personas))
+    .route("/api/commands", get(commands::list_commands));
 }
