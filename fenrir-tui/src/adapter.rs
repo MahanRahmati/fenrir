@@ -172,7 +172,7 @@ impl Adapter {
     let command = match Command::parse(line) {
       Ok(command) => command,
       Err(e) => {
-        self.tui.add_message(format!("Error: {e}"));
+        self.tui.add_error(format!("Error: {e}"));
         return Ok(());
       }
     };
@@ -268,6 +268,7 @@ impl Adapter {
       ServerEvent::Token {
         text, reasoning, ..
       } => {
+        self.tui.clear_retrying();
         if reasoning {
           self.tui.ensure_reasoning_line();
         } else {
@@ -282,6 +283,7 @@ impl Adapter {
         preview,
         ..
       } => {
+        self.tui.clear_retrying();
         self.tui.add_tool_call(id, name, arguments, preview);
       }
       ServerEvent::ToolApprovalRequest { .. } => {}
@@ -341,8 +343,17 @@ impl Adapter {
           self.mode = Mode::Idle;
         }
       }
+      ServerEvent::Retrying {
+        attempt,
+        max_attempts,
+        delay_seconds,
+        ..
+      } => {
+        self.tui.set_retrying(attempt, max_attempts, delay_seconds);
+      }
       ServerEvent::Error { message, .. } => {
-        self.tui.add_message(format!("Error: {message}"));
+        self.tui.clear_retrying();
+        self.tui.add_error(format!("Error: {message}"));
       }
       ServerEvent::SessionStopped { .. } => {
         self.prediction_pending = false;

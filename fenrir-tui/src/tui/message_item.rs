@@ -18,6 +18,7 @@ pub enum Role {
   ToolCall,
   ToolResult,
   Compaction,
+  Error,
 }
 
 impl Role {
@@ -26,7 +27,7 @@ impl Role {
       Role::User | Role::ToolCall | Role::ToolResult | Role::Compaction => {
         HORIZONTAL_PADDING
       }
-      Role::Assistant | Role::Reasoning => {
+      Role::Assistant | Role::Reasoning | Role::Error => {
         HORIZONTAL_PADDING + TEXT_EXTRA_PADDING
       }
     };
@@ -115,6 +116,7 @@ impl MessageItem {
         Role::Reasoning => self.reasoning_list_item(),
         Role::ToolCall | Role::ToolResult => self.tool_list_item(inner_width),
         Role::Compaction => self.compaction_list_item(),
+        Role::Error => self.error_list_item(),
       };
       let mut lines = container.render_lines(inner_width);
       if lines.is_empty() {
@@ -152,6 +154,13 @@ impl MessageItem {
     return Container::builder(self.text.clone())
       .borderless()
       .style(Style::default().dim())
+      .build();
+  }
+
+  fn error_list_item(&self) -> Container<'static> {
+    return Container::builder(self.text.clone())
+      .borderless()
+      .style(Style::default().fg(Color::Red))
       .build();
   }
 

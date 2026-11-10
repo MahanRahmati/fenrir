@@ -1,10 +1,11 @@
 mod provider;
 mod providers;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
 use crate::config::Config;
 use crate::config::secrets::Secrets;
+use crate::network::NetworkTimeouts;
 pub use crate::provider_manager::provider::ChatUsage;
 pub use crate::provider_manager::provider::Model;
 pub use crate::provider_manager::provider::ToolCall;
@@ -24,18 +25,24 @@ pub struct ProviderManager {
 impl ProviderManager {
   pub fn new(config: Config, secrets: Secrets) -> Self {
     let mut providers: Vec<Box<dyn Provider>> = Vec::new();
+    let timeouts = NetworkTimeouts::from_config(&config.network);
     if let Some(provider) = setup_openai_compatible(
       config.clone(),
       secrets.openai_compatible_key.clone(),
+      timeouts,
+    ) {
+      providers.push(Box::new(provider));
+    }
+    if let Some(provider) = setup_openrouter(
+      config.clone(),
+      secrets.open_router_key.clone(),
+      timeouts,
     ) {
       providers.push(Box::new(provider));
     }
     if let Some(provider) =
-      setup_openrouter(config.clone(), secrets.open_router_key.clone())
+      setup_zai(config.clone(), secrets.zai_key.clone(), timeouts)
     {
-      providers.push(Box::new(provider));
-    }
-    if let Some(provider) = setup_zai(config.clone(), secrets.zai_key.clone()) {
       providers.push(Box::new(provider));
     }
     let default_model = resolve_default_model(&config, &providers);
@@ -95,8 +102,7 @@ impl ProviderManager {
     return self
       .get_provider(&model.provider)?
       .chat(messages, tools, &model.name)
-      .await
-      .context("Chat request failed");
+      .await;
   }
 
   pub async fn chat_stream(
@@ -108,8 +114,7 @@ impl ProviderManager {
     return self
       .get_provider(&model.provider)?
       .chat_stream(messages, tools, &model.name)
-      .await
-      .context("Chat stream request failed");
+      .await;
   }
 }
 
@@ -153,6 +158,7 @@ fn resolve_default_model(
 fn setup_openai_compatible(
   config: Config,
   api_key: Option<String>,
+  timeouts: NetworkTimeouts,
 ) -> Option<OpenAICompatibleProvider> {
   let config = config.providers.openai_compatible?;
   let url = config.url.as_ref()?;
@@ -164,24 +170,34 @@ fn setup_openai_compatible(
     config.name.clone(),
     api_key,
     config.models.clone(),
+    timeouts,
   ));
 }
 
 fn setup_openrouter(
   config: Config,
   api_key: Option<String>,
+  timeouts: NetworkTimeouts,
 ) -> Option<OpenRouterProvider> {
   let config = config.providers.open_router?;
   if config.models.is_empty() {
     return None;
   }
-  return Some(OpenRouterProvider::new(api_key, config.models.clone()));
+  return Some(OpenRouterProvider::new(
+    api_key,
+    config.models.clone(),
+    timeouts,
+  ));
 }
 
-fn setup_zai(config: Config, api_key: Option<String>) -> Option<ZaiProvider> {
+fn setup_zai(
+  config: Config,
+  api_key: Option<String>,
+  timeouts: NetworkTimeouts,
+) -> Option<ZaiProvider> {
   let config = config.providers.zai?;
   if config.models.is_empty() {
     return None;
   }
-  return Some(ZaiProvider::new(api_key, config.models.clone()));
+  return Some(ZaiProvider::new(api_key, config.models.clone(), timeouts));
 }

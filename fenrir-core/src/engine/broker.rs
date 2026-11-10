@@ -994,6 +994,7 @@ fn session_id_of(event: &ServerEvent) -> Option<Uuid> {
     | ServerEvent::ToolResult { correlation, .. }
     | ServerEvent::Usage { correlation, .. }
     | ServerEvent::Subagents { correlation, .. }
+    | ServerEvent::Retrying { correlation, .. }
     | ServerEvent::TurnFinished { correlation, .. } => {
       Some(correlation.session_id)
     }

@@ -20,6 +20,7 @@ pub struct Config {
   pub compaction: CompactionConfig,
   pub subagent: SubagentConfig,
   pub server: ServerConfig,
+  pub network: NetworkConfig,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -193,6 +194,30 @@ impl Default for ServerConfig {
     return Self {
       host: "127.0.0.1".to_string(),
       port: 12345,
+    };
+  }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct NetworkConfig {
+  pub connect_timeout_seconds: u64,
+  pub request_timeout_seconds: u64,
+  pub stream_idle_timeout_seconds: u64,
+  pub max_retries: u32,
+  pub retry_base_delay_seconds: u64,
+  pub retry_max_delay_seconds: u64,
+}
+
+impl Default for NetworkConfig {
+  fn default() -> Self {
+    return Self {
+      connect_timeout_seconds: 10,
+      request_timeout_seconds: 300,
+      stream_idle_timeout_seconds: 120,
+      max_retries: 3,
+      retry_base_delay_seconds: 2,
+      retry_max_delay_seconds: 30,
     };
   }
 }

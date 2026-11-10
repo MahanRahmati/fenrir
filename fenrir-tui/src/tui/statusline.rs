@@ -12,12 +12,19 @@ enum State {
   Processing(Spinner),
 }
 
+struct RetryStatus {
+  attempt: u32,
+  max_attempts: u32,
+  delay_seconds: u64,
+}
+
 pub struct StatusLine {
   cwd: String,
   version: &'static str,
   usage: Option<ChatUsage>,
   context_window: Option<u64>,
   subagents: usize,
+  retry: Option<RetryStatus>,
   state: State,
 }
 
@@ -30,6 +37,7 @@ impl StatusLine {
       usage: None,
       context_window: None,
       subagents: 0,
+      retry: None,
       state: State::Idle,
     };
   }
@@ -61,6 +69,24 @@ impl StatusLine {
     } else {
       State::Idle
     };
+    self.retry = None;
+  }
+
+  pub fn set_retrying(
+    &mut self,
+    attempt: u32,
+    max_attempts: u32,
+    delay_seconds: u64,
+  ) {
+    self.retry = Some(RetryStatus {
+      attempt,
+      max_attempts,
+      delay_seconds,
+    });
+  }
+
+  pub fn clear_retrying(&mut self) {
+    self.retry = None;
   }
 
   fn to_relative_path(path: &str) -> String {
@@ -75,7 +101,16 @@ impl StatusLine {
 
   fn left_label(&self) -> String {
     let left_label = match &self.state {
-      State::Processing(spinner) => spinner.frame().to_string(),
+      State::Processing(spinner) => match &self.retry {
+        Some(retry) => format!(
+          "{} retrying {}/{} in {}s",
+          spinner.frame(),
+          retry.attempt,
+          retry.max_attempts,
+          retry.delay_seconds
+        ),
+        None => spinner.frame().to_string(),
+      },
       State::Idle => Self::to_relative_path(&self.cwd),
     };
     return left_label;

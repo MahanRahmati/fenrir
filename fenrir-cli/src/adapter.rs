@@ -326,6 +326,18 @@ impl Adapter {
         println!();
         flush();
       }
+      ServerEvent::Retrying {
+        attempt,
+        max_attempts,
+        delay_seconds,
+        reason,
+        ..
+      } => {
+        println!(
+          "\n[retry] attempt {attempt}/{max_attempts} in {delay_seconds}s: {reason}"
+        );
+        flush();
+      }
       ServerEvent::Error {
         request_id,
         message,

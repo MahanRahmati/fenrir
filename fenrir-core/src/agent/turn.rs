@@ -1,5 +1,4 @@
-use std::fmt::Display;
-
+use anyhow::{Error, anyhow};
 use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 
@@ -37,8 +36,12 @@ pub async fn run_turn(
     PromptMode::Normal => match text {
       Some(text) => text,
       None => {
-        return failed(context.events, correlation, "Missing prompt text")
-          .await;
+        return failed(
+          context.events,
+          correlation,
+          anyhow!("Missing prompt text"),
+        )
+        .await;
       }
     },
     PromptMode::Review => {
@@ -153,27 +156,36 @@ pub async fn run_compact(
     Ok(summary) => TurnOutcome::Completed { assistant: summary },
     Err(_) if context.cancel.is_cancelled() => TurnOutcome::Cancelled,
     Err(e) => {
+      let message = error_chain(&e);
       let _ = context
         .events
         .send(SessionEvent::Event(ServerEvent::Error {
           request_id: Some(request_id),
           session_id: Some(session.id),
-          message: format!("Compaction failed: {e}"),
+          message: format!("Compaction failed: {message}"),
         }))
         .await;
-      return TurnOutcome::Failed {
-        message: e.to_string(),
-      };
+      return TurnOutcome::Failed { message };
     }
   }
+}
+
+fn error_chain(error: &Error) -> String {
+  let mut parts = vec![error.to_string()];
+  let mut source = error.source();
+  while let Some(s) = source {
+    parts.push(s.to_string());
+    source = s.source();
+  }
+  return parts.join(": ");
 }
 
 async fn failed(
   events: &Sender<SessionEvent>,
   correlation: Correlation,
-  error: impl Display,
+  error: Error,
 ) -> TurnOutcome {
-  let message = error.to_string();
+  let message = error_chain(&error);
   let _ = events
     .send(SessionEvent::Event(ServerEvent::Error {
       request_id: None,

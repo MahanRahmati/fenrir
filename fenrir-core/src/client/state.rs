@@ -370,6 +370,24 @@ impl ClientState {
         }
         return Some(ServerEvent::Subagents { correlation, delta });
       }
+      ServerEvent::Retrying {
+        correlation,
+        attempt,
+        max_attempts,
+        delay_seconds,
+        reason,
+      } => {
+        if !self.is_active(correlation.session_id) {
+          return None;
+        }
+        return Some(ServerEvent::Retrying {
+          correlation,
+          attempt,
+          max_attempts,
+          delay_seconds,
+          reason,
+        });
+      }
       ServerEvent::Compacted {
         session_id,
         summary,

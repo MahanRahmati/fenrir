@@ -7,15 +7,18 @@ pub mod system;
 pub mod title;
 
 use std::collections::HashMap;
+use std::time::Duration;
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
+use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
 use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
+use crate::network::retry::{self, RetryDelay, RetryPolicy};
 use crate::persona_manager::Persona;
 use crate::provider_manager::{ChatUsage, Model, ProviderManager, ToolCall};
 use crate::session_manager::Message;
@@ -86,6 +89,81 @@ impl<'a> PromptExecutor<'a> {
     return self.once_blocking(spec, correlation, events, cancel).await;
   }
 
+  async fn with_retries<T, F, Fut>(
+    &self,
+    kind: PromptKind,
+    correlation: Correlation,
+    events: &Sender<SessionEvent>,
+    cancel: &CancellationToken,
+    mut attempt: F,
+  ) -> Result<T>
+  where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T>>,
+  {
+    let policy = RetryPolicy::from_config(&self.config.network);
+    let max_attempts = policy.max_attempts();
+    let mut retries = 0u32;
+
+    loop {
+      let result = tokio::select! {
+          biased;
+          _ = cancel.cancelled() => bail!("Cancelled"),
+          result = attempt() => result,
+      };
+
+      let error = match result {
+        Ok(value) => return Ok(value),
+        Err(error) => error,
+      };
+
+      if retries >= policy.max_retries {
+        return Err(final_error(error, retries));
+      }
+      let Some(advice) = retry::classify(&error) else {
+        return Err(error);
+      };
+      let delay = match policy.delay(retries + 1, advice) {
+        RetryDelay::Wait(delay) => delay,
+        RetryDelay::TooLong(requested) => {
+          return Err(error.context(format!(
+            "Provider asked to retry after {}s, above the configured limit of {}s",
+            requested.as_secs(),
+            policy.max_delay.as_secs()
+          )));
+        }
+      };
+
+      retries += 1;
+      let next_attempt = retries + 1;
+      let reason = retry::reason(&error);
+      vlog!(
+        "Retrying request in {}s (attempt {}/{}): {}",
+        delay.as_secs(),
+        next_attempt,
+        max_attempts,
+        reason
+      );
+      if matches!(kind, PromptKind::Chat | PromptKind::Compaction) {
+        let _ = events
+          .send(SessionEvent::Event(ServerEvent::Retrying {
+            correlation,
+            attempt: next_attempt,
+            max_attempts,
+            delay_seconds: delay.as_secs(),
+            reason,
+          }))
+          .await;
+      }
+
+      tokio::select! {
+        biased;
+        _ = cancel.cancelled() => bail!("Cancelled"),
+        _ = sleep(delay) => {}
+      }
+    }
+  }
+
   async fn once_blocking(
     &self,
     spec: PromptSpec,
@@ -94,15 +172,11 @@ impl<'a> PromptExecutor<'a> {
     cancel: &CancellationToken,
   ) -> Result<PromptOutput> {
     let messages = with_system(&spec.system, &spec.messages);
-    let response = tokio::select! {
-        biased;
-        _ = cancel.cancelled() => bail!("Cancelled"),
-        response = self.providers.chat(
-            &spec.model,
-            &messages,
-            &spec.tools,
-        ) => response?,
-    };
+    let response = self
+      .with_retries(spec.kind, correlation, events, cancel, || {
+        self.providers.chat(&spec.model, &messages, &spec.tools)
+      })
+      .await?;
     if spec.emit_tokens {
       if self.config.general.show_reasoning
         && let Some(reasoning) = response.reasoning.as_deref()
@@ -141,29 +215,40 @@ impl<'a> PromptExecutor<'a> {
     cancel: &CancellationToken,
   ) -> Result<PromptOutput> {
     let messages = with_system(&spec.system, &spec.messages);
-    let mut stream = tokio::select! {
-        biased;
-        _ = cancel.cancelled() => bail!("Cancelled"),
-        stream = self.providers.chat_stream(
-            &spec.model,
-            &messages,
-            &spec.tools,
-        ) => stream?,
-    };
+    let mut stream = self
+      .with_retries(spec.kind, correlation, events, cancel, || {
+        self
+          .providers
+          .chat_stream(&spec.model, &messages, &spec.tools)
+      })
+      .await?;
 
     let mut content = String::new();
     let mut reasoning = String::new();
     let mut usage = None;
     let mut tool_calls: HashMap<usize, ToolCall> = HashMap::new();
+    let idle_seconds = self.config.network.stream_idle_timeout_seconds;
 
     loop {
       let delta = tokio::select! {
           biased;
           _ = cancel.cancelled() => bail!("Cancelled"),
           chunk = stream.next() => match chunk {
-              Some(chunk) => chunk?,
+              Some(Ok(chunk)) => chunk,
+              Some(Err(error)) => {
+                  return Err(error.context(format!(
+                      "Connection lost after {} characters of output; the partial response was discarded",
+                      content.len() + reasoning.len()
+                  )));
+              }
               None => break,
           },
+          _ = idle_timeout(idle_seconds) => {
+              bail!(
+                  "Provider stopped sending data for {idle_seconds}s after {} characters of output; the partial response was discarded",
+                  content.len() + reasoning.len()
+              );
+          }
       };
 
       if let Some(value) = delta.usage {
@@ -221,6 +306,23 @@ impl<'a> PromptExecutor<'a> {
       usage,
     });
   }
+}
+
+fn final_error(error: Error, retries: u32) -> Error {
+  if retries == 0 {
+    return error;
+  }
+  return error.context(format!(
+    "Request failed after {} attempts",
+    retries.saturating_add(1)
+  ));
+}
+
+async fn idle_timeout(seconds: u64) {
+  if seconds == 0 {
+    return std::future::pending::<()>().await;
+  }
+  return sleep(Duration::from_secs(seconds)).await;
 }
 
 pub fn with_system(system: &str, messages: &[Message]) -> Vec<Message> {

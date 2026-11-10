@@ -143,6 +143,12 @@ impl MessagesList {
     self.select_last();
   }
 
+  pub fn add_error(&mut self, message: String) {
+    let message = MessageItem::new(message, Role::Error);
+    self.messages.push(message);
+    self.select_last();
+  }
+
   pub fn add_tool_call(
     &mut self,
     id: String,

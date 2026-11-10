@@ -216,6 +216,13 @@ pub enum ServerEvent {
     correlation: Correlation,
     delta: i32,
   },
+  Retrying {
+    correlation: Correlation,
+    attempt: u32,
+    max_attempts: u32,
+    delay_seconds: u64,
+    reason: String,
+  },
   Compacted {
     session_id: Uuid,
     summary: String,

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use futures::{StreamExt, future};
 
 use crate::config::ProviderModel;
-use crate::network::HttpClient;
+use crate::network::{HttpClient, NetworkTimeouts};
 use crate::provider_manager::provider::{
   ChatResponse, ChatStream, Model, Provider,
 };
@@ -28,7 +28,11 @@ pub struct ZaiProvider {
 }
 
 impl ZaiProvider {
-  pub fn new(api_key: Option<String>, models: Vec<ProviderModel>) -> Self {
+  pub fn new(
+    api_key: Option<String>,
+    models: Vec<ProviderModel>,
+    timeouts: NetworkTimeouts,
+  ) -> Self {
     let models: Vec<Model> = models
       .into_iter()
       .map(|m| Model {
@@ -37,7 +41,7 @@ impl ZaiProvider {
         alias: m.alias,
       })
       .collect();
-    let client = HttpClient::new(ZAI_BASE_URL.to_string());
+    let client = HttpClient::new(ZAI_BASE_URL.to_string(), timeouts);
     return Self {
       name: ZAI_PROVIDER_NAME.to_string(),
       api_key,

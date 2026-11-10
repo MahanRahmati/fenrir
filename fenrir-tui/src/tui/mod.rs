@@ -90,6 +90,21 @@ impl Tui {
     self.statusline.set_processing(processing);
   }
 
+  pub fn set_retrying(
+    &mut self,
+    attempt: u32,
+    max_attempts: u32,
+    delay_seconds: u64,
+  ) {
+    self
+      .statusline
+      .set_retrying(attempt, max_attempts, delay_seconds);
+  }
+
+  pub fn clear_retrying(&mut self) {
+    self.statusline.clear_retrying();
+  }
+
   pub fn update_subagents(&mut self, delta: i32) {
     self.statusline.update_subagents(delta);
   }
@@ -391,6 +406,10 @@ impl Tui {
 
   pub fn add_message(&mut self, message: String) {
     self.messages_list.add_message(message);
+  }
+
+  pub fn add_error(&mut self, message: String) {
+    self.messages_list.add_error(message);
   }
 
   pub fn add_tool_call(
