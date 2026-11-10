@@ -184,7 +184,7 @@ impl Adapter {
     };
     if self.client.state().creating_session
       || (queueable
-        && (self.client.state().active_turn.is_some()
+        && (self.client.state().active_turn().is_some()
           || self.client.state().is_pending()))
     {
       self.pending_lines.push_back(line.to_string());
@@ -309,7 +309,7 @@ impl Adapter {
       ServerEvent::Prediction { text, .. } => {
         if self.prediction_pending {
           self.prediction_pending = false;
-          if self.client.state().active_turn.is_none()
+          if self.client.state().active_turn().is_none()
             && !self.client.state().is_pending()
             && matches!(self.mode, Mode::Idle)
             && self.tui.input_is_empty()
@@ -419,7 +419,7 @@ impl Adapter {
     if !self.tui.take_cancel_request() {
       return Ok(());
     }
-    let Some(turn_id) = self.client.state().active_turn else {
+    let Some(turn_id) = self.client.state().active_turn() else {
       return Ok(());
     };
     self.client.cancel(Some(turn_id)).await?;
@@ -430,7 +430,7 @@ impl Adapter {
     if !self.predict_enabled
       || !self.predict_after_turn
       || self.prediction_pending
-      || self.client.state().active_turn.is_some()
+      || self.client.state().active_turn().is_some()
       || self.client.state().is_pending()
       || self.has_queued_messages()
       || !matches!(self.mode, Mode::Idle)
@@ -439,7 +439,7 @@ impl Adapter {
     {
       return Ok(());
     }
-    let Some(session_id) = self.client.state().active_session else {
+    let Some(session_id) = self.client.state().visible_session() else {
       return Ok(());
     };
     self.predict_after_turn = false;
@@ -452,7 +452,7 @@ impl Adapter {
     while !self.client.state().creating_session
       && !self.client.state().is_pending()
       && !self.exiting
-      && self.client.state().active_turn.is_none()
+      && self.client.state().active_turn().is_none()
       && matches!(self.mode, Mode::Idle)
     {
       let Some(line) = self.pending_lines.pop_front() else {
@@ -479,7 +479,7 @@ impl Adapter {
     let mut messages: Vec<String> = self
       .client
       .state()
-      .queued_messages
+      .queued_messages()
       .iter()
       .map(|message| message.content.clone())
       .collect();
@@ -488,12 +488,12 @@ impl Adapter {
   }
 
   fn has_queued_messages(&self) -> bool {
-    return !self.client.state().queued_messages.is_empty()
+    return !self.client.state().queued_messages().is_empty()
       || !self.pending_lines.is_empty();
   }
 
   fn open_sessions(&mut self, sessions: Vec<SessionSummary>) {
-    let active_session = self.client.state().active_session;
+    let active_session = self.client.state().visible_session();
     self.tui.open_sessions_popup(sessions, active_session);
     self.mode = Mode::Sessions;
   }

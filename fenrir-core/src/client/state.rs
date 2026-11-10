@@ -33,28 +33,42 @@ pub struct PendingApproval {
   pub message: String,
 }
 
-pub struct ClientState {
-  pub client_id: Uuid,
-  pub active_session: Option<Uuid>,
+#[derive(Default)]
+pub struct SessionState {
   pub active_turn: Option<Uuid>,
-  pub creating_session: bool,
   pub awaiting_usage: Option<Uuid>,
   pub queued_messages: Vec<QueuedMessage>,
-  pending: HashMap<u64, PendingRequest>,
   approvals: VecDeque<PendingApproval>,
+}
+
+impl SessionState {
+  pub fn take_next_approval(&mut self) -> Option<PendingApproval> {
+    return self.approvals.pop_front();
+  }
+
+  fn clear_approvals(&mut self, turn_id: Uuid) {
+    self
+      .approvals
+      .retain(|approval| approval.turn_id != turn_id);
+  }
+}
+
+pub struct ClientState {
+  pub client_id: Uuid,
+  pub visible_session: Option<Uuid>,
+  pub creating_session: bool,
+  sessions: HashMap<Uuid, SessionState>,
+  pending: HashMap<u64, PendingRequest>,
 }
 
 impl ClientState {
   pub fn new(client_id: Uuid) -> Self {
     return Self {
       client_id,
-      active_session: None,
-      active_turn: None,
+      visible_session: None,
       creating_session: false,
-      awaiting_usage: None,
-      queued_messages: Vec::new(),
+      sessions: HashMap::new(),
       pending: HashMap::new(),
-      approvals: VecDeque::new(),
     };
   }
 
@@ -73,25 +87,66 @@ impl ClientState {
   pub fn is_busy(&self) -> bool {
     return self.creating_session
       || self.is_pending()
-      || self.active_turn.is_some();
+      || self.active_turn().is_some();
   }
 
   pub fn is_active(&self, session_id: Uuid) -> bool {
-    return self.active_session == Some(session_id);
+    return self.visible_session == Some(session_id);
   }
 
-  pub fn approvals(&self) -> &VecDeque<PendingApproval> {
-    return &self.approvals;
+  pub fn visible_session(&self) -> Option<Uuid> {
+    return self.visible_session;
+  }
+
+  pub fn session(&self, session_id: Uuid) -> Option<&SessionState> {
+    return self.sessions.get(&session_id);
+  }
+
+  pub fn active_turn(&self) -> Option<Uuid> {
+    return self
+      .visible_session
+      .and_then(|session_id| self.sessions.get(&session_id))
+      .and_then(|session| session.active_turn);
+  }
+
+  pub fn awaiting_usage(&self) -> Option<Uuid> {
+    return self
+      .visible_session
+      .and_then(|session_id| self.sessions.get(&session_id))
+      .and_then(|session| session.awaiting_usage);
+  }
+
+  pub fn queued_messages(&self) -> &[QueuedMessage] {
+    return self
+      .visible_session
+      .and_then(|session_id| self.sessions.get(&session_id))
+      .map(|session| session.queued_messages.as_slice())
+      .unwrap_or_default();
   }
 
   pub fn take_next_approval(&mut self) -> Option<PendingApproval> {
-    return self.approvals.pop_front();
+    let session_id = self.visible_session?;
+    return self.take_next_approval_for(session_id);
   }
 
-  pub fn clear_approvals(&mut self, session_id: Uuid, turn_id: Uuid) {
-    self.approvals.retain(|approval| {
-      approval.session_id != session_id || approval.turn_id != turn_id
-    });
+  pub fn take_next_approval_for(
+    &mut self,
+    session_id: Uuid,
+  ) -> Option<PendingApproval> {
+    return self
+      .sessions
+      .get_mut(&session_id)
+      .and_then(SessionState::take_next_approval);
+  }
+
+  pub fn forget_session(&mut self, session_id: Uuid) {
+    self.sessions.remove(&session_id);
+    self
+      .pending
+      .retain(|_, pending| pending.session_id != Some(session_id));
+    if self.visible_session == Some(session_id) {
+      self.visible_session = None;
+    }
   }
 
   pub(crate) fn insert_pending(
@@ -106,6 +161,10 @@ impl ClientState {
     return self.pending.remove(&request_id).is_some();
   }
 
+  fn session_mut(&mut self, session_id: Uuid) -> &mut SessionState {
+    return self.sessions.entry(session_id).or_default();
+  }
+
   fn finish_turn_requests(&mut self, session_id: Uuid) {
     self.pending.retain(|_, pending| {
       !pending.starts_turn
@@ -115,376 +174,183 @@ impl ClientState {
   }
 
   pub fn apply(&mut self, event: ServerEvent) -> Option<ServerEvent> {
+    let visible_before = self.visible_session;
+    self.update(&event);
+    if self.is_visible_event(&event, visible_before) {
+      return Some(event);
+    }
+    return None;
+  }
+
+  pub fn apply_all(&mut self, event: ServerEvent) -> ServerEvent {
+    self.update(&event);
+    return event;
+  }
+
+  fn update(&mut self, event: &ServerEvent) {
     match event {
       ServerEvent::Connected { client_id } => {
-        self.client_id = client_id;
-        return Some(ServerEvent::Connected { client_id });
+        self.client_id = *client_id;
       }
       ServerEvent::SessionCreated {
+        request_id,
+        session,
+      }
+      | ServerEvent::SessionLoaded {
         request_id,
         session,
       } => {
         let keep_pending = self
           .pending
-          .get(&request_id)
+          .get(request_id)
           .is_some_and(|pending| pending.starts_turn);
         if !keep_pending {
-          self.remove_pending(request_id);
+          self.remove_pending(*request_id);
         }
-        self.active_session = Some(session.summary.id);
-        self.active_turn = None;
+        let session_id = session.summary.id;
+        self.visible_session = Some(session_id);
         self.creating_session = false;
-        self.awaiting_usage = None;
-        self.queued_messages.clear();
-        self.approvals.clear();
-        return Some(ServerEvent::SessionCreated {
-          request_id,
-          session,
-        });
+        self.sessions.insert(session_id, SessionState::default());
       }
-      ServerEvent::SessionLoaded {
-        request_id,
-        session,
-      } => {
-        self.remove_pending(request_id);
-        self.active_session = Some(session.summary.id);
-        self.active_turn = None;
-        self.creating_session = false;
-        self.awaiting_usage = None;
-        self.queued_messages.clear();
-        self.approvals.clear();
-        return Some(ServerEvent::SessionLoaded {
-          request_id,
-          session,
-        });
+      ServerEvent::SessionsListed { request_id, .. }
+      | ServerEvent::PersonasListed { request_id, .. }
+      | ServerEvent::ModelsListed { request_id, .. }
+      | ServerEvent::PersonaUpdated { request_id, .. }
+      | ServerEvent::ModelUpdated { request_id, .. }
+      | ServerEvent::CommandCatalog { request_id, .. } => {
+        self.remove_pending(*request_id);
       }
-      ServerEvent::SessionsListed {
-        request_id,
-        sessions,
-      } => {
-        self.remove_pending(request_id);
-        return Some(ServerEvent::SessionsListed {
-          request_id,
-          sessions,
-        });
-      }
-      ServerEvent::PersonasListed {
-        request_id,
-        personas,
-        current,
-      } => {
-        self.remove_pending(request_id);
-        return Some(ServerEvent::PersonasListed {
-          request_id,
-          personas,
-          current,
-        });
-      }
-      ServerEvent::ModelsListed {
-        request_id,
-        models,
-        current,
-      } => {
-        self.remove_pending(request_id);
-        return Some(ServerEvent::ModelsListed {
-          request_id,
-          models,
-          current,
-        });
-      }
-      ServerEvent::PersonaUpdated {
-        request_id,
-        session_id,
-        persona,
-      } => {
-        self.remove_pending(request_id);
-        return Some(ServerEvent::PersonaUpdated {
-          request_id,
-          session_id,
-          persona,
-        });
-      }
-      ServerEvent::ModelUpdated {
-        request_id,
-        session_id,
-        model,
-      } => {
-        self.remove_pending(request_id);
-        return Some(ServerEvent::ModelUpdated {
-          request_id,
-          session_id,
-          model,
-        });
-      }
-      ServerEvent::CommandCatalog {
-        request_id,
-        commands,
-      } => {
-        self.remove_pending(request_id);
-        return Some(ServerEvent::CommandCatalog {
-          request_id,
-          commands,
-        });
-      }
-      ServerEvent::UserMessage {
-        correlation,
-        client_id,
-        content,
-      } => {
-        if !self.is_active(correlation.session_id) {
-          return None;
-        }
-        return Some(ServerEvent::UserMessage {
-          correlation,
-          client_id,
-          content,
-        });
-      }
-      ServerEvent::TurnStarted {
-        correlation,
-        client_id,
-      } => {
-        if self.active_session.is_none() {
-          self.active_session = Some(correlation.session_id);
-        }
-        if !self.is_active(correlation.session_id) {
-          return None;
+      ServerEvent::UserMessage { .. }
+      | ServerEvent::Token { .. }
+      | ServerEvent::ToolCall { .. }
+      | ServerEvent::ToolResult { .. }
+      | ServerEvent::Subagents { .. }
+      | ServerEvent::Retrying { .. }
+      | ServerEvent::Compacted { .. }
+      | ServerEvent::Prediction { .. }
+      | ServerEvent::TitleUpdated { .. }
+      | ServerEvent::Exited => {}
+      ServerEvent::TurnStarted { correlation, .. } => {
+        if self.visible_session.is_none() {
+          self.visible_session = Some(correlation.session_id);
         }
         self.finish_turn_requests(correlation.session_id);
-        self.active_turn = Some(correlation.turn_id);
+        let session = self.session_mut(correlation.session_id);
+        session.active_turn = Some(correlation.turn_id);
         self.creating_session = false;
-        return Some(ServerEvent::TurnStarted {
-          correlation,
-          client_id,
-        });
-      }
-      ServerEvent::Token {
-        correlation,
-        text,
-        reasoning,
-      } => {
-        if !self.is_active(correlation.session_id) {
-          return None;
-        }
-        return Some(ServerEvent::Token {
-          correlation,
-          text,
-          reasoning,
-        });
-      }
-      ServerEvent::ToolCall {
-        correlation,
-        id,
-        name,
-        arguments,
-        preview,
-      } => {
-        if !self.is_active(correlation.session_id) {
-          return None;
-        }
-        return Some(ServerEvent::ToolCall {
-          correlation,
-          id,
-          name,
-          arguments,
-          preview,
-        });
       }
       ServerEvent::ToolApprovalRequest {
         correlation,
         tool_call_id,
-        tool_name,
         message,
+        ..
       } => {
-        if !self.is_active(correlation.session_id) {
-          return None;
-        }
-        self.approvals.push_back(PendingApproval {
+        let session = self.session_mut(correlation.session_id);
+        session.approvals.push_back(PendingApproval {
           session_id: correlation.session_id,
           turn_id: correlation.turn_id,
           tool_call_id: tool_call_id.clone(),
           message: message.clone(),
         });
-        return Some(ServerEvent::ToolApprovalRequest {
-          correlation,
-          tool_call_id,
-          tool_name,
-          message,
-        });
       }
       ServerEvent::ToolApprovalResult {
         correlation,
         tool_call_id,
-        status,
+        ..
       } => {
-        self.approvals.retain(|approval| {
-          approval.session_id != correlation.session_id
-            || approval.turn_id != correlation.turn_id
-            || approval.tool_call_id != tool_call_id
-        });
-        if !self.is_active(correlation.session_id) {
-          return None;
-        }
-        return Some(ServerEvent::ToolApprovalResult {
-          correlation,
-          tool_call_id,
-          status,
+        let session = self.session_mut(correlation.session_id);
+        session.approvals.retain(|approval| {
+          approval.turn_id != correlation.turn_id
+            || approval.tool_call_id != *tool_call_id
         });
       }
-      ServerEvent::ToolResult {
-        correlation,
-        id,
-        result,
-        error,
-      } => {
-        if !self.is_active(correlation.session_id) {
-          return None;
+      ServerEvent::Usage { correlation, .. } => {
+        let session = self.session_mut(correlation.session_id);
+        if session.awaiting_usage == Some(correlation.turn_id) {
+          session.awaiting_usage = None;
         }
-        return Some(ServerEvent::ToolResult {
-          correlation,
-          id,
-          result,
-          error,
-        });
-      }
-      ServerEvent::Usage {
-        correlation,
-        usage,
-        context_window,
-      } => {
-        if self.awaiting_usage == Some(correlation.turn_id) {
-          self.awaiting_usage = None;
-        }
-        if !self.is_active(correlation.session_id) {
-          return None;
-        }
-        return Some(ServerEvent::Usage {
-          correlation,
-          usage,
-          context_window,
-        });
-      }
-      ServerEvent::Subagents { correlation, delta } => {
-        if !self.is_active(correlation.session_id) {
-          return None;
-        }
-        return Some(ServerEvent::Subagents { correlation, delta });
-      }
-      ServerEvent::Retrying {
-        correlation,
-        attempt,
-        max_attempts,
-        delay_seconds,
-        reason,
-      } => {
-        if !self.is_active(correlation.session_id) {
-          return None;
-        }
-        return Some(ServerEvent::Retrying {
-          correlation,
-          attempt,
-          max_attempts,
-          delay_seconds,
-          reason,
-        });
-      }
-      ServerEvent::Compacted {
-        session_id,
-        summary,
-      } => {
-        if !self.is_active(session_id) {
-          return None;
-        }
-        return Some(ServerEvent::Compacted {
-          session_id,
-          summary,
-        });
-      }
-      ServerEvent::Prediction { session_id, text } => {
-        if !self.is_active(session_id) {
-          return None;
-        }
-        return Some(ServerEvent::Prediction { session_id, text });
-      }
-      ServerEvent::TitleUpdated { session_id, title } => {
-        if !self.is_active(session_id) {
-          return None;
-        }
-        return Some(ServerEvent::TitleUpdated { session_id, title });
       }
       ServerEvent::QueueUpdated {
         session_id,
         messages,
       } => {
-        if !self.is_active(session_id) {
-          return None;
-        }
-        self.queued_messages = messages.clone();
-        return Some(ServerEvent::QueueUpdated {
-          session_id,
-          messages,
-        });
+        let session = self.session_mut(*session_id);
+        session.queued_messages = messages.clone();
       }
       ServerEvent::TurnFinished {
         correlation,
         outcome,
       } => {
-        let is_active = self.is_active(correlation.session_id);
         self.finish_turn_requests(correlation.session_id);
-        if self.active_turn == Some(correlation.turn_id) {
-          self.active_turn = None;
+        let session = self.session_mut(correlation.session_id);
+        if session.active_turn == Some(correlation.turn_id) {
+          session.active_turn = None;
         }
-        self.clear_approvals(correlation.session_id, correlation.turn_id);
-        if is_active {
-          self.awaiting_usage = match outcome {
-            TurnOutcome::Completed { .. } => Some(correlation.turn_id),
-            TurnOutcome::Cancelled | TurnOutcome::Failed { .. } => None,
-          };
-        }
-        if !is_active {
-          return None;
-        }
-        return Some(ServerEvent::TurnFinished {
-          correlation,
-          outcome,
-        });
+        session.clear_approvals(correlation.turn_id);
+        session.awaiting_usage = match outcome {
+          TurnOutcome::Completed { .. } => Some(correlation.turn_id),
+          TurnOutcome::Cancelled | TurnOutcome::Failed { .. } => None,
+        };
       }
-      ServerEvent::Error {
-        request_id,
-        session_id,
-        message,
-      } => {
+      ServerEvent::Error { request_id, .. } => {
         if let Some(request_id) = request_id {
-          self.remove_pending(request_id);
+          self.remove_pending(*request_id);
         }
-        if self.creating_session && self.active_session.is_none() {
+        if self.creating_session && self.visible_session.is_none() {
           self.creating_session = false;
         }
-        return Some(ServerEvent::Error {
-          request_id,
-          session_id,
-          message,
-        });
       }
       ServerEvent::SessionStopped { session_id } => {
-        let was_active = self.is_active(session_id);
-        self
-          .pending
-          .retain(|_, pending| pending.session_id != Some(session_id));
-        self
-          .approvals
-          .retain(|approval| approval.session_id != session_id);
-        if !was_active {
-          return None;
+        if self.visible_session == Some(*session_id) {
+          self.creating_session = false;
         }
-        self.active_session = None;
-        self.active_turn = None;
-        self.creating_session = false;
-        self.awaiting_usage = None;
-        self.queued_messages.clear();
-        return Some(ServerEvent::SessionStopped { session_id });
+        self.forget_session(*session_id);
       }
-      ServerEvent::Exited => return Some(ServerEvent::Exited),
     }
+  }
+
+  fn is_visible_event(
+    &self,
+    event: &ServerEvent,
+    visible_before: Option<Uuid>,
+  ) -> bool {
+    return match event {
+      ServerEvent::Connected { .. }
+      | ServerEvent::SessionsListed { .. }
+      | ServerEvent::PersonasListed { .. }
+      | ServerEvent::ModelsListed { .. }
+      | ServerEvent::CommandCatalog { .. }
+      | ServerEvent::Exited => true,
+      ServerEvent::SessionCreated { session, .. }
+      | ServerEvent::SessionLoaded { session, .. } => {
+        self.visible_session == Some(session.summary.id)
+      }
+      ServerEvent::UserMessage { correlation, .. }
+      | ServerEvent::TurnStarted { correlation, .. }
+      | ServerEvent::Token { correlation, .. }
+      | ServerEvent::ToolCall { correlation, .. }
+      | ServerEvent::ToolApprovalRequest { correlation, .. }
+      | ServerEvent::ToolApprovalResult { correlation, .. }
+      | ServerEvent::ToolResult { correlation, .. }
+      | ServerEvent::Usage { correlation, .. }
+      | ServerEvent::Subagents { correlation, .. }
+      | ServerEvent::Retrying { correlation, .. }
+      | ServerEvent::TurnFinished { correlation, .. } => {
+        self.visible_session == Some(correlation.session_id)
+      }
+      ServerEvent::Compacted { session_id, .. }
+      | ServerEvent::Prediction { session_id, .. }
+      | ServerEvent::TitleUpdated { session_id, .. }
+      | ServerEvent::QueueUpdated { session_id, .. } => {
+        self.visible_session == Some(*session_id)
+      }
+      ServerEvent::SessionStopped { session_id } => {
+        visible_before == Some(*session_id)
+      }
+      ServerEvent::PersonaUpdated { session_id, .. }
+      | ServerEvent::ModelUpdated { session_id, .. }
+      | ServerEvent::Error { session_id, .. } => session_id
+        .is_none_or(|session_id| self.visible_session == Some(session_id)),
+    };
   }
 }

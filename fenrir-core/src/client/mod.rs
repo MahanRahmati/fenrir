@@ -97,7 +97,7 @@ impl Client {
   }
 
   pub async fn set_persona(&mut self, name: impl Into<String>) -> Result<u64> {
-    let session_id = self.state.active_session;
+    let session_id = self.state.visible_session();
     return self.set_persona_for(session_id, name).await;
   }
 
@@ -119,7 +119,7 @@ impl Client {
   }
 
   pub async fn set_model(&mut self, model: Model) -> Result<u64> {
-    let session_id = self.state.active_session;
+    let session_id = self.state.visible_session();
     return self.set_model_for(session_id, model).await;
   }
 
@@ -141,7 +141,7 @@ impl Client {
 
   pub async fn send_prompt(&mut self, text: impl Into<String>) -> Result<u64> {
     let text = text.into();
-    let session_id = self.state.active_session;
+    let session_id = self.state.visible_session();
     if session_id.is_none() {
       self.state.creating_session = true;
     }
@@ -162,7 +162,7 @@ impl Client {
   }
 
   pub async fn run_command(&mut self, command: Command) -> Result<u64> {
-    let session_id = self.state.active_session;
+    let session_id = self.state.visible_session();
     let starts_turn = matches!(command, Command::Compact | Command::Review);
     return self
       .send_tracked(
@@ -179,7 +179,7 @@ impl Client {
   }
 
   pub async fn compact(&mut self) -> Result<u64> {
-    let Some(session_id) = self.state.active_session else {
+    let Some(session_id) = self.state.visible_session() else {
       bail!("No session selected");
     };
     return self
@@ -203,7 +203,7 @@ impl Client {
   }
 
   pub async fn cancel(&mut self, turn_id: Option<Uuid>) -> Result<()> {
-    let Some(session_id) = self.state.active_session else {
+    let Some(session_id) = self.state.visible_session() else {
       return Ok(());
     };
     return self
@@ -233,15 +233,28 @@ impl Client {
       .await;
   }
 
-  pub async fn unsubscribe(&mut self, session_id: Uuid) -> Result<()> {
+  pub async fn subscribe(&mut self, session_id: Uuid) -> Result<()> {
     return self
       .handle
-      .send(ClientRequest::Unsubscribe { session_id })
+      .send(ClientRequest::Subscribe { session_id })
       .await;
+  }
+
+  pub async fn unsubscribe(&mut self, session_id: Uuid) -> Result<()> {
+    self
+      .handle
+      .send(ClientRequest::Unsubscribe { session_id })
+      .await?;
+    self.state.forget_session(session_id);
+    return Ok(());
   }
 
   pub async fn shutdown(&mut self) -> Result<()> {
     return self.handle.send(ClientRequest::Shutdown).await;
+  }
+
+  pub async fn disconnect(&mut self) -> Result<()> {
+    return self.handle.send(ClientRequest::Disconnect).await;
   }
 
   pub fn apply_event(&mut self, event: ServerEvent) -> Option<ServerEvent> {
@@ -250,8 +263,8 @@ impl Client {
 
   pub async fn recv(&mut self) -> Option<ServerEvent> {
     loop {
+      let previous_session = self.state.visible_session();
       let event = self.handle.events.recv().await?;
-      let previous_session = self.state.active_session;
       let Some(update) = self.state.apply(event) else {
         continue;
       };
@@ -266,9 +279,15 @@ impl Client {
             session_id: previous_session,
           })
           .await;
+        self.state.forget_session(previous_session);
       }
       return Some(update);
     }
+  }
+
+  pub async fn recv_all(&mut self) -> Option<ServerEvent> {
+    let event = self.handle.events.recv().await?;
+    return Some(self.state.apply_all(event));
   }
 
   fn take_request_id(&mut self) -> u64 {

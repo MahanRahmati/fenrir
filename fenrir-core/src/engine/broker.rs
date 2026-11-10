@@ -88,9 +88,16 @@ impl BrokerHandle {
   }
 }
 
-struct ClientState {
+#[derive(Default)]
+struct Draft {
+  persona: Option<String>,
+  model: Option<Model>,
+}
+
+struct ConnectedClient {
   cwd: String,
   events: Sender<ServerEvent>,
+  draft: Draft,
 }
 
 struct PendingApproval {
@@ -104,11 +111,10 @@ struct Broker {
   requests: Receiver<BrokerRequest>,
   session_events: Receiver<SessionEvent>,
   session_event_tx: Sender<SessionEvent>,
-  clients: HashMap<Uuid, ClientState>,
+  clients: HashMap<Uuid, ConnectedClient>,
   sessions: HashMap<Uuid, SessionHandle>,
   subscriptions: HashMap<Uuid, HashSet<Uuid>>,
   pending_approvals: HashMap<(Uuid, Uuid, String), PendingApproval>,
-  next_persona: Option<String>,
   default_model: Option<Model>,
 }
 
@@ -132,7 +138,6 @@ pub fn spawn(
     sessions: HashMap::new(),
     subscriptions: HashMap::new(),
     pending_approvals: HashMap::new(),
-    next_persona: None,
     default_model,
   };
   tokio::spawn(broker.run());
@@ -152,7 +157,14 @@ impl Broker {
           match request {
             BrokerRequest::Connect { cwd, events, reply } => {
               let id = Uuid::now_v7();
-              self.clients.insert(id, ClientState { cwd, events });
+              self.clients.insert(
+                id,
+                ConnectedClient {
+                  cwd,
+                  events,
+                  draft: Draft::default(),
+                },
+              );
               let _ = reply.send(id);
               self.send_to(id, ServerEvent::Connected { client_id: id });
             }
@@ -211,8 +223,8 @@ impl Broker {
         let session = self
           .repo
           .create_session(
-            persona.or_else(|| self.next_persona.clone()),
-            self.model_or_default(model),
+            persona.or_else(|| self.draft_persona(client_id)),
+            self.model_or_default(client_id, model),
             self.client_cwd(client_id)?,
           )
           .await?;
@@ -281,7 +293,7 @@ impl Broker {
           ServerEvent::PersonasListed {
             request_id,
             personas: persona_infos(),
-            current: self.draft_persona(),
+            current: self.draft_persona(client_id),
           },
         );
         return Ok(());
@@ -292,7 +304,7 @@ impl Broker {
       } => {
         let providers =
           ProviderManager::new(self.config.clone(), self.secrets.clone());
-        let current = self.current_model(session_id).await?;
+        let current = self.current_model(client_id, session_id).await?;
         self.send_to(
           client_id,
           ServerEvent::ModelsListed {
@@ -324,7 +336,9 @@ impl Broker {
               .await?;
           }
           None => {
-            self.next_persona = Some(name.clone());
+            if let Some(client) = self.clients.get_mut(&client_id) {
+              client.draft.persona = Some(name.clone());
+            }
             self.send_to(
               client_id,
               ServerEvent::PersonaUpdated {
@@ -342,7 +356,9 @@ impl Broker {
         session_id,
         model,
       } => {
-        self.default_model = Some(model.clone());
+        if let Some(client) = self.clients.get_mut(&client_id) {
+          client.draft.model = Some(model.clone());
+        }
         match session_id {
           Some(session_id) => {
             self.ensure_session(session_id).await?;
@@ -398,8 +414,8 @@ impl Broker {
             let session = self
               .repo
               .create_session(
-                self.next_persona.clone(),
-                self.model_or_default(None),
+                self.draft_persona(client_id),
+                self.model_or_default(client_id, None),
                 self.client_cwd(client_id)?,
               )
               .await?;
@@ -560,12 +576,14 @@ impl Broker {
   ) -> Result<()> {
     match command.effect(session_id)? {
       Effect::CreateSession { persona, model } => {
-        self.next_persona = None;
+        if let Some(client) = self.clients.get_mut(&client_id) {
+          client.draft.persona = None;
+        }
         let session = self
           .repo
           .create_session(
             persona,
-            self.model_or_default(model),
+            self.model_or_default(client_id, model),
             self.client_cwd(client_id)?,
           )
           .await?;
@@ -594,7 +612,7 @@ impl Broker {
         return Ok(());
       }
       Effect::ListPersonas => {
-        let current = self.current_persona(session_id).await?;
+        let current = self.current_persona(client_id, session_id).await?;
         self.send_to(
           client_id,
           ServerEvent::PersonasListed {
@@ -608,7 +626,7 @@ impl Broker {
       Effect::ListModels => {
         let providers =
           ProviderManager::new(self.config.clone(), self.secrets.clone());
-        let current = self.current_model(session_id).await?;
+        let current = self.current_model(client_id, session_id).await?;
         self.send_to(
           client_id,
           ServerEvent::ModelsListed {
@@ -636,8 +654,8 @@ impl Broker {
             let session = self
               .repo
               .create_session(
-                self.next_persona.clone(),
-                self.model_or_default(None),
+                self.draft_persona(client_id),
+                self.model_or_default(client_id, None),
                 self.client_cwd(client_id)?,
               )
               .await?;
@@ -698,7 +716,7 @@ impl Broker {
   async fn load_session(&self, session_id: Uuid) -> Result<Session> {
     let mut session = self.repo.load_session(session_id).await?;
     if session.model.is_none()
-      && let Some(model) = self.model_or_default(None)
+      && let Some(model) = self.default_model.clone()
     {
       self.repo.set_model(session_id, &model).await?;
       session.model = Some(model);
@@ -884,37 +902,62 @@ impl Broker {
     }
   }
 
-  fn model_or_default(&self, model: Option<Model>) -> Option<Model> {
-    return model.or_else(|| self.default_model.clone());
+  fn model_or_default(
+    &self,
+    client_id: Uuid,
+    model: Option<Model>,
+  ) -> Option<Model> {
+    return model
+      .or_else(|| self.draft_model(client_id))
+      .or_else(|| self.default_model.clone());
+  }
+
+  fn draft_model(&self, client_id: Uuid) -> Option<Model> {
+    return self
+      .clients
+      .get(&client_id)
+      .and_then(|client| client.draft.model.clone());
   }
 
   async fn current_persona(
     &self,
+    client_id: Uuid,
     session_id: Option<Uuid>,
   ) -> Result<Option<String>> {
     return match session_id {
       Some(id) => Ok(Some(self.repo.load_session(id).await?.persona)),
-      None => Ok(self.draft_persona()),
+      None => Ok(self.draft_persona(client_id)),
     };
   }
 
-  fn draft_persona(&self) -> Option<String> {
+  fn draft_persona(&self, client_id: Uuid) -> Option<String> {
     return self
-      .next_persona
-      .clone()
+      .clients
+      .get(&client_id)
+      .and_then(|client| client.draft.persona.clone())
       .or_else(|| Some(DEFAULT_PERSONA.name().to_string()));
   }
 
   async fn current_model(
     &self,
+    client_id: Uuid,
     session_id: Option<Uuid>,
   ) -> Result<Option<Model>> {
     return match session_id {
       Some(id) => {
         let session = self.load_session(id).await?;
-        Ok(session.model.or_else(|| self.default_model.clone()))
+        Ok(
+          session
+            .model
+            .or_else(|| self.draft_model(client_id))
+            .or_else(|| self.default_model.clone()),
+        )
       }
-      None => Ok(self.default_model.clone()),
+      None => Ok(
+        self
+          .draft_model(client_id)
+          .or_else(|| self.default_model.clone()),
+      ),
     };
   }
 

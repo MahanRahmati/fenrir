@@ -97,7 +97,7 @@ impl Adapter {
           }
         }
         _ = sigint.recv() => {
-          if self.client.state().active_turn.is_some()
+          if self.client.state().active_turn().is_some()
             || self.client.state().is_pending()
           {
             self.cancel_turn().await?;
@@ -119,7 +119,7 @@ impl Adapter {
       if self.eof
         && self.input_queue.is_empty()
         && !self.client.state().is_busy()
-        && self.client.state().awaiting_usage.is_none()
+        && self.client.state().awaiting_usage().is_none()
         && matches!(self.mode, Mode::Idle)
       {
         self.shutdown().await?;
@@ -134,7 +134,7 @@ impl Adapter {
     loop {
       if matches!(self.mode, Mode::Idle)
         && (self.client.state().is_busy()
-          || self.client.state().awaiting_usage.is_some())
+          || self.client.state().awaiting_usage().is_some())
       {
         return Ok(false);
       }
@@ -163,7 +163,7 @@ impl Adapter {
         }
         Mode::Personas { personas } => {
           if let Some(index) = parse_index(&line, personas.len(), "persona") {
-            let session_id = self.client.state().active_session;
+            let session_id = self.client.state().visible_session();
             self
               .client
               .set_persona_for(session_id, personas[index].name.clone())
@@ -173,7 +173,7 @@ impl Adapter {
         }
         Mode::Models { models } => {
           if let Some(index) = parse_index(&line, models.len(), "model") {
-            let session_id = self.client.state().active_session;
+            let session_id = self.client.state().visible_session();
             self
               .client
               .set_model_for(session_id, models[index].clone())
@@ -384,7 +384,7 @@ impl Adapter {
       println!("No sessions found.");
       return;
     }
-    let active_session = self.client.state().active_session;
+    let active_session = self.client.state().visible_session();
     let lines: Vec<String> = sessions
       .iter()
       .map(|session| {
