@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, bail};
+use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -1045,9 +1046,7 @@ impl Broker {
       .unwrap_or_default();
     let mut dead = Vec::new();
     for id in clients {
-      if let Some(client) = self.clients.get(&id)
-        && client.events.try_send(event.clone()).is_err()
-      {
+      if !self.deliver(id, event.clone()) {
         dead.push(id);
       }
     }
@@ -1064,9 +1063,30 @@ impl Broker {
   }
 
   fn send_to(&mut self, id: Uuid, event: ServerEvent) {
-    if let Some(client) = self.clients.get(&id) {
-      let _ = client.events.try_send(event);
+    if !self.deliver(id, event) {
+      self.remove_client(id);
     }
+  }
+
+  fn deliver(&self, id: Uuid, event: ServerEvent) -> bool {
+    let Some(client) = self.clients.get(&id) else {
+      return false;
+    };
+    return match client.events.try_send(event) {
+      Ok(()) => true,
+      Err(TrySendError::Closed(_)) => {
+        vlog!("Client {id} disconnected");
+        false
+      }
+      Err(TrySendError::Full(event)) => {
+        vlog!(
+          "Disconnecting client {id} for session {:?}: event channel full at {}",
+          session_id_of(&event),
+          event.name()
+        );
+        false
+      }
+    };
   }
 
   fn model_or_default(
