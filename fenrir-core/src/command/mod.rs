@@ -137,6 +137,10 @@ impl Command {
     };
   }
 
+  pub fn starts_turn(&self) -> bool {
+    return matches!(self, Self::Compact | Self::Review);
+  }
+
   pub fn catalog() -> Vec<CommandInfo> {
     return COMMANDS.iter().map(CommandEntry::info).collect();
   }

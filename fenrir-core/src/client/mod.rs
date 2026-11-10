@@ -163,7 +163,7 @@ impl Client {
 
   pub async fn run_command(&mut self, command: Command) -> Result<u64> {
     let session_id = self.state.visible_session();
-    let starts_turn = matches!(command, Command::Compact | Command::Review);
+    let starts_turn = command.starts_turn();
     return self
       .send_tracked(
         RequestKind::RunCommand,
