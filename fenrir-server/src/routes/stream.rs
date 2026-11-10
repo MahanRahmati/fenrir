@@ -10,6 +10,7 @@ use fenrir_core::engine::protocol::{ServerEvent, TurnOutcome};
 use crate::sse::{self, SseEvent};
 
 pub enum StreamEnd {
+  Live,
   Session { request_id: u64 },
   Request { request_id: u64 },
   Turn { request_id: u64, client_id: Uuid },
@@ -74,21 +75,24 @@ fn should_close_stream(
     return true;
   }
   let request_id = match end {
+    StreamEnd::Live => None,
     StreamEnd::Session { request_id }
     | StreamEnd::Request { request_id }
-    | StreamEnd::Turn { request_id, .. } => *request_id,
+    | StreamEnd::Turn { request_id, .. } => Some(*request_id),
   };
-  if matches!(
-    event,
-    ServerEvent::Error {
-      request_id: Some(id),
-      ..
-    } if *id == request_id
-  ) {
+  if let Some(request_id) = request_id
+    && matches!(
+      event,
+      ServerEvent::Error {
+        request_id: Some(id),
+        ..
+      } if *id == request_id
+    )
+  {
     return true;
   }
   return match end {
-    StreamEnd::Session { .. } => false,
+    StreamEnd::Live | StreamEnd::Session { .. } => false,
     StreamEnd::Request { request_id } => {
       response_request_id(event) == Some(*request_id)
     }

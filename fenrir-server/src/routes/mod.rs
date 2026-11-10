@@ -1,6 +1,7 @@
 mod approval;
 mod command;
 mod commands;
+mod events;
 mod health;
 mod models;
 mod personas;
@@ -22,6 +23,7 @@ pub fn router() -> Router<AdapterHandle> {
       get(sessions::list_sessions).post(sessions::create_session),
     )
     .route("/api/sessions/{session_id}", get(sessions::get_session))
+    .route("/api/sessions/{session_id}/events", get(events::events))
     .route(
       "/api/sessions/{session_id}/persona",
       post(sessions::set_persona),
