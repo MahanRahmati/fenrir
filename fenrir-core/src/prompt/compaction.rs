@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::config::Config;
 use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
@@ -11,6 +12,8 @@ use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::session::Session;
 use crate::session_manager::{Message, Summary};
 use crate::vlog;
+
+const SUMMARY_INSTRUCTION: &str = "Write the structured summary of the conversation above now, using the exact format from the system prompt. Do not continue the conversation.";
 
 pub fn build(
   config: &Config,
@@ -36,37 +39,55 @@ pub fn build(
       }
       Some(Message {
         id: message.id,
-        msg_type: message.msg_type.clone(),
+        msg_type: None,
         role: message.role.clone(),
         content,
-        tool_call_id: message.tool_call_id.clone(),
-        tool_calls: message.tool_calls.clone(),
+        tool_call_id: None,
+        tool_calls: None,
         timestamp: message.timestamp,
       })
     })
     .collect();
 
-  let mut prompt_messages = Vec::new();
-  if let Some(ref summary) = last_summary {
-    let first_user_message =
-      serialized.iter().find(|message| message.role == "user");
-    if let Some(message) = first_user_message {
-      prompt_messages.push(message.clone());
-    }
-    for message in &serialized {
-      if message.id > summary.covers_message_id {
-        prompt_messages.push(message.clone());
+  let selected: Vec<&Message> = match last_summary {
+    Some(ref summary) => {
+      let mut selected = Vec::new();
+      if let Some(first_user_message) =
+        serialized.iter().find(|message| message.role == "user")
+      {
+        selected.push(first_user_message);
       }
+      selected.extend(
+        serialized
+          .iter()
+          .filter(|message| message.id > summary.covers_message_id),
+      );
+      selected
     }
-  } else {
-    prompt_messages = serialized;
-  }
+    None => serialized.iter().collect(),
+  };
+
+  let transcript = selected
+    .iter()
+    .map(|message| message.content.as_str())
+    .collect::<Vec<&str>>()
+    .join("\n\n");
+  let content =
+    format!("Conversation transcript:\n{transcript}\n\n{SUMMARY_INSTRUCTION}");
 
   return PromptSpec {
     kind: PromptKind::Compaction,
     model: model.clone(),
     system: system_prompt,
-    messages: prompt_messages,
+    messages: vec![Message {
+      id: Uuid::now_v7(),
+      msg_type: None,
+      role: "user".to_string(),
+      content,
+      tool_call_id: None,
+      tool_calls: None,
+      timestamp: chrono::Utc::now().timestamp(),
+    }],
     tools: Vec::new(),
     stream: false,
     emit_tokens: false,
