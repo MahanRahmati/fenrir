@@ -50,7 +50,8 @@ pub fn spawn_if_needed(
   if first_message.is_empty() {
     return;
   }
-  let Some(model) = session.model.clone() else {
+  let providers = ProviderManager::new(config.clone(), secrets.clone());
+  let Some(model) = providers.small_model().or(session.model.clone()) else {
     return;
   };
 
@@ -58,7 +59,6 @@ pub fn spawn_if_needed(
   let session_id = session.id;
   let cwd = session.cwd.clone();
   let config = config.clone();
-  let secrets = secrets.clone();
   let repo = repo.clone();
   let events = events.clone();
 
@@ -73,7 +73,6 @@ pub fn spawn_if_needed(
       tool_calls: None,
       timestamp: now,
     };
-    let providers = ProviderManager::new(config.clone(), secrets.clone());
     let spec = build(&config, &cwd, &model, message);
     let correlation = Correlation {
       session_id,

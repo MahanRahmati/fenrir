@@ -21,6 +21,7 @@ use crate::vlog;
 pub struct ProviderManager {
   providers: Vec<Box<dyn Provider>>,
   default_model: Option<Model>,
+  small_model: Option<Model>,
 }
 
 impl ProviderManager {
@@ -52,9 +53,12 @@ impl ProviderManager {
       providers.push(Box::new(provider));
     }
     let default_model = resolve_default_model(&config, &providers);
+    let small_model =
+      resolve_small_model(&config, &providers, default_model.as_ref());
     return Self {
       providers,
       default_model,
+      small_model,
     };
   }
 
@@ -68,6 +72,10 @@ impl ProviderManager {
 
   pub fn default_model(&self) -> Option<Model> {
     return self.default_model.clone();
+  }
+
+  pub fn small_model(&self) -> Option<Model> {
+    return self.small_model.clone();
   }
 
   pub async fn context_window(&self, model: &Model) -> Option<u64> {
@@ -128,24 +136,10 @@ fn resolve_default_model(
   config: &Config,
   providers: &[Box<dyn Provider>],
 ) -> Option<Model> {
-  if let Some(model_str) = config.general.model.as_ref() {
-    if let Some((provider_name, model_name)) = model_str.split_once('/') {
-      if let Some(model) = providers
-        .iter()
-        .find(|p| p.name() == provider_name)
-        .and_then(|p| {
-          p.list_models().into_iter().find(|m| m.name == model_name)
-        })
-      {
-        vlog!("Selected provider '{provider_name}' model '{model_name}'");
-        return Some(model);
-      }
-      vlog!("Failed to select provider '{provider_name}' model '{model_name}'");
-    } else {
-      vlog!(
-        "Invalid configured model '{model_str}': expected '<provider>/<model>'"
-      );
-    }
+  if let Some(model) =
+    find_model(config.general.model.as_deref(), providers, "model")
+  {
+    return Some(model);
   }
 
   let model = providers
@@ -159,6 +153,52 @@ fn resolve_default_model(
     );
   }
   return model;
+}
+
+fn resolve_small_model(
+  config: &Config,
+  providers: &[Box<dyn Provider>],
+  default_model: Option<&Model>,
+) -> Option<Model> {
+  if let Some(model) = find_model(
+    config.general.small_model.as_deref(),
+    providers,
+    "small model",
+  ) {
+    return Some(model);
+  }
+  if config.general.small_model.is_some() {
+    vlog!("Falling back to the default model for small model tasks");
+  }
+  return default_model.cloned();
+}
+
+fn find_model(
+  model_str: Option<&str>,
+  providers: &[Box<dyn Provider>],
+  setting: &str,
+) -> Option<Model> {
+  let model_str = model_str?;
+  let Some((provider_name, model_name)) = model_str.split_once('/') else {
+    vlog!(
+      "Invalid configured {setting} '{model_str}': expected '<provider>/<model>'"
+    );
+    return None;
+  };
+  let Some(model) = providers
+    .iter()
+    .find(|p| p.name() == provider_name)
+    .and_then(|p| p.list_models().into_iter().find(|m| m.name == model_name))
+  else {
+    vlog!(
+      "Failed to select provider '{provider_name}' model '{model_name}' for {setting}"
+    );
+    return None;
+  };
+  vlog!(
+    "Selected provider '{provider_name}' model '{model_name}' for {setting}"
+  );
+  return Some(model);
 }
 
 fn setup_openai_compatible(
