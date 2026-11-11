@@ -11,6 +11,7 @@ const DEFAULT_SECRETS_NAME: &str = "secrets.toml";
 pub struct Secrets {
   pub openai_compatible_key: Option<String>,
   pub open_router_key: Option<String>,
+  pub opencode_key: Option<String>,
   pub zai_key: Option<String>,
 }
 

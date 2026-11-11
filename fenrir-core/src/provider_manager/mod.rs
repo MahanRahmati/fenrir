@@ -11,6 +11,7 @@ pub use crate::provider_manager::provider::Model;
 pub use crate::provider_manager::provider::ToolCall;
 use crate::provider_manager::provider::{ChatResponse, ChatStream, Provider};
 use crate::provider_manager::providers::openai_compatible::OpenAICompatibleProvider;
+use crate::provider_manager::providers::opencode::OpencodeProvider;
 use crate::provider_manager::providers::openrouter::OpenRouterProvider;
 use crate::provider_manager::providers::zai::ZaiProvider;
 use crate::session_manager::Message;
@@ -38,6 +39,11 @@ impl ProviderManager {
       secrets.open_router_key.clone(),
       timeouts,
     ) {
+      providers.push(Box::new(provider));
+    }
+    if let Some(provider) =
+      setup_opencode(config.clone(), secrets.opencode_key.clone(), timeouts)
+    {
       providers.push(Box::new(provider));
     }
     if let Some(provider) =
@@ -184,6 +190,22 @@ fn setup_openrouter(
     return None;
   }
   return Some(OpenRouterProvider::new(
+    api_key,
+    config.models.clone(),
+    timeouts,
+  ));
+}
+
+fn setup_opencode(
+  config: Config,
+  api_key: Option<String>,
+  timeouts: NetworkTimeouts,
+) -> Option<OpencodeProvider> {
+  let config = config.providers.opencode?;
+  if config.models.is_empty() {
+    return None;
+  }
+  return Some(OpencodeProvider::new(
     api_key,
     config.models.clone(),
     timeouts,

@@ -182,11 +182,18 @@ pub struct ModelEntry {
   pub meta: Option<ModelMeta>,
   #[serde(default)]
   pub context_length: Option<u64>,
+  #[serde(default)]
+  pub limit: Option<ModelLimit>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ModelMeta {
   pub n_ctx: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ModelLimit {
+  pub context: Option<u64>,
 }
 
 pub fn build_headers(api_key: Option<&str>) -> HashMap<String, String> {
@@ -465,6 +472,7 @@ pub fn parse_context_window(
         .clone()
         .and_then(|meta| meta.n_ctx)
         .or(entry.context_length)
+        .or(entry.limit.as_ref().and_then(|limit| limit.context))
     })
     .filter(|n_ctx| *n_ctx > 0)
 }
