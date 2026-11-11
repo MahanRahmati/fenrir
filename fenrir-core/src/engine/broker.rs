@@ -18,7 +18,7 @@ use crate::engine::repo_actor::{RepoHandle, summary_of};
 use crate::engine::session_actor::{
   SessionActor, SessionHandle, SessionRequest, TokenChunk,
 };
-use crate::persona_manager::{DEFAULT_PERSONA, PersonaManager};
+use crate::persona_manager::PersonaManager;
 use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::ToolApprovalStatus;
 use crate::session_manager::session::Session;
@@ -1122,7 +1122,9 @@ impl Broker {
       .clients
       .get(&client_id)
       .and_then(|client| client.draft.persona.clone())
-      .or_else(|| Some(DEFAULT_PERSONA.name().to_string()));
+      .or_else(|| {
+        Some(PersonaManager::default_for(&self.config).name().to_string())
+      });
   }
 
   async fn current_model(

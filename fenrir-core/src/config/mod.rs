@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 
 use crate::files::operations;
+use crate::persona_manager::PersonaManager;
 use crate::utils::xdg;
 
 pub const DEFAULT_DIRECTORY: &str = "fenrir";
@@ -27,6 +28,7 @@ pub struct Config {
 #[serde(default)]
 pub struct GeneralConfig {
   pub model: Option<String>,
+  pub default_persona: Option<String>,
   pub stream: bool,
   pub show_reasoning: bool,
   pub show_tools: bool,
@@ -39,6 +41,7 @@ impl Default for GeneralConfig {
   fn default() -> Self {
     return Self {
       model: None,
+      default_persona: None,
       stream: true,
       show_reasoning: true,
       show_tools: true,
@@ -254,10 +257,14 @@ impl Config {
           "Cannot read configuration file '{}'",
           config_path.display()
         ))?;
-    let config = toml::from_str(&config_content).context(format!(
+    let config: Config = toml::from_str(&config_content).context(format!(
       "Configuration file '{}' is invalid",
       config_path.display()
     ))?;
+    if let Some(name) = config.general.default_persona.as_deref() {
+      PersonaManager::find(name)
+        .context(format!("Unknown default persona '{name}'"))?;
+    }
     return Ok(config);
   }
 

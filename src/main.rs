@@ -8,6 +8,7 @@ use fenrir_core::database::DB;
 use fenrir_core::engine::broker;
 use fenrir_core::engine::repo_actor::RepoActor;
 use fenrir_core::logging::{set_print_enabled, setup_logging};
+use fenrir_core::persona_manager::PersonaManager;
 use fenrir_core::session_manager::repository::SessionRepository;
 
 use crate::cli::{Cli, Commands};
@@ -72,10 +73,12 @@ async fn main() {
     }
     Some(Commands::Tui) => {
       let predict_enabled = config.general.predict_next_prompt;
+      let default_persona =
+        PersonaManager::default_for(&config).name().to_string();
       let repository = SessionRepository::new(db);
       let repo = RepoActor::spawn(repository, config.clone());
       let broker = broker::spawn(config, secrets, repo);
-      fenrir_tui::run(&broker, predict_enabled).await
+      fenrir_tui::run(&broker, predict_enabled, &default_persona).await
     }
     Some(Commands::Serve) => {
       set_print_enabled(true);

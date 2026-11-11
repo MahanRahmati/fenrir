@@ -12,7 +12,6 @@ use fenrir_core::engine::broker::BrokerHandle;
 use fenrir_core::engine::protocol::{
   CommandInfo, PersonaInfo, ServerEvent, SessionSummary, SessionView,
 };
-use fenrir_core::persona_manager::DEFAULT_PERSONA;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::Message;
 use fenrir_core::tool_manager::SUBAGENT_TOOL_NAME;
@@ -223,11 +222,11 @@ impl Adapter {
       ServerEvent::Connected { .. } => {}
       ServerEvent::SessionCreated {
         request_id,
-        session: _,
+        session,
       } => {
         if self.new_session_request == Some(request_id) {
           self.new_session_request = None;
-          println!("Persona set to: {}", DEFAULT_PERSONA.name());
+          println!("Persona set to: {}", session.persona);
         }
       }
       ServerEvent::SessionLoaded { session, .. } => {

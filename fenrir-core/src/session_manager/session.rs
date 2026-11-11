@@ -6,7 +6,6 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::engine::repo_actor::RepoHandle;
 use crate::hook_manager::HookManager;
-use crate::persona_manager::DEFAULT_PERSONA;
 use crate::persona_manager::PersonaManager;
 use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, Model};
@@ -101,7 +100,7 @@ impl Session {
       title: None,
       created_at: now,
       last_interaction: now,
-      persona: DEFAULT_PERSONA.name().to_string(),
+      persona: PersonaManager::default_for(config).name().to_string(),
       model: model.clone(),
       cwd: cwd.to_owned(),
       messages: Vec::new(),
@@ -119,7 +118,7 @@ impl Session {
     let tool_manager = ToolManager::new(config, is_subagent);
     let mut persona_manager = PersonaManager::new();
     let persona = if row.persona.is_empty() {
-      DEFAULT_PERSONA.name().to_string()
+      PersonaManager::default_for(config).name().to_string()
     } else {
       row.persona
     };

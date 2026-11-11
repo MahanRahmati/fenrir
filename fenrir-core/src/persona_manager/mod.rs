@@ -1,5 +1,3 @@
-use anyhow::{Result, bail};
-
 mod compaction;
 mod default;
 mod judge;
@@ -9,6 +7,9 @@ mod researcher;
 mod reviewer;
 mod titles;
 
+use anyhow::{Result, bail};
+
+use crate::config::Config;
 pub use crate::persona_manager::compaction::COMPACTION_PERSONA;
 pub use crate::persona_manager::default::DEFAULT_PERSONA;
 pub use crate::persona_manager::judge::JUDGE_PERSONA;
@@ -53,6 +54,13 @@ impl PersonaManager {
       bail!("Unknown persona: {name}");
     };
     return Ok(persona);
+  }
+
+  pub fn default_for(config: &Config) -> Persona {
+    let Some(name) = config.general.default_persona.as_deref() else {
+      return DEFAULT_PERSONA;
+    };
+    return Self::find(name).unwrap_or(DEFAULT_PERSONA);
   }
 
   pub fn set(&mut self, name: &str) -> Result<()> {

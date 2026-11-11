@@ -19,7 +19,6 @@ use fenrir_core::engine::broker::BrokerHandle;
 use fenrir_core::engine::protocol::{
   PersonaInfo, ServerEvent, SessionSummary, SessionView, TurnOutcome,
 };
-use fenrir_core::persona_manager::DEFAULT_PERSONA;
 use fenrir_core::provider_manager::Model;
 
 use crate::tui::Tui;
@@ -54,7 +53,11 @@ struct Adapter {
   exiting: bool,
 }
 
-pub async fn run(broker: &BrokerHandle, predict_enabled: bool) -> Result<()> {
+pub async fn run(
+  broker: &BrokerHandle,
+  predict_enabled: bool,
+  default_persona: &str,
+) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|path| path.display().to_string())
     .unwrap_or_default();
@@ -92,7 +95,7 @@ pub async fn run(broker: &BrokerHandle, predict_enabled: bool) -> Result<()> {
     return Err(e);
   }
 
-  adapter.tui.set_persona(DEFAULT_PERSONA.name());
+  adapter.tui.set_persona(default_persona);
   let request_id = adapter.client.list_models(None).await?;
   adapter.startup_models_request = Some(request_id);
   adapter.redraw();
