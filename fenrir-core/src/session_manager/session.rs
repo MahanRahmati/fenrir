@@ -354,8 +354,9 @@ impl Message {
 }
 
 fn truncate(content: &str, max_chars: usize) -> String {
-  if content.len() <= max_chars {
+  if content.chars().count() <= max_chars {
     return content.to_string();
   }
-  return format!("{}[truncated]", &content[..max_chars]);
+  let truncated: String = content.chars().take(max_chars).collect();
+  return format!("{truncated}[truncated]");
 }
