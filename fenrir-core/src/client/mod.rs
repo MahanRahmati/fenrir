@@ -69,10 +69,10 @@ impl Client {
       .await;
   }
 
-  pub async fn list_sessions(&mut self) -> Result<u64> {
+  pub async fn list_sessions(&mut self, limit: Option<u32>) -> Result<u64> {
     return self
       .send_tracked(RequestKind::ListSessions, None, false, |request_id| {
-        ClientRequest::ListSessions { request_id }
+        ClientRequest::ListSessions { request_id, limit }
       })
       .await;
   }

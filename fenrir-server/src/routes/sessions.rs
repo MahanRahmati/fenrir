@@ -1,5 +1,5 @@
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -35,6 +35,11 @@ pub struct ModelData {
 #[derive(Debug, Serialize)]
 pub struct CancelData {
   pub accepted: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct ListSessionsQuery {
+  pub limit: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -100,8 +105,9 @@ fn validate_model(model: &Model) -> Result<(), ApiError> {
 
 pub async fn list_sessions(
   State(adapter): State<AdapterHandle>,
+  Query(query): Query<ListSessionsQuery>,
 ) -> ApiResult<SessionsData> {
-  let sessions = adapter.list_sessions().await?;
+  let sessions = adapter.list_sessions(query.limit).await?;
   return Ok(ApiResponse::success(
     SessionsData { sessions },
     "Sessions listed",

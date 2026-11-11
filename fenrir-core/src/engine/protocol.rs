@@ -74,6 +74,7 @@ pub enum ClientRequest {
   },
   ListSessions {
     request_id: u64,
+    limit: Option<u32>,
   },
   ListPersonas {
     request_id: u64,

@@ -285,8 +285,8 @@ impl Broker {
         self.replay_active_turn(client_id, session_id, already_subscribed);
         return Ok(());
       }
-      ClientRequest::ListSessions { request_id } => {
-        let sessions = self.repo.list_sessions().await?;
+      ClientRequest::ListSessions { request_id, limit } => {
+        let sessions = self.repo.list_sessions(limit).await?;
         self.send_to(
           client_id,
           ServerEvent::SessionsListed {
@@ -622,7 +622,7 @@ impl Broker {
         return Ok(());
       }
       Effect::ListSessions => {
-        let sessions = self.repo.list_sessions().await?;
+        let sessions = self.repo.list_sessions(None).await?;
         self.send_to(
           client_id,
           ServerEvent::SessionsListed {
@@ -1244,7 +1244,7 @@ fn request_id_of(request: &ClientRequest) -> Option<u64> {
   return match request {
     ClientRequest::CreateSession { request_id, .. }
     | ClientRequest::LoadSession { request_id, .. }
-    | ClientRequest::ListSessions { request_id }
+    | ClientRequest::ListSessions { request_id, .. }
     | ClientRequest::ListPersonas { request_id }
     | ClientRequest::ListModels { request_id, .. }
     | ClientRequest::SetPersona { request_id, .. }

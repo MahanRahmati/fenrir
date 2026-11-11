@@ -55,9 +55,12 @@ impl AdapterHandle {
     return Client::connect(&self.broker, &self.cwd).await;
   }
 
-  pub async fn list_sessions(&self) -> Result<Vec<SessionSummary>> {
+  pub async fn list_sessions(
+    &self,
+    limit: Option<u32>,
+  ) -> Result<Vec<SessionSummary>> {
     let mut client = self.connect().await?;
-    let result = list_sessions_with(&mut client).await;
+    let result = list_sessions_with(&mut client, limit).await;
     let _ = client.disconnect().await;
     return result;
   }
@@ -72,8 +75,9 @@ impl AdapterHandle {
 
 async fn list_sessions_with(
   client: &mut Client,
+  limit: Option<u32>,
 ) -> Result<Vec<SessionSummary>> {
-  let request_id = client.list_sessions().await?;
+  let request_id = client.list_sessions(limit).await?;
   loop {
     match next_event(client).await? {
       ServerEvent::SessionsListed {

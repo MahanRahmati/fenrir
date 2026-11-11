@@ -641,10 +641,14 @@ impl SessionRepository {
     return Ok(());
   }
 
-  pub async fn list_summaries(&self) -> Result<Vec<SessionSummary>> {
+  pub async fn list_summaries(
+    &self,
+    limit: Option<u32>,
+  ) -> Result<Vec<SessionSummary>> {
+    let limit = limit.map(i64::from).unwrap_or(-1);
     let mut rows = self
       .db
-      .query(LIST_SESSIONS, ())
+      .query(LIST_SESSIONS, (limit,))
       .await
       .context("Failed to list sessions")?;
 

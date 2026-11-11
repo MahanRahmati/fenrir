@@ -31,6 +31,7 @@ pub enum RepoRequest {
     reply: oneshot::Sender<Result<Session>>,
   },
   ListSessions {
+    limit: Option<u32>,
     reply: oneshot::Sender<Result<Vec<SessionSummary>>>,
   },
   Summary {
@@ -139,9 +140,15 @@ impl RepoHandle {
     return rx.await?;
   }
 
-  pub async fn list_sessions(&self) -> Result<Vec<SessionSummary>> {
+  pub async fn list_sessions(
+    &self,
+    limit: Option<u32>,
+  ) -> Result<Vec<SessionSummary>> {
     let (reply, rx) = oneshot::channel();
-    self.tx.send(RepoRequest::ListSessions { reply }).await?;
+    self
+      .tx
+      .send(RepoRequest::ListSessions { limit, reply })
+      .await?;
     return rx.await?;
   }
 
@@ -401,8 +408,8 @@ impl RepoActor {
           .await;
         let _ = reply.send(result);
       }
-      RepoRequest::ListSessions { reply } => {
-        let result = self.repo.list_summaries().await;
+      RepoRequest::ListSessions { limit, reply } => {
+        let result = self.repo.list_summaries(limit).await;
         let _ = reply.send(result);
       }
       RepoRequest::Summary { id, reply } => {
