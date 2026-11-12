@@ -11,6 +11,7 @@ use crate::engine::protocol::{Correlation, SessionEvent};
 use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::Persona;
 use crate::provider_manager::{Model, ProviderManager};
+use crate::skill_manager::SkillRegistry;
 use crate::tool_manager::preview::ToolPreview;
 
 pub type ToolParams = HashMap<String, String>;
@@ -18,6 +19,7 @@ pub type ToolParams = HashMap<String, String>;
 pub struct ToolContext<'a> {
   pub config: &'a Config,
   pub secrets: &'a Secrets,
+  pub skills: &'a SkillRegistry,
   pub persona: &'a Persona,
   pub model: &'a Model,
   pub provider_manager: &'a ProviderManager,

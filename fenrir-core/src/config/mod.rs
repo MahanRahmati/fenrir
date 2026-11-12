@@ -114,6 +114,7 @@ pub struct PermissionsConfig {
   pub todo_list: bool,
   pub weather: bool,
   pub git: bool,
+  pub skill: bool,
 }
 
 impl Default for PermissionsConfig {
@@ -139,6 +140,7 @@ impl Default for PermissionsConfig {
       todo_list: true,
       weather: true,
       git: true,
+      skill: true,
     };
   }
 }

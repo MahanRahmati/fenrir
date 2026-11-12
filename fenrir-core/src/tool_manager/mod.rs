@@ -18,6 +18,7 @@ mod read_file;
 mod read_pdf;
 mod remove_file;
 mod screenshot;
+mod skill;
 mod subagent;
 mod todo_list;
 pub mod tool;
@@ -31,6 +32,7 @@ use tokio::time;
 
 use crate::config::Config;
 use crate::persona_manager::ToolAccess;
+use crate::skill_manager::SkillRegistry;
 pub use crate::tool_manager::browser::BROWSER_TOOL_NAME;
 use crate::tool_manager::browser::BrowserTool;
 pub use crate::tool_manager::control_keyboard::CONTROL_KEYBOARD_TOOL_NAME;
@@ -69,6 +71,8 @@ pub use crate::tool_manager::remove_file::REMOVE_FILE_TOOL_NAME;
 use crate::tool_manager::remove_file::RemoveFileTool;
 pub use crate::tool_manager::screenshot::SCREENSHOT_TOOL_NAME;
 use crate::tool_manager::screenshot::ScreenshotTool;
+pub use crate::tool_manager::skill::SKILL_TOOL_NAME;
+use crate::tool_manager::skill::SkillTool;
 pub use crate::tool_manager::subagent::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::subagent::SubagentTool;
 pub use crate::tool_manager::todo_list::TODO_LIST_TOOL_NAME;
@@ -84,10 +88,15 @@ use crate::tool_manager::write_file::WriteFileTool;
 pub struct ToolManager {
   tools: Vec<Box<dyn Tool>>,
   tool_timeout: Duration,
+  skills: SkillRegistry,
 }
 
 impl ToolManager {
-  pub fn new(config: &Config, is_subagent: bool) -> Self {
+  pub fn new(
+    config: &Config,
+    is_subagent: bool,
+    skills: SkillRegistry,
+  ) -> Self {
     let tool_timeout = Duration::from_secs(config.general.tool_timeout_seconds);
     let mut tools: Vec<Box<dyn Tool>> = Vec::new();
     if config.permissions.datetime {
@@ -147,6 +156,9 @@ impl ToolManager {
     if config.permissions.git {
       tools.push(Box::new(GitTool));
     }
+    if config.permissions.skill && skills.has_model_invocable() {
+      tools.push(Box::new(SkillTool::new(&skills)));
+    }
     if !is_subagent && config.subagent.enabled {
       tools.push(Box::new(SubagentTool));
     }
@@ -157,7 +169,12 @@ impl ToolManager {
     return Self {
       tools,
       tool_timeout,
+      skills,
     };
+  }
+
+  pub fn skills(&self) -> &SkillRegistry {
+    return &self.skills;
   }
 
   pub fn get_tools_specs(&self, tool_access: ToolAccess) -> Vec<ToolSpec> {

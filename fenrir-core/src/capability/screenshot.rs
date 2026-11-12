@@ -138,8 +138,8 @@ fn picture_dirs() -> Vec<PathBuf> {
   if let Ok(dir) = std::env::var("XDG_PICTURES_DIR") {
     dirs.push(PathBuf::from(dir));
   }
-  if let Ok(home) = std::env::var("HOME") {
-    dirs.push(Path::new(&home).join("Pictures"));
+  if let Some(home) = xdg::home_dir() {
+    dirs.push(home.join("Pictures"));
   }
   return dirs;
 }

@@ -194,6 +194,7 @@ async fn execute_tool_calls(
       let mut tool_context = ToolContext {
         config: context.config,
         secrets: context.secrets,
+        skills: session.tool_manager.skills(),
         persona: session.persona_manager.current(),
         model,
         provider_manager: context.providers,

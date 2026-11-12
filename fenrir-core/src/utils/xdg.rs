@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use anyhow::{Context, Result, bail};
 use xdg::BaseDirectories;
@@ -11,6 +11,18 @@ pub fn data_home() -> Result<PathBuf> {
     bail!("cannot determine the data home directory");
   };
   return Ok(data_home);
+}
+
+pub fn config_home() -> Result<PathBuf> {
+  let xdg_dirs = BaseDirectories::with_prefix(DEFAULT_DIRECTORY);
+  let Some(config_home) = xdg_dirs.get_config_home() else {
+    bail!("cannot determine the config home directory");
+  };
+  return Ok(config_home);
+}
+
+pub fn home_dir() -> Option<PathBuf> {
+  return env::home_dir();
 }
 
 pub fn find_config_file(name: &str) -> Option<PathBuf> {

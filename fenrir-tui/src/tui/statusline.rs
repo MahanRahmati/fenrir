@@ -1,11 +1,10 @@
-use std::env;
-
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::tui::spinner::Spinner;
 use fenrir_core::provider_manager::ChatUsage;
 use fenrir_core::utils::usage::format_usage;
+use fenrir_core::utils::xdg;
 
 enum State {
   Idle,
@@ -90,7 +89,7 @@ impl StatusLine {
   }
 
   fn to_relative_path(path: &str) -> String {
-    if let Some(home) = env::home_dir()
+    if let Some(home) = xdg::home_dir()
       && let Some(home_str) = home.to_str()
       && path.starts_with(home_str)
     {

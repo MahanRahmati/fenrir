@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -11,6 +13,7 @@ use crate::prompt::Prompt;
 use crate::provider_manager::{ChatUsage, Model};
 use crate::session_manager::repository::SessionRow;
 use crate::session_manager::summary::Summary;
+use crate::skill_manager::SkillRegistry;
 use crate::tool_manager::ToolManager;
 use crate::tool_manager::ToolPreview;
 
@@ -115,7 +118,8 @@ impl Session {
     model: Option<Model>,
   ) -> Self {
     let is_subagent = row.parent_id.is_some();
-    let tool_manager = ToolManager::new(config, is_subagent);
+    let skills = SkillRegistry::load(Path::new(&row.cwd));
+    let tool_manager = ToolManager::new(config, is_subagent, skills);
     let mut persona_manager = PersonaManager::new();
     let persona = if row.persona.is_empty() {
       PersonaManager::default_for(config).name().to_string()

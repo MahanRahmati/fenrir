@@ -15,6 +15,7 @@ mod read_file;
 mod read_pdf;
 mod remove_file;
 mod screenshot;
+mod skill;
 mod subagent;
 mod todo_list;
 mod weather;
@@ -26,9 +27,9 @@ use fenrir_core::tool_manager::{
   GIT_TOOL_NAME, GOAL_CHECK_TOOL_NAME, LIST_DIRECTORIES_TOOL_NAME,
   MUSIC_TOOL_NAME, NOTIFY_TOOL_NAME, PROJECT_CONTEXT_TOOL_NAME,
   READ_FILE_TOOL_NAME, READ_PDF_TOOL_NAME, REMOVE_FILE_TOOL_NAME,
-  SCREENSHOT_TOOL_NAME, SUBAGENT_TOOL_NAME, TODO_LIST_TOOL_NAME, ToolPreview,
-  ToolPreviewLine, ToolPreviewLineKind, WEATHER_TOOL_NAME,
-  WRITE_FILE_TOOL_NAME,
+  SCREENSHOT_TOOL_NAME, SKILL_TOOL_NAME, SUBAGENT_TOOL_NAME,
+  TODO_LIST_TOOL_NAME, ToolPreview, ToolPreviewLine, ToolPreviewLineKind,
+  WEATHER_TOOL_NAME, WRITE_FILE_TOOL_NAME,
 };
 
 const TOOL_CALL_ICON: &str = "●";
@@ -75,6 +76,7 @@ pub fn tool_call_view(
     READ_PDF_TOOL_NAME => read_pdf::view(arguments),
     REMOVE_FILE_TOOL_NAME => remove_file::view(arguments),
     SCREENSHOT_TOOL_NAME => screenshot::view(arguments),
+    SKILL_TOOL_NAME => skill::view(arguments),
     SUBAGENT_TOOL_NAME => subagent::view(arguments),
     TODO_LIST_TOOL_NAME => todo_list::view(arguments),
     WEATHER_TOOL_NAME => weather::view(arguments),
