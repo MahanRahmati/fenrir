@@ -71,7 +71,7 @@ impl Tui {
       personas_popup: PersonasPopup::new(),
       models_popup: ModelsPopup::new(),
       confirm_popup: ConfirmPopup::new(),
-      completion_popup: CompletionPopup::new(),
+      completion_popup: CompletionPopup::new(cwd),
       statusline: StatusLine::new(cwd),
       cancel_requested: false,
       last_escape_time: None,

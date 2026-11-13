@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::config::secrets::Secrets;
 use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
+use crate::mentions::strip_mentions;
 use crate::persona_manager::PREDICTION_PERSONA;
 use crate::prompt::{PromptExecutor, PromptKind, PromptSpec, system};
 use crate::provider_manager::{Model, ProviderManager};
@@ -171,7 +172,7 @@ async fn run(
   };
   let cancel = CancellationToken::new();
   let output = PromptExecutor::new(providers, config)
-    .once(spec, correlation, &events, &cancel)
+    .once(spec, None, correlation, &events, &cancel)
     .await?;
 
   let Some(content) = output.content else {
@@ -198,8 +199,12 @@ fn prediction_messages(session: &Session) -> Vec<Message> {
     .filter(|message| {
       (message.role == "user" || message.role == "assistant")
         && message.tool_calls.is_none()
-        && !message.content.trim().is_empty()
     })
+    .map(|mut message| {
+      message.content = strip_mentions(&message.content);
+      message
+    })
+    .filter(|message| !message.content.trim().is_empty())
     .collect();
   if messages.len() > MAX_CONTEXT_MESSAGES {
     messages = messages.split_off(messages.len() - MAX_CONTEXT_MESSAGES);

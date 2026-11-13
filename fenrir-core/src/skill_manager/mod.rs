@@ -23,8 +23,8 @@ pub enum SkillScope {
 impl SkillScope {
   pub fn name(&self) -> &'static str {
     return match self {
-      Self::Project => "Project",
-      Self::Global => "Global",
+      Self::Project => "project",
+      Self::Global => "global",
     };
   }
 }

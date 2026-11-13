@@ -5,6 +5,7 @@ use futures::Stream;
 use serde::{Deserialize, Serialize};
 
 use crate::session_manager::Message;
+use crate::skill_manager::SkillRegistry;
 use crate::tool_manager::tool::ToolSpec;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -68,11 +69,13 @@ pub trait Provider: Send + Sync {
     messages: &[Message],
     tools: &[ToolSpec],
     model: &str,
+    skills: Option<&SkillRegistry>,
   ) -> Result<ChatResponse>;
   async fn chat_stream(
     &self,
     messages: &[Message],
     tools: &[ToolSpec],
     model: &str,
+    skills: Option<&SkillRegistry>,
   ) -> Result<ChatStream>;
 }

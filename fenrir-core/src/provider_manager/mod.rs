@@ -15,6 +15,7 @@ use crate::provider_manager::providers::opencode::OpencodeProvider;
 use crate::provider_manager::providers::openrouter::OpenRouterProvider;
 use crate::provider_manager::providers::zai::ZaiProvider;
 use crate::session_manager::Message;
+use crate::skill_manager::SkillRegistry;
 use crate::tool_manager::tool::ToolSpec;
 use crate::vlog;
 
@@ -112,10 +113,11 @@ impl ProviderManager {
     model: &Model,
     messages: &[Message],
     tools: &[ToolSpec],
+    skills: Option<&SkillRegistry>,
   ) -> Result<ChatResponse> {
     return self
       .get_provider(&model.provider)?
-      .chat(messages, tools, &model.name)
+      .chat(messages, tools, &model.name, skills)
       .await;
   }
 
@@ -124,10 +126,11 @@ impl ProviderManager {
     model: &Model,
     messages: &[Message],
     tools: &[ToolSpec],
+    skills: Option<&SkillRegistry>,
   ) -> Result<ChatStream> {
     return self
       .get_provider(&model.provider)?
-      .chat_stream(messages, tools, &model.name)
+      .chat_stream(messages, tools, &model.name, skills)
       .await;
   }
 }

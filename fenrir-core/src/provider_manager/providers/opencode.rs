@@ -13,6 +13,7 @@ use crate::provider_manager::providers::openai_compatible_api::{
   build_request, parse_context_window, parse_response, parse_sse_chunk,
 };
 use crate::session_manager::Message;
+use crate::skill_manager::SkillRegistry;
 use crate::tool_manager::tool::ToolSpec;
 use crate::vlog;
 
@@ -60,8 +61,9 @@ impl OpencodeProvider {
     messages: &[Message],
     tools: &[ToolSpec],
     stream: bool,
+    skills: Option<&SkillRegistry>,
   ) -> Result<ChatCompletionRequest> {
-    return build_request(model, messages, tools, stream, None).await;
+    return build_request(model, messages, tools, stream, None, skills).await;
   }
 }
 
@@ -90,8 +92,11 @@ impl Provider for OpencodeProvider {
     messages: &[Message],
     tools: &[ToolSpec],
     model: &str,
+    skills: Option<&SkillRegistry>,
   ) -> Result<ChatResponse> {
-    let request = self.build_request(model, messages, tools, false).await?;
+    let request = self
+      .build_request(model, messages, tools, false, skills)
+      .await?;
     let headers = self.build_headers();
 
     vlog!("Sending chat request to OpenCode");
@@ -110,8 +115,11 @@ impl Provider for OpencodeProvider {
     messages: &[Message],
     tools: &[ToolSpec],
     model: &str,
+    skills: Option<&SkillRegistry>,
   ) -> Result<ChatStream> {
-    let request = self.build_request(model, messages, tools, true).await?;
+    let request = self
+      .build_request(model, messages, tools, true, skills)
+      .await?;
     let headers = self.build_headers();
 
     vlog!("Sending streaming chat request to OpenCode");

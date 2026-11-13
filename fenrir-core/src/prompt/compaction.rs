@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
 use crate::engine::repo_actor::RepoHandle;
+use crate::mentions::strip_mentions;
 use crate::persona_manager::COMPACTION_PERSONA;
 use crate::prompt::{PromptExecutor, PromptKind, PromptSpec, system};
 use crate::provider_manager::{Model, ProviderManager};
@@ -33,7 +34,8 @@ pub fn build(
     .iter()
     .filter(|message| message.role != "system")
     .filter_map(|message| {
-      let content = message.serialize_for_compaction(max_chars);
+      let content =
+        strip_mentions(&message.serialize_for_compaction(max_chars));
       if content.is_empty() {
         return None;
       }
@@ -119,7 +121,7 @@ pub async fn run_once(
     session.summaries.last().cloned(),
   );
   let output = PromptExecutor::new(providers, config)
-    .once(spec, correlation, events, cancel)
+    .once(spec, None, correlation, events, cancel)
     .await?;
 
   session.last_usage = output.usage;

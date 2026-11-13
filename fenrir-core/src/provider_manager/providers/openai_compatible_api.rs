@@ -7,13 +7,15 @@ use serde_json::Value;
 use crate::capability::pdf;
 use crate::files::operations::{read_bytes, read_to_string};
 use crate::mentions::{
-  PathKind, classify_path, extract_paths, mime_type, strip_mentions,
+  PathKind, classify_path, extract_paths, mime_type, skill_context,
+  split_skill_mentions, strip_attached_mentions,
 };
 use crate::network::sse::SSEChunk;
 use crate::provider_manager::provider::{
   ChatResponse, ChatStreamDelta, ChatUsage, StreamToolCallDelta, ToolCall,
 };
 use crate::session_manager::Message;
+use crate::skill_manager::SkillRegistry;
 use crate::tool_manager::tool::ToolSpec;
 use crate::vlog;
 use base64::Engine;
@@ -219,7 +221,10 @@ pub fn build_chat_tools(tools: &[ToolSpec]) -> Vec<ChatTool> {
     .collect()
 }
 
-pub async fn build_messages(messages: &[Message]) -> Result<Vec<ChatMessage>> {
+pub async fn build_messages(
+  messages: &[Message],
+  skills: Option<&SkillRegistry>,
+) -> Result<Vec<ChatMessage>> {
   let mut chat_messages: Vec<ChatMessage> = Vec::new();
   for msg in messages {
     if msg.role == "reasoning" {
@@ -231,7 +236,8 @@ pub async fn build_messages(messages: &[Message]) -> Result<Vec<ChatMessage>> {
     } else if msg.role != "user" && msg.role != "tool" {
       Some(ChatContent::Text(msg.content.clone()))
     } else {
-      Some(build_content_parts(&msg.content, msg.role == "user").await?)
+      let skills = if msg.role == "user" { skills } else { None };
+      Some(build_content_parts(&msg.content, msg.role == "user", skills).await?)
     };
 
     let tool_calls = msg.tool_calls.as_ref().map(|calls| {
@@ -264,8 +270,9 @@ pub async fn build_request(
   tools: &[ToolSpec],
   stream: bool,
   extra_body: Option<ExtraBody>,
+  skills: Option<&SkillRegistry>,
 ) -> Result<ChatCompletionRequest> {
-  let chat_messages = build_messages(messages).await?;
+  let chat_messages = build_messages(messages, skills).await?;
   let chat_tools = build_chat_tools(tools);
   return Ok(ChatCompletionRequest {
     model: model.to_string(),
@@ -375,16 +382,21 @@ pub fn parse_sse_chunk(chunk: SSEChunk) -> Option<Result<ChatStreamDelta>> {
 async fn build_content_parts(
   content: &str,
   strict: bool,
+  skills: Option<&SkillRegistry>,
 ) -> Result<ChatContent> {
-  let paths = extract_paths(content);
-  if paths.is_empty() {
+  let mut text = content.to_string();
+  let mut mentioned = Vec::new();
+  if let Some(skills) = skills {
+    let (remaining, found) = split_skill_mentions(&text, skills);
+    text = remaining;
+    mentioned = found;
+  }
+  let paths = extract_paths(&text);
+  if paths.is_empty() && mentioned.is_empty() {
     return Ok(ChatContent::Text(content.to_string()));
   }
-  let text = strip_mentions(content);
   let mut parts = Vec::new();
-  if !text.trim().is_empty() {
-    parts.push(ContentPart::Text { text });
-  }
+  let mut attached: Vec<String> = Vec::new();
   for path in paths {
     let kind = match classify_path(&path) {
       Some(kind) => kind,
@@ -421,6 +433,7 @@ async fn build_content_parts(
             url: format!("data:{mime};base64,{encoded}"),
           },
         });
+        attached.push(path);
       }
       PathKind::Text => {
         let contents = match read_to_string(&path).await {
@@ -435,6 +448,7 @@ async fn build_content_parts(
         parts.push(ContentPart::Text {
           text: format!("@{path}:\n{contents}"),
         });
+        attached.push(path);
       }
       PathKind::Pdf => {
         let info = match pdf::pdf_info(&path).await {
@@ -452,8 +466,17 @@ async fn build_content_parts(
             info.pages, info.file_size
           ),
         });
+        attached.push(path);
       }
     }
+  }
+  if !attached.is_empty() {
+    text = strip_attached_mentions(&text, &attached);
+  }
+  if let Some(prompt) = skill_context(&mentioned, &text) {
+    parts.insert(0, ContentPart::Text { text: prompt });
+  } else if !text.trim().is_empty() {
+    parts.insert(0, ContentPart::Text { text });
   }
   return Ok(ChatContent::Parts(parts));
 }

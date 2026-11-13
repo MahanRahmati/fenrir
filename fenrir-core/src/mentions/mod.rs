@@ -1,3 +1,5 @@
+use crate::skill_manager::{Skill, SkillRegistry};
+
 const PUNCTUATION: &[char] = &[',', ';', '.', '?', '!', ')', ']', '}'];
 
 pub enum PathKind {
@@ -29,6 +31,87 @@ pub fn strip_mentions(content: &str) -> String {
     .filter(|token| !token.starts_with('@'))
     .collect::<Vec<_>>()
     .join(" ");
+}
+
+pub fn strip_attached_mentions(content: &str, attached: &[String]) -> String {
+  return content
+    .split_whitespace()
+    .filter(|token| {
+      let Some(path) = token.strip_prefix('@') else {
+        return true;
+      };
+      let path = path.trim_end_matches(PUNCTUATION);
+      return !attached.iter().any(|attached| attached == path);
+    })
+    .collect::<Vec<_>>()
+    .join(" ");
+}
+
+pub fn split_skill_mentions<'a>(
+  content: &str,
+  skills: &'a SkillRegistry,
+) -> (String, Vec<&'a Skill>) {
+  let mut mentioned: Vec<&Skill> = Vec::new();
+  let mut text = String::new();
+  let mut last = 0;
+  for (start, end) in token_spans(content) {
+    let token = &content[start..end];
+    let Some(name) = token.strip_prefix('@') else {
+      continue;
+    };
+    let name = name.trim_end_matches(PUNCTUATION);
+    let Some(skill) = skills.find(name) else {
+      continue;
+    };
+    text.push_str(&content[last..start]);
+    last = end;
+    if !mentioned.iter().any(|existing| existing.name == skill.name) {
+      mentioned.push(skill);
+    }
+  }
+  text.push_str(&content[last..]);
+  return (text, mentioned);
+}
+
+pub fn skill_context(mentioned: &[&Skill], text: &str) -> Option<String> {
+  if mentioned.is_empty() {
+    return None;
+  }
+  let mut context = String::new();
+  for skill in mentioned {
+    context.push_str(&format!(
+      "Skill: {} ({})\nDirectory: {}\n\n{}\n\n",
+      skill.name,
+      skill.scope.name(),
+      skill.directory.display(),
+      skill.content
+    ));
+  }
+  context.push_str("End of skill instructions.");
+  let text = text.trim();
+  if !text.is_empty() {
+    context.push_str("\n\n");
+    context.push_str(text);
+  }
+  return Some(context);
+}
+
+fn token_spans(content: &str) -> Vec<(usize, usize)> {
+  let mut spans = Vec::new();
+  let mut start = None;
+  for (index, character) in content.char_indices() {
+    if character.is_whitespace() {
+      if let Some(start) = start.take() {
+        spans.push((start, index));
+      }
+    } else if start.is_none() {
+      start = Some(index);
+    }
+  }
+  if let Some(start) = start {
+    spans.push((start, content.len()));
+  }
+  return spans;
 }
 
 pub fn classify_path(path: &str) -> Option<PathKind> {

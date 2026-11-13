@@ -80,7 +80,7 @@ pub fn spawn_if_needed(
     };
     let cancel = CancellationToken::new();
     let output = PromptExecutor::new(&providers, &config)
-      .once(spec, correlation, &events, &cancel)
+      .once(spec, None, correlation, &events, &cancel)
       .await;
     let output = match output {
       Ok(output) => output,

@@ -16,6 +16,6 @@ pub mod persona_manager;
 mod prompt;
 pub mod provider_manager;
 pub mod session_manager;
-mod skill_manager;
+pub mod skill_manager;
 pub mod tool_manager;
 pub mod utils;

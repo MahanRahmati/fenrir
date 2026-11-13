@@ -58,7 +58,13 @@ pub async fn run_agent_loop(
     let mut spec = chat::build(session, context.config, &model);
     spec.emit_tokens = !is_subagent;
     let output = executor
-      .once(spec, correlation, context.events, context.cancel)
+      .once(
+        spec,
+        Some(session.tool_manager.skills()),
+        correlation,
+        context.events,
+        context.cancel,
+      )
       .await?;
 
     if let Some(usage) = output.usage {

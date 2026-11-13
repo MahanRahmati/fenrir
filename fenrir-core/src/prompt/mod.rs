@@ -22,6 +22,7 @@ use crate::network::retry::{self, RetryDelay, RetryPolicy};
 use crate::persona_manager::Persona;
 use crate::provider_manager::{ChatUsage, Model, ProviderManager, ToolCall};
 use crate::session_manager::Message;
+use crate::skill_manager::SkillRegistry;
 use crate::tool_manager::tool::ToolSpec;
 use crate::tool_manager::{
   EDIT_FILE_TOOL_NAME, GOAL_CHECK_TOOL_NAME, SUBAGENT_TOOL_NAME,
@@ -39,6 +40,7 @@ const CWD_RESTRICTED: &str = "Tools are restricted to the current working direct
 const CONCISE: &str = "Be concise and direct.";
 const PATHS: &str = "Show file paths clearly when working with files.";
 const MENTIONS: &str = "Files mentioned with @path are automatically attached to the message (as text, or as an image). Never use read_file on an attached file.";
+const SKILLS: &str = "Skills stay active for the whole session, whether you load one with the skill tool or the user attaches one with @skill-id. Apply a skill immediately. Never announce that it is loaded, describe it, or ask the user for input before acting. Never call the skill tool for a skill the user attached with @skill-id.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptKind {
@@ -78,15 +80,20 @@ impl<'a> PromptExecutor<'a> {
   pub async fn once(
     &self,
     spec: PromptSpec,
+    skills: Option<&SkillRegistry>,
     correlation: Correlation,
     events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
   ) -> Result<PromptOutput> {
     vlog!("Running prompt: {:?}", spec.kind);
     if spec.stream && self.config.general.stream {
-      return self.once_streaming(spec, correlation, events, cancel).await;
+      return self
+        .once_streaming(spec, skills, correlation, events, cancel)
+        .await;
     }
-    return self.once_blocking(spec, correlation, events, cancel).await;
+    return self
+      .once_blocking(spec, skills, correlation, events, cancel)
+      .await;
   }
 
   async fn with_retries<T, F, Fut>(
@@ -167,6 +174,7 @@ impl<'a> PromptExecutor<'a> {
   async fn once_blocking(
     &self,
     spec: PromptSpec,
+    skills: Option<&SkillRegistry>,
     correlation: Correlation,
     events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
@@ -174,7 +182,9 @@ impl<'a> PromptExecutor<'a> {
     let messages = with_system(&spec.system, &spec.messages);
     let response = self
       .with_retries(spec.kind, correlation, events, cancel, || {
-        self.providers.chat(&spec.model, &messages, &spec.tools)
+        self
+          .providers
+          .chat(&spec.model, &messages, &spec.tools, skills)
       })
       .await?;
     if spec.emit_tokens {
@@ -210,6 +220,7 @@ impl<'a> PromptExecutor<'a> {
   async fn once_streaming(
     &self,
     spec: PromptSpec,
+    skills: Option<&SkillRegistry>,
     correlation: Correlation,
     events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
@@ -219,7 +230,7 @@ impl<'a> PromptExecutor<'a> {
       .with_retries(spec.kind, correlation, events, cancel, || {
         self
           .providers
-          .chat_stream(&spec.model, &messages, &spec.tools)
+          .chat_stream(&spec.model, &messages, &spec.tools, skills)
       })
       .await?;
 
@@ -391,6 +402,7 @@ impl Prompt {
     guidelines.push(CONCISE);
     guidelines.push(PATHS);
     guidelines.push(MENTIONS);
+    guidelines.push(SKILLS);
 
     let guidelines_list = guidelines
       .iter()

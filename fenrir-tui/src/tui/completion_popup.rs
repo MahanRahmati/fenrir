@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
@@ -11,6 +12,7 @@ use crate::tui::input::Input;
 use crate::tui::popup::Popup;
 use fenrir_core::command::Command;
 use fenrir_core::files::operations::is_dir;
+use fenrir_core::skill_manager::SkillRegistry;
 use fenrir_core::utils::process;
 
 const MAX_RESULTS: usize = 10;
@@ -18,7 +20,7 @@ const MAX_POPUP_HEIGHT: usize = 10;
 
 #[derive(Clone, Copy, PartialEq)]
 enum CompletionKind {
-  File,
+  Mention,
   SlashCommand,
 }
 
@@ -34,16 +36,18 @@ pub struct CompletionPopup {
   candidates: Vec<CompletionItem>,
   selected_index: usize,
   token_start: usize,
+  cwd: PathBuf,
 }
 
 impl CompletionPopup {
-  pub fn new() -> Self {
+  pub fn new(cwd: &str) -> Self {
     return Self {
       popup: Popup::new(),
       kind: None,
       candidates: Vec::new(),
       selected_index: 0,
       token_start: 0,
+      cwd: PathBuf::from(cwd),
     };
   }
 
@@ -104,7 +108,7 @@ impl CompletionPopup {
       };
 
     let kind = if token.starts_with('@') {
-      Some(CompletionKind::File)
+      Some(CompletionKind::Mention)
     } else if token.starts_with('/') {
       Some(CompletionKind::SlashCommand)
     } else {
@@ -120,7 +124,9 @@ impl CompletionPopup {
     };
 
     let candidates = match kind {
-      CompletionKind::File => file_candidates(&token[1..]).await,
+      CompletionKind::Mention => {
+        mention_candidates(&token[1..], &self.cwd).await
+      }
       CompletionKind::SlashCommand => command_candidates(&token[1..]),
     };
     if candidates.is_empty() {
@@ -158,7 +164,7 @@ impl CompletionPopup {
     );
 
     let title = match self.kind {
-      Some(CompletionKind::File) => "Files",
+      Some(CompletionKind::Mention) => "Mentions",
       Some(CompletionKind::SlashCommand) => "Commands",
       None => return,
     };
@@ -180,7 +186,7 @@ impl CompletionPopup {
 
   fn build_list_item(&self, item: &CompletionItem) -> ListItem<'static> {
     let mut spans = match self.kind {
-      Some(CompletionKind::File) => {
+      Some(CompletionKind::Mention) => {
         let display =
           format!("{}{}", item.text, if item.is_dir { "/" } else { "" });
         vec![Span::raw(display)]
@@ -206,7 +212,7 @@ impl CompletionPopup {
     };
 
     let replacement = match self.kind {
-      Some(CompletionKind::File) => {
+      Some(CompletionKind::Mention) => {
         if item.is_dir {
           format!("@{}/", item.text)
         } else {
@@ -289,6 +295,33 @@ async fn run_fd(args: &[&str]) -> Option<Vec<String>> {
     }
   }
   return Some(lines);
+}
+
+async fn mention_candidates(prefix: &str, cwd: &Path) -> Vec<CompletionItem> {
+  let skills = SkillRegistry::load(cwd);
+  let mut seen: HashSet<String> = HashSet::new();
+  let mut items: Vec<CompletionItem> = Vec::new();
+  for skill in skills.skills() {
+    if !skill.name.starts_with(prefix) {
+      continue;
+    }
+    if !seen.insert(skill.name.clone()) {
+      continue;
+    }
+    items.push(CompletionItem {
+      text: skill.name.clone(),
+      is_dir: false,
+      detail: Some(skill.description.clone()),
+    });
+  }
+  for item in file_candidates(prefix).await {
+    if seen.contains(&item.text) {
+      continue;
+    }
+    items.push(item);
+  }
+  items.truncate(MAX_RESULTS);
+  return items;
 }
 
 async fn file_candidates(prefix: &str) -> Vec<CompletionItem> {
