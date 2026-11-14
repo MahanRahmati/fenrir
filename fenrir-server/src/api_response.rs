@@ -4,33 +4,35 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ApiStatus {
-  Success,
-  Error,
+pub use fenrir_core::client::api::{ApiResponse, ApiStatus};
+
+pub fn success<T>(data: T, message: impl Into<String>) -> Json<ApiResponse<T>> {
+  return Json(ApiResponse::success(data, message));
 }
 
-#[derive(Debug, Serialize)]
-pub struct ApiResponse<T> {
-  pub status: ApiStatus,
+#[derive(Debug)]
+pub struct ApiAccepted<T> {
   pub data: Option<T>,
   pub message: Option<String>,
 }
 
-impl<T> ApiResponse<T> {
-  pub fn success(data: T, message: impl Into<String>) -> Self {
+impl<T> ApiAccepted<T> {
+  pub fn accepted(message: impl Into<String>) -> Self {
     return Self {
-      status: ApiStatus::Success,
-      data: Some(data),
+      data: None,
       message: Some(message.into()),
     };
   }
 }
 
-impl<T: Serialize> IntoResponse for ApiResponse<T> {
+impl<T: Serialize> IntoResponse for ApiAccepted<T> {
   fn into_response(self) -> Response {
-    return (StatusCode::OK, Json(self)).into_response();
+    let body = ApiResponse {
+      status: ApiStatus::Success,
+      data: self.data,
+      message: self.message,
+    };
+    return (StatusCode::ACCEPTED, Json(body)).into_response();
   }
 }
 
@@ -40,7 +42,9 @@ pub struct ApiError {
   pub message: String,
 }
 
-pub type ApiResult<T> = Result<ApiResponse<T>, ApiError>;
+pub type ApiResult<T> = Result<Json<ApiResponse<T>>, ApiError>;
+
+pub type ApiAction<T> = Result<ApiAccepted<T>, ApiError>;
 
 pub type ApiStreamResult<T> = Result<T, ApiError>;
 

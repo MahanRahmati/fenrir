@@ -1117,6 +1117,7 @@ dependencies = [
  "fenrir-core",
  "futures",
  "serde",
+ "serde_json",
  "tokio",
  "uuid",
 ]

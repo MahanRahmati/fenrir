@@ -7,9 +7,7 @@ use fenrir_core::engine::protocol::ServerEvent;
 pub type SseEvent = Result<Event, Infallible>;
 
 pub fn event_of(event: &ServerEvent) -> SseEvent {
-  return Ok(
-    Event::default()
-      .event(event.name())
-      .data(event.data().to_string()),
-  );
+  let data =
+    serde_json::to_string(event).unwrap_or_else(|_| String::from("{}"));
+  return Ok(Event::default().event(event.name()).data(data));
 }

@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
@@ -286,17 +285,6 @@ impl ServerEvent {
       ServerEvent::Error { .. } => "error",
       ServerEvent::SessionStopped { .. } => "session_stopped",
       ServerEvent::Exited => "exited",
-    };
-  }
-
-  pub fn data(&self) -> Value {
-    return match serde_json::to_value(self) {
-      Ok(Value::Object(map)) => map
-        .into_iter()
-        .next()
-        .map(|(_, value)| value)
-        .unwrap_or(Value::Null),
-      Ok(_) | Err(_) => Value::Null,
     };
   }
 }

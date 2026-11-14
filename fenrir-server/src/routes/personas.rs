@@ -1,17 +1,11 @@
 use axum::extract::State;
-use serde::Serialize;
 
-use fenrir_core::engine::protocol::{PersonaInfo, ServerEvent};
+use fenrir_core::client::api::PersonasData;
+use fenrir_core::engine::protocol::ServerEvent;
 
 use super::request::await_event;
 use crate::adapter::AdapterHandle;
-use crate::api_response::{ApiResponse, ApiResult};
-
-#[derive(Debug, Serialize)]
-pub struct PersonasData {
-  pub personas: Vec<PersonaInfo>,
-  pub current: Option<String>,
-}
+use crate::api_response::{ApiResult, success};
 
 pub async fn list_personas(
   State(adapter): State<AdapterHandle>,
@@ -23,8 +17,8 @@ pub async fn list_personas(
       ServerEvent::PersonasListed {
         request_id: id,
         personas,
-        current,
-      } if id == request_id => Some((personas, current)),
+        current: _,
+      } if id == request_id => Some(personas),
       _ => None,
     })
     .await;
@@ -32,9 +26,6 @@ pub async fn list_personas(
   .await;
   let _ = client.disconnect().await;
 
-  let (personas, current) = result?;
-  return Ok(ApiResponse::success(
-    PersonasData { personas, current },
-    "Personas listed",
-  ));
+  let personas = result?;
+  return Ok(success(PersonasData { personas }, "Personas listed"));
 }

@@ -46,6 +46,15 @@ impl ClientHandle {
   pub async fn send(&self, request: ClientRequest) -> Result<()> {
     return self.sender().send(request).await;
   }
+
+  pub fn into_parts(self) -> (ClientSender, Receiver<ServerEvent>) {
+    let ClientHandle {
+      id,
+      events,
+      requests,
+    } = self;
+    return (ClientSender { id, requests }, events);
+  }
 }
 
 #[derive(Clone)]
@@ -179,6 +188,7 @@ impl Broker {
                 break;
               }
               let request_id = request_id_of(&request);
+              let session_id = session_id_of_request(&request);
               if let Err(error) = self
                 .handle_client_request(client_id, request)
                 .await
@@ -187,7 +197,7 @@ impl Broker {
                   client_id,
                   ServerEvent::Error {
                     request_id,
-                    session_id: None,
+                    session_id,
                     message: error.to_string(),
                   },
                 );
@@ -1256,6 +1266,52 @@ fn request_id_of(request: &ClientRequest) -> Option<u64> {
     | ClientRequest::Predict { .. }
     | ClientRequest::Cancel { .. }
     | ClientRequest::ApproveTool { .. }
+    | ClientRequest::Shutdown => None,
+  };
+}
+
+fn session_id_of_request(request: &ClientRequest) -> Option<Uuid> {
+  return match request {
+    ClientRequest::LoadSession { session_id, .. }
+    | ClientRequest::SetPersona {
+      session_id: Some(session_id),
+      ..
+    }
+    | ClientRequest::SetModel {
+      session_id: Some(session_id),
+      ..
+    }
+    | ClientRequest::SendPrompt {
+      session_id: Some(session_id),
+      ..
+    }
+    | ClientRequest::RunCommand {
+      session_id: Some(session_id),
+      ..
+    }
+    | ClientRequest::Compact { session_id, .. }
+    | ClientRequest::Subscribe { session_id }
+    | ClientRequest::Unsubscribe { session_id }
+    | ClientRequest::Predict { session_id }
+    | ClientRequest::Cancel { session_id, .. }
+    | ClientRequest::ApproveTool { session_id, .. } => Some(*session_id),
+    ClientRequest::Disconnect
+    | ClientRequest::CreateSession { .. }
+    | ClientRequest::ListSessions { .. }
+    | ClientRequest::ListPersonas { .. }
+    | ClientRequest::ListModels { .. }
+    | ClientRequest::SetPersona {
+      session_id: None, ..
+    }
+    | ClientRequest::SetModel {
+      session_id: None, ..
+    }
+    | ClientRequest::SendPrompt {
+      session_id: None, ..
+    }
+    | ClientRequest::RunCommand {
+      session_id: None, ..
+    }
     | ClientRequest::Shutdown => None,
   };
 }

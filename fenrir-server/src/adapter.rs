@@ -1,16 +1,19 @@
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use axum::serve;
 use tokio::net::TcpListener;
 use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::oneshot;
 use tokio::time;
 
 use fenrir_core::client::Client;
 use fenrir_core::config::ServerConfig;
-use fenrir_core::engine::broker::BrokerHandle;
+use fenrir_core::engine::broker::{BrokerHandle, ClientSender};
 use fenrir_core::engine::protocol::{ServerEvent, SessionSummary};
 
+use crate::connections::{ConnectionsHandle, EventsReply};
 use crate::routes;
 
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -20,16 +23,29 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 pub struct AdapterHandle {
   broker: BrokerHandle,
   cwd: String,
+  connections: ConnectionsHandle,
 }
 
-pub async fn run(broker: &BrokerHandle, config: ServerConfig) -> Result<()> {
-  let cwd = std::env::current_dir()
-    .map(|path| path.display().to_string())
-    .unwrap_or_default();
-  let handle = AdapterHandle {
-    broker: broker.clone(),
-    cwd,
-  };
+pub struct ServerHandle {
+  pub address: SocketAddr,
+  stop: Option<oneshot::Sender<()>>,
+  done: oneshot::Receiver<()>,
+}
+
+impl ServerHandle {
+  pub async fn shutdown(mut self) {
+    if let Some(stop) = self.stop.take() {
+      let _ = stop.send(());
+    }
+    let _ = self.done.await;
+  }
+}
+
+pub async fn spawn(
+  broker: &BrokerHandle,
+  config: ServerConfig,
+) -> Result<ServerHandle> {
+  let handle = adapter(broker);
   let app = routes::router().with_state(handle.clone());
 
   let address = format!("{}:{}", config.host, config.port);
@@ -39,20 +55,83 @@ pub async fn run(broker: &BrokerHandle, config: ServerConfig) -> Result<()> {
   let local_address = listener
     .local_addr()
     .context("Failed to read server address")?;
-  println!("Fenrir server listening on http://{local_address}");
 
-  let shutdown = async move {
-    shutdown_signal().await;
+  let (stop, stopped) = oneshot::channel();
+  let (done, finished) = oneshot::channel();
+  tokio::spawn(async move {
+    let shutdown = async move {
+      let _ = stopped.await;
+    };
+    let server = serve(listener, app).with_graceful_shutdown(shutdown);
+    if let Err(error) = server.await {
+      eprintln!("Server failed: {error}");
+    }
     handle.shutdown().await;
-  };
-  let server = serve(listener, app).with_graceful_shutdown(shutdown);
-  server.await.context("Server failed")?;
+    let _ = done.send(());
+  });
+
+  return Ok(ServerHandle {
+    address: local_address,
+    stop: Some(stop),
+    done: finished,
+  });
+}
+
+pub async fn run(broker: &BrokerHandle, config: ServerConfig) -> Result<()> {
+  let server = spawn(broker, config).await?;
+  println!("Fenrir server listening on http://{}", server.address);
+  shutdown_signal().await;
+  server.shutdown().await;
   return Ok(());
 }
 
+fn adapter(broker: &BrokerHandle) -> AdapterHandle {
+  let cwd = std::env::current_dir()
+    .map(|path| path.display().to_string())
+    .unwrap_or_default();
+  return AdapterHandle {
+    broker: broker.clone(),
+    cwd,
+    connections: ConnectionsHandle::spawn(broker.clone()),
+  };
+}
+
 impl AdapterHandle {
+  pub fn cwd(&self) -> &str {
+    return &self.cwd;
+  }
+
   pub async fn connect(&self) -> Result<Client> {
     return Client::connect(&self.broker, &self.cwd).await;
+  }
+
+  pub async fn create_connection(&self, cwd: String) -> Result<uuid::Uuid> {
+    return self.connections.create(cwd).await;
+  }
+
+  pub fn connections(&self) -> ConnectionsHandle {
+    return self.connections.clone();
+  }
+
+  pub async fn connection_sender(
+    &self,
+    client_id: uuid::Uuid,
+  ) -> Result<Option<ClientSender>> {
+    return self.connections.sender(client_id).await;
+  }
+
+  pub async fn take_events(
+    &self,
+    client_id: uuid::Uuid,
+  ) -> Result<EventsReply> {
+    return self.connections.take_events(client_id).await;
+  }
+
+  pub async fn disconnect_connection(
+    &self,
+    client_id: uuid::Uuid,
+  ) -> Result<()> {
+    return self.connections.disconnect(client_id).await;
   }
 
   pub async fn list_sessions(

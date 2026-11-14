@@ -1,3 +1,4 @@
+pub mod api;
 mod state;
 
 pub use state::{ClientState, PendingApproval, PendingRequest, RequestKind};

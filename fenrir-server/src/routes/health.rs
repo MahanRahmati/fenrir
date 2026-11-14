@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::api_response::{ApiResponse, ApiResult};
+use crate::api_response::{ApiResult, success};
 
 #[derive(Debug, Serialize)]
 pub struct HealthData {
@@ -9,7 +9,7 @@ pub struct HealthData {
 }
 
 pub async fn health() -> ApiResult<HealthData> {
-  return Ok(ApiResponse::success(
+  return Ok(success(
     HealthData {
       name: "fenrir-server",
       version: env!("CARGO_PKG_VERSION"),
