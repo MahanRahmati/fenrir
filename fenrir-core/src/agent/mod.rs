@@ -42,6 +42,7 @@ pub async fn run_agent_loop(
   let is_subagent = session.is_subagent();
   let max_iterations = context.config.subagent.max_iterations;
   let executor = PromptExecutor::new(context.providers, context.config);
+  let system = chat::system_prompt(session, context.config);
   let mut turns = 0usize;
   let mut assistant = String::new();
 
@@ -55,7 +56,7 @@ pub async fn run_agent_loop(
     }
     turns += 1;
 
-    let mut spec = chat::build(session, context.config, &model);
+    let mut spec = chat::build(session, &model, &system);
     spec.emit_tokens = !is_subagent;
     let output = executor
       .once(
