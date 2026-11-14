@@ -4,7 +4,6 @@ use uuid::Uuid;
 
 use fenrir_core::client::api::{SessionData, SessionsData};
 
-use super::request;
 use crate::adapter::AdapterHandle;
 use crate::api_response::{ApiResult, success};
 
@@ -26,8 +25,8 @@ pub async fn get_session(
   Path(session_id): Path<Uuid>,
 ) -> ApiResult<SessionData> {
   let mut client = adapter.connect().await?;
-  let result = request::load_session(&mut client, session_id).await;
-  let _ = client.disconnect().await;
+  let result = client.load_session(session_id).await;
+  client.disconnect().await;
 
   let session = result?;
   return Ok(success(SessionData { session }, "Session loaded"));

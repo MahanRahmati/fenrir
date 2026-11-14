@@ -1,7 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::io::{BufRead, Write};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
@@ -738,7 +738,7 @@ fn is_yes(input: &str) -> bool {
   return answer == "y" || answer == "yes";
 }
 
-fn print_error(error: &anyhow::Error) {
+fn print_error(error: &Error) {
   println!("\nError: {error}");
   flush();
 }

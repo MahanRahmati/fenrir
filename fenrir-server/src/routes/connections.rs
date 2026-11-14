@@ -1,3 +1,4 @@
+use anyhow::Error;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -10,10 +11,9 @@ use fenrir_core::client::api::{
   PersonaRequest, PromptRequest, ReviewRequest, SubscribeRequest,
 };
 use fenrir_core::command::Command;
-use fenrir_core::engine::protocol::{ClientRequest, PromptMode, ServerEvent};
+use fenrir_core::engine::protocol::{ClientRequest, PromptMode};
 use fenrir_core::provider_manager::Model;
 
-use super::request::await_event;
 use super::stream;
 use crate::adapter::AdapterHandle;
 use crate::api_request::ApiRequest;
@@ -316,30 +316,12 @@ pub async fn defaults(
 ) -> ApiResult<DefaultsData> {
   let mut client = adapter.connect().await?;
   let result = async {
-    let request_id = client.list_personas().await?;
-    let persona = await_event(&mut client, request_id, |event| match event {
-      ServerEvent::PersonasListed {
-        request_id: id,
-        current,
-        ..
-      } if id == request_id => Some(current),
-      _ => None,
-    })
-    .await?;
-    let request_id = client.list_models(None).await?;
-    let model = await_event(&mut client, request_id, |event| match event {
-      ServerEvent::ModelsListed {
-        request_id: id,
-        current,
-        ..
-      } if id == request_id => Some(current),
-      _ => None,
-    })
-    .await?;
-    return Ok::<_, ApiError>((persona, model));
+    let (_, persona) = client.list_personas().await?;
+    let (_, model) = client.list_models().await?;
+    return Ok::<_, Error>((persona, model));
   }
   .await;
-  let _ = client.disconnect().await;
+  client.disconnect().await;
 
   let (persona, model) = result?;
   let Some(persona) = persona else {

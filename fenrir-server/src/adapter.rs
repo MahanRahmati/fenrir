@@ -1,22 +1,21 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result};
 use axum::serve;
 use tokio::net::TcpListener;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::oneshot;
 use tokio::time;
 
-use fenrir_core::client::Client;
 use fenrir_core::config::ServerConfig;
 use fenrir_core::engine::broker::{BrokerHandle, ClientSender};
-use fenrir_core::engine::protocol::{ServerEvent, SessionSummary};
+use fenrir_core::engine::protocol::SessionSummary;
 
+use crate::broker_client::TempClient;
 use crate::connections::{ConnectionsHandle, EventsReply};
 use crate::routes;
 
-const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Clone)]
@@ -101,8 +100,8 @@ impl AdapterHandle {
     return &self.cwd;
   }
 
-  pub async fn connect(&self) -> Result<Client> {
-    return Client::connect(&self.broker, &self.cwd).await;
+  pub async fn connect(&self) -> Result<TempClient> {
+    return TempClient::connect(&self.broker, &self.cwd).await;
   }
 
   pub async fn create_connection(&self, cwd: String) -> Result<uuid::Uuid> {
@@ -139,46 +138,17 @@ impl AdapterHandle {
     limit: Option<u32>,
   ) -> Result<Vec<SessionSummary>> {
     let mut client = self.connect().await?;
-    let result = list_sessions_with(&mut client, limit).await;
-    let _ = client.disconnect().await;
+    let result = client.list_sessions(limit).await;
+    client.disconnect().await;
     return result;
   }
 
   async fn shutdown(&self) {
-    let Ok(mut client) = self.connect().await else {
+    let Ok(client) = self.connect().await else {
       return;
     };
     let _ = time::timeout(SHUTDOWN_TIMEOUT, client.shutdown()).await;
   }
-}
-
-async fn list_sessions_with(
-  client: &mut Client,
-  limit: Option<u32>,
-) -> Result<Vec<SessionSummary>> {
-  let request_id = client.list_sessions(limit).await?;
-  loop {
-    match next_event(client).await? {
-      ServerEvent::SessionsListed {
-        request_id: id,
-        sessions,
-      } if id == request_id => return Ok(sessions),
-      ServerEvent::Error {
-        request_id: Some(id),
-        message,
-        ..
-      } if id == request_id => bail!("{message}"),
-      _ => {}
-    }
-  }
-}
-
-pub async fn next_event(client: &mut Client) -> Result<ServerEvent> {
-  return match time::timeout(RESPONSE_TIMEOUT, client.recv()).await {
-    Ok(Some(event)) => Ok(event),
-    Ok(None) => Err(anyhow!("Broker connection closed")),
-    Err(_) => Err(anyhow!("Timed out waiting for broker response")),
-  };
 }
 
 async fn shutdown_signal() {

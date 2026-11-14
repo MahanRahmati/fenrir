@@ -3,7 +3,6 @@ mod connections;
 mod health;
 mod models;
 mod personas;
-mod request;
 mod sessions;
 mod stream;
 

@@ -55,23 +55,6 @@ impl ApiError {
       message: message.into(),
     };
   }
-
-  pub fn from_message(message: impl Into<String>) -> Self {
-    let message = message.into();
-    let status = if message == "Session not found" {
-      StatusCode::NOT_FOUND
-    } else if message.starts_with("Unknown persona")
-      || message.starts_with("Unknown command")
-      || message.starts_with("No session selected")
-    {
-      StatusCode::BAD_REQUEST
-    } else if message.contains("busy") {
-      StatusCode::CONFLICT
-    } else {
-      StatusCode::INTERNAL_SERVER_ERROR
-    };
-    return Self::new(status, message);
-  }
 }
 
 impl From<Error> for ApiError {
