@@ -132,11 +132,13 @@ pub fn spawn(
   let config = config.clone();
   let secrets = secrets.clone();
   tokio::spawn(async move {
-    let providers = ProviderManager::new(config.clone(), secrets);
-    let model = providers.small_model().or(model);
+    let provider_manager = ProviderManager::new(config.clone(), secrets);
+    let model = provider_manager.small_model().or(model);
     let text = match model {
       Some(model) if !messages.is_empty() => {
-        match run(&providers, &config, &model, &cwd, messages, summary).await {
+        match run(&provider_manager, &config, &model, &cwd, messages, summary)
+          .await
+        {
           Ok(text) => text,
           Err(e) => {
             vlog!("Failed to predict next prompt: {e}");
@@ -156,7 +158,7 @@ pub fn spawn(
 }
 
 async fn run(
-  providers: &ProviderManager,
+  provider_manager: &ProviderManager,
   config: &Config,
   model: &Model,
   cwd: &str,
@@ -174,7 +176,7 @@ async fn run(
     turn_id: Uuid::nil(),
   };
   let cancel = CancellationToken::new();
-  let output = PromptExecutor::new(providers, config)
+  let output = PromptExecutor::new(provider_manager, config)
     .once(spec, None, correlation, &events, &cancel)
     .await?;
 

@@ -99,7 +99,7 @@ pub fn build(
 pub async fn run_once(
   session: &mut Session,
   config: &Config,
-  providers: &ProviderManager,
+  provider_manager: &ProviderManager,
   repo: &RepoHandle,
   events: &Sender<SessionEvent>,
   correlation: Correlation,
@@ -120,7 +120,7 @@ pub async fn run_once(
     &session.messages,
     session.summaries.last(),
   );
-  let output = PromptExecutor::new(providers, config)
+  let output = PromptExecutor::new(provider_manager, config)
     .once(spec, None, correlation, events, cancel)
     .await?;
 
@@ -157,7 +157,7 @@ pub async fn run_once(
 pub async fn run_if_needed(
   session: &mut Session,
   config: &Config,
-  providers: &ProviderManager,
+  provider_manager: &ProviderManager,
   repo: &RepoHandle,
   events: &Sender<SessionEvent>,
   correlation: Correlation,
@@ -169,7 +169,7 @@ pub async fn run_if_needed(
   run_once(
     session,
     config,
-    providers,
+    provider_manager,
     repo,
     events,
     correlation,

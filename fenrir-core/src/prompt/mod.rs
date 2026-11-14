@@ -68,13 +68,19 @@ pub struct PromptOutput {
 }
 
 pub struct PromptExecutor<'a> {
-  providers: &'a ProviderManager,
+  provider_manager: &'a ProviderManager,
   config: &'a Config,
 }
 
 impl<'a> PromptExecutor<'a> {
-  pub fn new(providers: &'a ProviderManager, config: &'a Config) -> Self {
-    return Self { providers, config };
+  pub fn new(
+    provider_manager: &'a ProviderManager,
+    config: &'a Config,
+  ) -> Self {
+    return Self {
+      provider_manager,
+      config,
+    };
   }
 
   pub async fn once(
@@ -183,7 +189,7 @@ impl<'a> PromptExecutor<'a> {
     let response = self
       .with_retries(spec.kind, correlation, events, cancel, || {
         self
-          .providers
+          .provider_manager
           .chat(&spec.model, &messages, &spec.tools, skills)
       })
       .await?;
@@ -228,9 +234,12 @@ impl<'a> PromptExecutor<'a> {
     let messages = with_system(&spec.system, spec.messages);
     let mut stream = self
       .with_retries(spec.kind, correlation, events, cancel, || {
-        self
-          .providers
-          .chat_stream(&spec.model, &messages, &spec.tools, skills)
+        self.provider_manager.chat_stream(
+          &spec.model,
+          &messages,
+          &spec.tools,
+          skills,
+        )
       })
       .await?;
 

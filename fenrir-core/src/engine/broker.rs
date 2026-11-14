@@ -108,6 +108,7 @@ struct PendingApproval {
 struct Broker {
   config: Config,
   secrets: Secrets,
+  provider_manager: ProviderManager,
   repo: RepoHandle,
   requests: Receiver<BrokerRequest>,
   session_events: Receiver<SessionEvent>,
@@ -127,11 +128,12 @@ pub fn spawn(
 ) -> BrokerHandle {
   let (request_tx, request_rx) = mpsc::channel(256);
   let (event_tx, event_rx) = mpsc::channel(512);
-  let default_model =
-    ProviderManager::new(config.clone(), secrets.clone()).default_model();
+  let provider_manager = ProviderManager::new(config.clone(), secrets.clone());
+  let default_model = provider_manager.default_model();
   let broker = Broker {
     config,
     secrets,
+    provider_manager,
     repo,
     requests: request_rx,
     session_events: event_rx,
@@ -311,14 +313,12 @@ impl Broker {
         request_id,
         session_id,
       } => {
-        let providers =
-          ProviderManager::new(self.config.clone(), self.secrets.clone());
         let current = self.current_model(client_id, session_id).await?;
         self.send_to(
           client_id,
           ServerEvent::ModelsListed {
             request_id,
-            models: providers.list_models(),
+            models: self.provider_manager.list_models(),
             current,
           },
         );
@@ -643,14 +643,12 @@ impl Broker {
         return Ok(());
       }
       Effect::ListModels => {
-        let providers =
-          ProviderManager::new(self.config.clone(), self.secrets.clone());
         let current = self.current_model(client_id, session_id).await?;
         self.send_to(
           client_id,
           ServerEvent::ModelsListed {
             request_id,
-            models: providers.list_models(),
+            models: self.provider_manager.list_models(),
             current,
           },
         );

@@ -55,7 +55,7 @@ pub async fn run_turn(
       {
         return failed(context.events, correlation, e).await;
       }
-      if let Some(model) = context.providers.large_model()
+      if let Some(model) = context.provider_manager.large_model()
         && session.model.as_ref() != Some(&model)
       {
         if let Err(e) = context.repo.set_model(session.id, &model).await {
@@ -127,7 +127,7 @@ pub async fn run_turn(
   if let Err(e) = compaction::run_if_needed(
     session,
     context.config,
-    context.providers,
+    context.provider_manager,
     context.repo,
     context.events,
     correlation,
@@ -163,7 +163,7 @@ pub async fn run_compact(
   match compaction::run_once(
     session,
     context.config,
-    context.providers,
+    context.provider_manager,
     context.repo,
     context.events,
     correlation,

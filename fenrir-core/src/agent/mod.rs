@@ -25,7 +25,7 @@ use crate::vlog;
 pub struct AgentContext<'a> {
   pub config: &'a Config,
   pub secrets: &'a Secrets,
-  pub providers: &'a ProviderManager,
+  pub provider_manager: &'a ProviderManager,
   pub repo: &'a RepoHandle,
   pub events: &'a Sender<SessionEvent>,
   pub cancel: &'a CancellationToken,
@@ -41,7 +41,7 @@ pub async fn run_agent_loop(
   };
   let is_subagent = session.is_subagent();
   let max_iterations = context.config.subagent.max_iterations;
-  let executor = PromptExecutor::new(context.providers, context.config);
+  let executor = PromptExecutor::new(context.provider_manager, context.config);
   let system = chat::system_prompt(session, context.config);
   let mut turns = 0usize;
   let mut assistant = String::new();
@@ -204,7 +204,7 @@ async fn execute_tool_calls(
         skills: session.tool_manager.skills(),
         persona: session.persona_manager.current(),
         model,
-        provider_manager: context.providers,
+        provider_manager: context.provider_manager,
         repository: context.repo,
         events: context.events,
         correlation,
@@ -345,7 +345,7 @@ impl Session {
     let agent_context = AgentContext {
       config: context.config,
       secrets: context.secrets,
-      providers: context.provider_manager,
+      provider_manager: context.provider_manager,
       repo: context.repository,
       events: context.events,
       cancel: context.cancel,

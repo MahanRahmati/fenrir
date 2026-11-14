@@ -50,8 +50,9 @@ pub fn spawn_if_needed(
   if first_message.is_empty() {
     return;
   }
-  let providers = ProviderManager::new(config.clone(), secrets.clone());
-  let Some(model) = providers.small_model().or(session.model.clone()) else {
+  let provider_manager = ProviderManager::new(config.clone(), secrets.clone());
+  let Some(model) = provider_manager.small_model().or(session.model.clone())
+  else {
     return;
   };
 
@@ -79,7 +80,7 @@ pub fn spawn_if_needed(
       turn_id: Uuid::nil(),
     };
     let cancel = CancellationToken::new();
-    let output = PromptExecutor::new(&providers, &config)
+    let output = PromptExecutor::new(&provider_manager, &config)
       .once(spec, None, correlation, &events, &cancel)
       .await;
     let output = match output {

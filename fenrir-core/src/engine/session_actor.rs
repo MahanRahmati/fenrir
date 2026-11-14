@@ -69,6 +69,7 @@ struct TurnStart {
 
 struct TurnResult {
   session: Session,
+  provider_manager: ProviderManager,
   turn_id: Uuid,
   outcome: TurnOutcome,
 }
@@ -77,6 +78,7 @@ pub struct SessionActor {
   id: Uuid,
   actor_id: Uuid,
   session: Option<Session>,
+  provider_manager: Option<ProviderManager>,
   config: Config,
   secrets: Secrets,
   repo: RepoHandle,
@@ -102,6 +104,10 @@ impl SessionActor {
       id,
       actor_id,
       session: Some(session),
+      provider_manager: Some(ProviderManager::new(
+        config.clone(),
+        secrets.clone(),
+      )),
       config,
       secrets,
       repo,
@@ -285,11 +291,13 @@ impl SessionActor {
         result = poll_turn(&mut turn), if turn.is_some() => {
           let TurnResult {
             session,
+            provider_manager,
             turn_id,
             outcome,
           } = result;
 
           self.session = Some(session);
+          self.provider_manager = Some(provider_manager);
           current_turn = None;
           current_cancel = None;
           turn = None;
@@ -316,17 +324,15 @@ impl SessionActor {
 
           if completed {
             let usage = self.session.as_ref().and_then(|session| session.last_usage);
-            let context_window = match self
+            let model = self
               .session
               .as_ref()
-              .and_then(|session| session.model.clone())
-            {
-              Some(model) => {
-                ProviderManager::new(self.config.clone(), self.secrets.clone())
-                  .context_window(&model)
-                  .await
+              .and_then(|session| session.model.clone());
+            let context_window = match (&self.provider_manager, model) {
+              (Some(provider_manager), Some(model)) => {
+                provider_manager.context_window(&model).await
               }
-              None => None,
+              _ => None,
             };
             self.emit(ServerEvent::Usage {
               correlation,
@@ -376,63 +382,8 @@ impl SessionActor {
     let Some(mut session) = self.session.take() else {
       return;
     };
-    let turn_id = Uuid::now_v7();
-    let cancel = CancellationToken::new();
-    *current_turn = Some(turn_id);
-    *current_cancel = Some(cancel.clone());
-
-    self
-      .emit(ServerEvent::TurnStarted {
-        correlation: Correlation {
-          session_id: self.id,
-          turn_id,
-        },
-        client_id,
-      })
-      .await;
-
-    let config = self.config.clone();
-    let secrets = self.secrets.clone();
-    let repo = self.repo.clone();
-    let events = self.events.clone();
-    let providers = ProviderManager::new(config.clone(), secrets.clone());
-
-    *turn = Some(Box::pin(async move {
-      let context = AgentContext {
-        config: &config,
-        secrets: &secrets,
-        providers: &providers,
-        repo: &repo,
-        events: &events,
-        cancel: &cancel,
-      };
-      let outcome = run_turn(
-        &mut session,
-        turn_id,
-        request_id,
-        client_id,
-        mode,
-        text,
-        &context,
-      )
-      .await;
-      TurnResult {
-        session,
-        turn_id,
-        outcome,
-      }
-    }));
-  }
-
-  async fn start_compact(
-    &mut self,
-    request_id: u64,
-    client_id: Uuid,
-    turn: &mut Option<TurnFuture>,
-    current_turn: &mut Option<Uuid>,
-    current_cancel: &mut Option<CancellationToken>,
-  ) {
-    let Some(mut session) = self.session.take() else {
+    let Some(provider_manager) = self.provider_manager.take() else {
+      self.session = Some(session);
       return;
     };
     let turn_id = Uuid::now_v7();
@@ -454,13 +405,75 @@ impl SessionActor {
     let secrets = self.secrets.clone();
     let repo = self.repo.clone();
     let events = self.events.clone();
-    let providers = ProviderManager::new(config.clone(), secrets.clone());
 
     *turn = Some(Box::pin(async move {
       let context = AgentContext {
         config: &config,
         secrets: &secrets,
-        providers: &providers,
+        provider_manager: &provider_manager,
+        repo: &repo,
+        events: &events,
+        cancel: &cancel,
+      };
+      let outcome = run_turn(
+        &mut session,
+        turn_id,
+        request_id,
+        client_id,
+        mode,
+        text,
+        &context,
+      )
+      .await;
+      TurnResult {
+        session,
+        provider_manager,
+        turn_id,
+        outcome,
+      }
+    }));
+  }
+
+  async fn start_compact(
+    &mut self,
+    request_id: u64,
+    client_id: Uuid,
+    turn: &mut Option<TurnFuture>,
+    current_turn: &mut Option<Uuid>,
+    current_cancel: &mut Option<CancellationToken>,
+  ) {
+    let Some(mut session) = self.session.take() else {
+      return;
+    };
+    let Some(provider_manager) = self.provider_manager.take() else {
+      self.session = Some(session);
+      return;
+    };
+    let turn_id = Uuid::now_v7();
+    let cancel = CancellationToken::new();
+    *current_turn = Some(turn_id);
+    *current_cancel = Some(cancel.clone());
+
+    self
+      .emit(ServerEvent::TurnStarted {
+        correlation: Correlation {
+          session_id: self.id,
+          turn_id,
+        },
+        client_id,
+      })
+      .await;
+
+    let config = self.config.clone();
+    let secrets = self.secrets.clone();
+    let repo = self.repo.clone();
+    let events = self.events.clone();
+
+    *turn = Some(Box::pin(async move {
+      let context = AgentContext {
+        config: &config,
+        secrets: &secrets,
+        provider_manager: &provider_manager,
         repo: &repo,
         events: &events,
         cancel: &cancel,
@@ -469,6 +482,7 @@ impl SessionActor {
         run_compact(&mut session, turn_id, request_id, &context).await;
       TurnResult {
         session,
+        provider_manager,
         turn_id,
         outcome,
       }
