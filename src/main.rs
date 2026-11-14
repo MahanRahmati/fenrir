@@ -74,7 +74,12 @@ async fn run_tui(config: Config) -> Result<()> {
   let predict_enabled = config.general.predict_next_prompt;
   let default_persona = PersonaManager::default_for(&config).name().to_string();
   let broker = start_broker(&config).await?;
-  return fenrir_tui::run(&broker, predict_enabled, &default_persona).await;
+  let server = fenrir_server::spawn(&broker, config.server).await?;
+  let base_url = format!("http://{}", server.address);
+  let result =
+    fenrir_tui::run(&base_url, predict_enabled, &default_persona).await;
+  server.shutdown().await;
+  return result;
 }
 
 async fn run_server(config: Config) -> Result<()> {

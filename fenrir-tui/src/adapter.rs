@@ -13,9 +13,8 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
-use fenrir_core::client::Client;
+use fenrir_core::client::ApiClient;
 use fenrir_core::command::Command;
-use fenrir_core::engine::broker::BrokerHandle;
 use fenrir_core::engine::protocol::{
   PersonaInfo, ServerEvent, SessionSummary, SessionView, TurnOutcome,
 };
@@ -39,14 +38,16 @@ enum Mode {
 }
 
 struct Adapter {
-  client: Client,
+  client: ApiClient,
   tui: Tui,
   terminal: ratatui::DefaultTerminal,
   input: Receiver<Event>,
   input_open: bool,
   mode: Mode,
   pending_lines: VecDeque<String>,
-  startup_models_request: Option<u64>,
+  pending_review_request: Option<u64>,
+  current_persona: Option<String>,
+  current_model: Option<Model>,
   prediction_pending: bool,
   predict_after_turn: bool,
   predict_enabled: bool,
@@ -54,14 +55,14 @@ struct Adapter {
 }
 
 pub async fn run(
-  broker: &BrokerHandle,
+  base_url: &str,
   predict_enabled: bool,
   default_persona: &str,
 ) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|path| path.display().to_string())
     .unwrap_or_default();
-  let client = Client::connect(broker, &cwd).await?;
+  let client = ApiClient::connect(base_url, &cwd).await?;
   let (input_tx, input_rx) = mpsc::channel(64);
   spawn_input_task(input_tx);
   let mut adapter = Adapter {
@@ -72,7 +73,9 @@ pub async fn run(
     input_open: true,
     mode: Mode::Idle,
     pending_lines: VecDeque::new(),
-    startup_models_request: None,
+    pending_review_request: None,
+    current_persona: None,
+    current_model: None,
     prediction_pending: false,
     predict_after_turn: false,
     predict_enabled,
@@ -96,8 +99,14 @@ pub async fn run(
   }
 
   adapter.tui.set_persona(default_persona);
-  let request_id = adapter.client.list_models(None).await?;
-  adapter.startup_models_request = Some(request_id);
+  if let Ok(defaults) = adapter.client.defaults().await {
+    adapter.current_persona = Some(defaults.persona.clone());
+    adapter.tui.set_persona(&defaults.persona);
+    if let Some(model) = defaults.model {
+      adapter.current_model = Some(model.clone());
+      adapter.tui.set_model(&model.label());
+    }
+  }
   adapter.redraw();
 
   let result = adapter.run_loop().await;
@@ -207,23 +216,76 @@ impl Adapter {
   }
 
   async fn run_command(&mut self, command: Command) -> Result<()> {
-    if command == Command::Exit {
-      self.shutdown().await;
-      self.exiting = true;
-      return Ok(());
+    match command {
+      Command::Exit => {
+        self.shutdown().await;
+        self.exiting = true;
+      }
+      Command::New => {
+        self.client.create_session(None, None).await?;
+      }
+      Command::Sessions => {
+        let sessions = self.client.sessions().await?;
+        self.open_sessions(sessions);
+      }
+      Command::Personas => {
+        let personas = self.client.personas().await?;
+        let current = self.current_persona.clone();
+        self.open_personas(personas, current);
+      }
+      Command::Models => {
+        let models = self.client.models().await?;
+        let current = self.current_model.clone();
+        self.open_models(models, current);
+      }
+      Command::Compact => {
+        self.client.compact().await?;
+      }
+      Command::Review => {
+        self.review_session().await?;
+      }
+      Command::Help => {
+        let session_id = self.client.state().visible_session();
+        let commands = self.client.commands(session_id).await?;
+        self.tui.open_help_popup(commands);
+      }
     }
+    return Ok(());
+  }
 
-    self.client.run_command(command).await?;
+  async fn review_session(&mut self) -> Result<()> {
+    match self.client.state().visible_session() {
+      Some(session_id) => {
+        self.client.review(session_id).await?;
+      }
+      None => {
+        let request_id = self.client.create_session(None, None).await?;
+        self.pending_review_request = Some(request_id);
+      }
+    }
     return Ok(());
   }
 
   async fn handle_server_event(&mut self, event: ServerEvent) -> Result<bool> {
     match event {
       ServerEvent::Connected { .. } => {}
-      ServerEvent::SessionCreated { session, .. } => {
+      ServerEvent::SessionCreated {
+        request_id,
+        session,
+      } => {
+        self.current_persona = Some(session.persona.clone());
+        self.current_model.clone_from(&session.model);
+        if self.pending_review_request == Some(request_id) {
+          self.pending_review_request = None;
+          if let Err(error) = self.client.review(session.summary.id).await {
+            self.tui.add_error(format!("Error: {error}"));
+          }
+        }
         self.show_session(&session);
       }
       ServerEvent::SessionLoaded { session, .. } => {
+        self.current_persona = Some(session.persona.clone());
+        self.current_model.clone_from(&session.model);
         self.show_session(&session);
       }
       ServerEvent::SessionsListed { sessions, .. } => {
@@ -235,23 +297,19 @@ impl Adapter {
         self.open_personas(personas, current);
       }
       ServerEvent::ModelsListed {
-        request_id,
-        models,
-        current,
+        models, current, ..
       } => {
-        if self.startup_models_request == Some(request_id) {
-          self.startup_models_request = None;
-          if let Some(model) = current {
-            self.tui.set_model(&model.label());
-          }
-        } else {
-          self.open_models(models, current);
+        if let Some(model) = &current {
+          self.current_model = Some(model.clone());
         }
+        self.open_models(models, current);
       }
       ServerEvent::PersonaUpdated { persona, .. } => {
+        self.current_persona = Some(persona.clone());
         self.tui.set_persona(&persona);
       }
       ServerEvent::ModelUpdated { model, .. } => {
+        self.current_model = Some(model.clone());
         self.tui.set_model(&model.label());
       }
       ServerEvent::CommandCatalog { commands, .. } => {
@@ -354,11 +412,19 @@ impl Adapter {
       } => {
         self.tui.set_retrying(attempt, max_attempts, delay_seconds);
       }
-      ServerEvent::Error { message, .. } => {
+      ServerEvent::Error {
+        request_id,
+        message,
+        ..
+      } => {
+        if self.pending_review_request == request_id {
+          self.pending_review_request = None;
+        }
         self.tui.clear_retrying();
         self.tui.add_error(format!("Error: {message}"));
       }
       ServerEvent::SessionStopped { .. } => {
+        self.pending_review_request = None;
         self.prediction_pending = false;
         self.tui.set_processing(false);
         self.tui.reset_subagents();
@@ -388,13 +454,15 @@ impl Adapter {
     {
       self.mode = Mode::Idle;
       if let Some(name) = self.tui.get_selected_persona() {
-        self.client.set_persona(name).await?;
+        let session_id = self.client.state().visible_session();
+        self.client.set_persona_for(session_id, name).await?;
       }
     } else if matches!(self.mode, Mode::Models) && !self.tui.models_popup_open()
     {
       self.mode = Mode::Idle;
       if let Some(model) = self.tui.get_selected_model() {
-        self.client.set_model(model).await?;
+        let session_id = self.client.state().visible_session();
+        self.client.set_model_for(session_id, model).await?;
       }
     } else if matches!(self.mode, Mode::Approval { .. })
       && !self.tui.confirm_popup_open()
@@ -535,7 +603,7 @@ impl Adapter {
 
   async fn shutdown(&mut self) {
     self.tui.quit();
-    let _ = self.client.shutdown().await;
+    let _ = self.client.disconnect().await;
   }
 
   fn redraw(&mut self) {

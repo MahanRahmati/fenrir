@@ -6,18 +6,20 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
-use fenrir_core::client::ClientState;
-use fenrir_core::client::api::{
+use crate::client::api::{
   ApiResponse, ApprovalRequest, CancelRequest, CommandsData, CompactRequest,
   ConnectionData, CreateConnectionRequest, CreateSessionRequest, DefaultsData,
   ModelRequest, ModelsData, PersonaRequest, PersonasData, PromptRequest,
   ReviewRequest, SessionsData, SubscribeRequest,
 };
-use fenrir_core::client::urls;
-use fenrir_core::engine::protocol::{
+use crate::client::state::{
+  ClientState, PendingApproval, PendingRequest, RequestKind,
+};
+use crate::client::urls;
+use crate::engine::protocol::{
   CommandInfo, PersonaInfo, PromptMode, ServerEvent, SessionSummary,
 };
-use fenrir_core::provider_manager::Model;
+use crate::provider_manager::Model;
 
 type EventStream = Pin<Box<dyn Stream<Item = reqwest::Result<Vec<u8>>> + Send>>;
 
@@ -77,6 +79,10 @@ impl ApiClient {
     return &self.state;
   }
 
+  pub fn take_next_approval(&mut self) -> Option<PendingApproval> {
+    return self.state.take_next_approval();
+  }
+
   pub async fn defaults(&self) -> Result<DefaultsData> {
     return self.get(urls::DEFAULTS).await;
   }
@@ -116,21 +122,35 @@ impl ApiClient {
       model,
     };
     let path = urls::connection_sessions(self.client_id);
-    self.post(&path, &body).await?;
+    self
+      .post_tracked(
+        &path,
+        &body,
+        request_id,
+        RequestKind::CreateSession,
+        None,
+        false,
+      )
+      .await?;
     return Ok(request_id);
   }
 
   pub async fn load_session(&mut self, session_id: Uuid) -> Result<u64> {
     let request_id = self.take_request_id();
     let path = urls::connection_session(self.client_id, session_id);
-    let response = self
+    let request = self
       .http
       .put(self.url(&path))
-      .json(&SubscribeRequest { request_id })
-      .send()
-      .await
-      .context("Cannot load the session")?;
-    parse::<serde_json::Value>(response).await?;
+      .json(&SubscribeRequest { request_id });
+    self
+      .send_tracked(
+        request,
+        request_id,
+        RequestKind::LoadSession,
+        Some(session_id),
+        false,
+      )
+      .await?;
     self.state.ensure_session(session_id);
     return Ok(request_id);
   }
@@ -148,7 +168,17 @@ impl ApiClient {
       mode: Some(PromptMode::Normal),
     };
     let path = urls::connection_prompts(self.client_id);
-    if let Err(error) = self.post(&path, &body).await {
+    if let Err(error) = self
+      .post_tracked(
+        &path,
+        &body,
+        request_id,
+        RequestKind::SendPrompt,
+        session_id,
+        true,
+      )
+      .await
+    {
       self.state.creating_session = false;
       return Err(error);
     }
@@ -167,7 +197,16 @@ impl ApiClient {
       name: name.into(),
     };
     let path = urls::connection_persona(self.client_id);
-    self.post(&path, &body).await?;
+    self
+      .post_tracked(
+        &path,
+        &body,
+        request_id,
+        RequestKind::SetPersona,
+        session_id,
+        false,
+      )
+      .await?;
     return Ok(request_id);
   }
 
@@ -183,14 +222,32 @@ impl ApiClient {
       model,
     };
     let path = urls::connection_model(self.client_id);
-    self.post(&path, &body).await?;
+    self
+      .post_tracked(
+        &path,
+        &body,
+        request_id,
+        RequestKind::SetModel,
+        session_id,
+        false,
+      )
+      .await?;
     return Ok(request_id);
   }
 
   pub async fn review(&mut self, session_id: Uuid) -> Result<u64> {
     let request_id = self.take_request_id();
     let path = urls::connection_session_review(self.client_id, session_id);
-    self.post(&path, &ReviewRequest { request_id }).await?;
+    self
+      .post_tracked(
+        &path,
+        &ReviewRequest { request_id },
+        request_id,
+        RequestKind::RunCommand,
+        Some(session_id),
+        true,
+      )
+      .await?;
     return Ok(request_id);
   }
 
@@ -200,16 +257,25 @@ impl ApiClient {
     };
     let request_id = self.take_request_id();
     let path = urls::connection_session_compact(self.client_id, session_id);
-    self.post(&path, &CompactRequest { request_id }).await?;
+    self
+      .post_tracked(
+        &path,
+        &CompactRequest { request_id },
+        request_id,
+        RequestKind::Compact,
+        Some(session_id),
+        true,
+      )
+      .await?;
     return Ok(request_id);
   }
 
-  pub async fn cancel(&mut self) -> Result<()> {
+  pub async fn cancel(&mut self, turn_id: Option<Uuid>) -> Result<()> {
     let Some(session_id) = self.state.visible_session() else {
       return Ok(());
     };
     let path = urls::connection_session_cancel(self.client_id, session_id);
-    return self.post(&path, &CancelRequest::default()).await;
+    return self.post(&path, &CancelRequest { turn_id }).await;
   }
 
   pub async fn approve_tool(
@@ -226,6 +292,11 @@ impl ApiClient {
       approved,
     };
     return self.post(&path, &body).await;
+  }
+
+  pub async fn predict(&mut self, session_id: Uuid) -> Result<()> {
+    let path = urls::connection_session_predict(self.client_id, session_id);
+    return self.post(&path, &serde_json::json!({})).await;
   }
 
   pub async fn disconnect(&mut self) -> Result<()> {
@@ -312,6 +383,51 @@ impl ApiClient {
       .await
       .context("Cannot reach the Fenrir server")?;
     parse::<serde_json::Value>(response).await?;
+    return Ok(());
+  }
+
+  async fn post_tracked<T: Serialize>(
+    &mut self,
+    path: &str,
+    body: &T,
+    request_id: u64,
+    kind: RequestKind,
+    session_id: Option<Uuid>,
+    starts_turn: bool,
+  ) -> Result<()> {
+    let request = self.http.post(self.url(path)).json(body);
+    return self
+      .send_tracked(request, request_id, kind, session_id, starts_turn)
+      .await;
+  }
+
+  async fn send_tracked(
+    &mut self,
+    request: reqwest::RequestBuilder,
+    request_id: u64,
+    kind: RequestKind,
+    session_id: Option<Uuid>,
+    starts_turn: bool,
+  ) -> Result<()> {
+    self.state.insert_pending(
+      request_id,
+      PendingRequest {
+        kind,
+        session_id,
+        starts_turn,
+      },
+    );
+    let response = match request.send().await {
+      Ok(response) => response,
+      Err(error) => {
+        self.state.remove_pending(request_id);
+        return Err(error).context("Cannot reach the Fenrir server");
+      }
+    };
+    if let Err(error) = parse::<serde_json::Value>(response).await {
+      self.state.remove_pending(request_id);
+      return Err(error);
+    }
     return Ok(());
   }
 

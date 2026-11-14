@@ -1082,10 +1082,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fenrir-core",
- "futures",
- "reqwest",
- "serde",
- "serde_json",
  "tokio",
  "uuid",
 ]

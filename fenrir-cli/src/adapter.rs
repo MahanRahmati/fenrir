@@ -18,7 +18,7 @@ use fenrir_core::tool_manager::tool::parse_tool_params;
 use fenrir_core::utils::datetime::format_timestamp;
 use fenrir_core::utils::usage::format_usage;
 
-use crate::client::ApiClient;
+use fenrir_core::client::ApiClient;
 
 enum Mode {
   Idle,
@@ -603,7 +603,7 @@ impl Adapter {
   async fn cancel_turn(&mut self) -> Result<()> {
     println!("\n[cancelling]");
     flush();
-    self.client.cancel().await?;
+    self.client.cancel(None).await?;
     return Ok(());
   }
 
