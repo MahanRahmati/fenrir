@@ -55,6 +55,24 @@ pub async fn run_turn(
       {
         return failed(context.events, correlation, e).await;
       }
+      if let Some(model) = context.providers.large_model()
+        && session.model.as_ref() != Some(&model)
+      {
+        if let Err(e) = context.repo.set_model(session.id, &model).await {
+          return failed(context.events, correlation, e).await;
+        }
+        session.model = Some(model.clone());
+        if let Some(request_id) = request_id {
+          let _ = context
+            .events
+            .send(SessionEvent::Event(ServerEvent::ModelUpdated {
+              request_id,
+              session_id: Some(session.id),
+              model,
+            }))
+            .await;
+        }
+      }
       session.replace_system_message(&system::build(
         context.config,
         session.persona_manager.current(),

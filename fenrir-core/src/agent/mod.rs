@@ -305,6 +305,7 @@ impl Session {
     context: &ToolContext<'_>,
     persona: &Persona,
     task: &str,
+    model: &Model,
   ) -> Result<String> {
     let task = task.trim();
     if task.is_empty() {
@@ -316,7 +317,7 @@ impl Session {
       .create_child_session(
         Some(context.session_id),
         Some(persona.name().to_string()),
-        Some(context.model.clone()),
+        Some(model.clone()),
         context.cwd.to_string(),
       )
       .await?;

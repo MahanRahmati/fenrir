@@ -8,9 +8,13 @@ pub fn view(arguments: &str) -> Option<ToolCallView> {
   if task.trim().is_empty() {
     return None;
   }
+  let label = match params.get("complexity").map(String::as_str) {
+    Some("hard") => format!("Subagent (hard) › {}", task_summary(task)),
+    _ => format!("Subagent › {}", task_summary(task)),
+  };
   return Some(ToolCallView {
     icon: TOOL_CALL_ICON,
-    label: format!("Subagent › {}", task_summary(task)),
+    label,
     body: Vec::new(),
     show_result: false,
   });

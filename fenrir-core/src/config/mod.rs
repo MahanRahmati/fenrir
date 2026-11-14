@@ -29,6 +29,7 @@ pub struct Config {
 pub struct GeneralConfig {
   pub model: Option<String>,
   pub small_model: Option<String>,
+  pub large_model: Option<String>,
   pub default_persona: Option<String>,
   pub stream: bool,
   pub show_reasoning: bool,
@@ -43,6 +44,7 @@ impl Default for GeneralConfig {
     return Self {
       model: None,
       small_model: None,
+      large_model: None,
       default_persona: None,
       stream: true,
       show_reasoning: true,

@@ -45,7 +45,11 @@ impl Tool for GoalCheckTool {
       bail!("Goal cannot be empty");
     }
     let task = judge::build(goal);
-    let report = Session::run_subagent(context, &JUDGE_PERSONA, &task)
+    let model = context
+      .provider_manager
+      .large_model()
+      .unwrap_or_else(|| context.model.clone());
+    let report = Session::run_subagent(context, &JUDGE_PERSONA, &task, &model)
       .await
       .context("Failed to check goal")?;
     return Ok(report);

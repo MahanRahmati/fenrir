@@ -23,6 +23,7 @@ pub struct ProviderManager {
   providers: Vec<Box<dyn Provider>>,
   default_model: Option<Model>,
   small_model: Option<Model>,
+  large_model: Option<Model>,
 }
 
 impl ProviderManager {
@@ -54,12 +55,23 @@ impl ProviderManager {
       providers.push(Box::new(provider));
     }
     let default_model = resolve_default_model(&config, &providers);
-    let small_model =
-      resolve_small_model(&config, &providers, default_model.as_ref());
+    let small_model = resolve_model(
+      config.general.small_model.as_deref(),
+      &providers,
+      "small model",
+      default_model.as_ref(),
+    );
+    let large_model = resolve_model(
+      config.general.large_model.as_deref(),
+      &providers,
+      "large model",
+      default_model.as_ref(),
+    );
     return Self {
       providers,
       default_model,
       small_model,
+      large_model,
     };
   }
 
@@ -77,6 +89,10 @@ impl ProviderManager {
 
   pub fn small_model(&self) -> Option<Model> {
     return self.small_model.clone();
+  }
+
+  pub fn large_model(&self) -> Option<Model> {
+    return self.large_model.clone();
   }
 
   pub async fn context_window(&self, model: &Model) -> Option<u64> {
@@ -158,20 +174,17 @@ fn resolve_default_model(
   return model;
 }
 
-fn resolve_small_model(
-  config: &Config,
+fn resolve_model(
+  configured: Option<&str>,
   providers: &[Box<dyn Provider>],
+  setting: &str,
   default_model: Option<&Model>,
 ) -> Option<Model> {
-  if let Some(model) = find_model(
-    config.general.small_model.as_deref(),
-    providers,
-    "small model",
-  ) {
+  if let Some(model) = find_model(configured, providers, setting) {
     return Some(model);
   }
-  if config.general.small_model.is_some() {
-    vlog!("Falling back to the default model for small model tasks");
+  if configured.is_some() {
+    vlog!("Falling back to the default model for {setting} tasks");
   }
   return default_model.cloned();
 }
