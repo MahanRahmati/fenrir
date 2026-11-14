@@ -10,46 +10,36 @@ mod stream;
 use axum::Router;
 use axum::routing::{delete, get, post, put};
 
+use fenrir_core::client::urls;
+
 use crate::adapter::AdapterHandle;
 
 pub fn router() -> Router<AdapterHandle> {
   return Router::new()
-    .merge(service_routes())
-    .nest("/api/connections/{client_id}", connection_routes());
-}
-
-fn service_routes() -> Router<AdapterHandle> {
-  return Router::new()
-    .route("/api/health", get(health::health))
-    .route("/api/defaults", get(connections::defaults))
-    .route("/api/connections", post(connections::create))
-    .route("/api/sessions", get(sessions::list_sessions))
-    .route("/api/sessions/{session_id}", get(sessions::get_session))
-    .route("/api/models", get(models::list_models))
-    .route("/api/personas", get(personas::list_personas))
-    .route("/api/commands", get(commands::list_commands));
-}
-
-fn connection_routes() -> Router<AdapterHandle> {
-  return Router::new()
-    .route("/", delete(connections::delete))
-    .route("/events", get(connections::events))
-    .route("/sessions", post(connections::create_session))
-    .nest("/sessions/{session_id}", session_routes())
-    .route("/prompts", post(connections::prompt))
-    .route("/persona", post(connections::set_persona))
-    .route("/model", post(connections::set_model));
-}
-
-fn session_routes() -> Router<AdapterHandle> {
-  return Router::new()
+    .route(urls::HEALTH, get(health::health))
+    .route(urls::DEFAULTS, get(connections::defaults))
+    .route(urls::CONNECTIONS, post(connections::create))
+    .route(urls::SESSIONS, get(sessions::list_sessions))
+    .route(urls::SESSION, get(sessions::get_session))
+    .route(urls::MODELS, get(models::list_models))
+    .route(urls::PERSONAS, get(personas::list_personas))
+    .route(urls::COMMANDS, get(commands::list_commands))
+    .route(urls::CONNECTION, delete(connections::delete))
+    .route(urls::CONNECTION_EVENTS, get(connections::events))
+    .route(urls::CONNECTION_SESSIONS, post(connections::create_session))
     .route(
-      "/",
+      urls::CONNECTION_SESSION,
       put(connections::subscribe).delete(connections::unsubscribe),
     )
-    .route("/review", post(connections::review))
-    .route("/compact", post(connections::compact))
-    .route("/cancel", post(connections::cancel))
-    .route("/approval", post(connections::approval))
-    .route("/predict", post(connections::predict));
+    .route(urls::CONNECTION_PROMPTS, post(connections::prompt))
+    .route(urls::CONNECTION_PERSONA, post(connections::set_persona))
+    .route(urls::CONNECTION_MODEL, post(connections::set_model))
+    .route(urls::CONNECTION_SESSION_REVIEW, post(connections::review))
+    .route(urls::CONNECTION_SESSION_COMPACT, post(connections::compact))
+    .route(urls::CONNECTION_SESSION_CANCEL, post(connections::cancel))
+    .route(
+      urls::CONNECTION_SESSION_APPROVAL,
+      post(connections::approval),
+    )
+    .route(urls::CONNECTION_SESSION_PREDICT, post(connections::predict));
 }

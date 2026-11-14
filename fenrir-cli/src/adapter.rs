@@ -6,9 +6,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
-use fenrir_core::client::Client;
 use fenrir_core::command::Command;
-use fenrir_core::engine::broker::BrokerHandle;
 use fenrir_core::engine::protocol::{
   CommandInfo, PersonaInfo, ServerEvent, SessionSummary, SessionView,
 };
@@ -19,6 +17,8 @@ use fenrir_core::tool_manager::task_summary;
 use fenrir_core::tool_manager::tool::parse_tool_params;
 use fenrir_core::utils::datetime::format_timestamp;
 use fenrir_core::utils::usage::format_usage;
+
+use crate::client::ApiClient;
 
 enum Mode {
   Idle,
@@ -39,21 +39,30 @@ enum Mode {
 }
 
 struct Adapter {
-  client: Client,
+  client: ApiClient,
   input: Receiver<Option<String>>,
   input_queue: VecDeque<String>,
   eof: bool,
   mode: Mode,
   new_session_request: Option<u64>,
+  pending_review_request: Option<u64>,
+  pending: HashSet<u64>,
+  turn_requests: HashSet<u64>,
+  current_persona: Option<String>,
+  current_model: Option<Model>,
   reasoning_open: bool,
   reasoning_ends_with_newline: bool,
 }
 
-pub async fn run(broker: &BrokerHandle) -> Result<()> {
+pub async fn run(base_url: &str) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|path| path.display().to_string())
     .unwrap_or_default();
-  let client = Client::connect(broker, &cwd).await?;
+  let client = ApiClient::connect(base_url, &cwd).await?;
+  let (current_persona, current_model) = match client.defaults().await {
+    Ok(defaults) => (Some(defaults.persona), defaults.model),
+    Err(_) => (None, None),
+  };
   let (input_tx, input_rx) = mpsc::channel(32);
   spawn_input_task(input_tx);
   let mut adapter = Adapter {
@@ -63,6 +72,11 @@ pub async fn run(broker: &BrokerHandle) -> Result<()> {
     eof: false,
     mode: Mode::Idle,
     new_session_request: None,
+    pending_review_request: None,
+    pending: HashSet::new(),
+    turn_requests: HashSet::new(),
+    current_persona,
+    current_model,
     reasoning_open: false,
     reasoning_ends_with_newline: false,
   };
@@ -96,9 +110,7 @@ impl Adapter {
           }
         }
         _ = sigint.recv() => {
-          if self.client.state().active_turn().is_some()
-            || self.client.state().is_pending()
-          {
+          if self.is_busy() {
             self.cancel_turn().await?;
           } else {
             self.shutdown().await?;
@@ -117,7 +129,7 @@ impl Adapter {
 
       if self.eof
         && self.input_queue.is_empty()
-        && !self.client.state().is_busy()
+        && !self.is_busy()
         && self.client.state().awaiting_usage().is_none()
         && matches!(self.mode, Mode::Idle)
       {
@@ -132,8 +144,7 @@ impl Adapter {
   async fn process_input(&mut self) -> Result<bool> {
     loop {
       if matches!(self.mode, Mode::Idle)
-        && (self.client.state().is_busy()
-          || self.client.state().awaiting_usage().is_some())
+        && (self.is_busy() || self.client.state().awaiting_usage().is_some())
       {
         return Ok(false);
       }
@@ -148,35 +159,37 @@ impl Adapter {
           turn_id,
           tool_call_id,
         } => {
-          self
+          if let Err(error) = self
             .client
             .approve_tool(session_id, turn_id, tool_call_id, is_yes(&line))
-            .await?;
+            .await
+          {
+            print_error(&error);
+          }
           false
         }
         Mode::Sessions { sessions } => {
-          if let Some(index) = parse_index(&line, sessions.len(), "session") {
-            self.client.load_session(sessions[index].id).await?;
+          if let Some(index) = parse_index(&line, sessions.len(), "session")
+            && let Err(error) = self.load_session(sessions[index].id).await
+          {
+            print_error(&error);
           }
           false
         }
         Mode::Personas { personas } => {
-          if let Some(index) = parse_index(&line, personas.len(), "persona") {
-            let session_id = self.client.state().visible_session();
-            self
-              .client
-              .set_persona_for(session_id, personas[index].name.clone())
-              .await?;
+          if let Some(index) = parse_index(&line, personas.len(), "persona")
+            && let Err(error) =
+              self.select_persona(personas[index].name.clone()).await
+          {
+            print_error(&error);
           }
           false
         }
         Mode::Models { models } => {
-          if let Some(index) = parse_index(&line, models.len(), "model") {
-            let session_id = self.client.state().visible_session();
-            self
-              .client
-              .set_model_for(session_id, models[index].clone())
-              .await?;
+          if let Some(index) = parse_index(&line, models.len(), "model")
+            && let Err(error) = self.select_model(models[index].clone()).await
+          {
+            print_error(&error);
           }
           false
         }
@@ -195,12 +208,12 @@ impl Adapter {
     let command = match Command::parse(line) {
       Ok(Some(command)) => command,
       Ok(None) => {
-        self.client.send_prompt(line.to_string()).await?;
+        let request_id = self.client.send_prompt(line.to_string()).await?;
+        self.add_pending(request_id, true);
         return Ok(false);
       }
       Err(e) => {
-        println!("\nError: {e}");
-        flush();
+        print_error(&e);
         return Ok(false);
       }
     };
@@ -210,9 +223,18 @@ impl Adapter {
       return Ok(true);
     }
 
-    let request_id = self.client.run_command(command).await?;
-    if command == Command::New {
-      self.new_session_request = Some(request_id);
+    let result = match command {
+      Command::New => self.create_new_session().await,
+      Command::Sessions => self.list_sessions().await,
+      Command::Personas => self.list_personas().await,
+      Command::Models => self.list_models().await,
+      Command::Compact => self.compact_session().await,
+      Command::Review => self.review_session().await,
+      Command::Help => self.show_help().await,
+      Command::Exit => Ok(()),
+    };
+    if let Err(error) = result {
+      print_error(&error);
     }
     return Ok(false);
   }
@@ -224,38 +246,55 @@ impl Adapter {
         request_id,
         session,
       } => {
+        self.complete_event_request(request_id);
+        self.current_persona = Some(session.persona.clone());
+        self.current_model.clone_from(&session.model);
         if self.new_session_request == Some(request_id) {
           self.new_session_request = None;
           println!("Persona set to: {}", session.persona);
         }
+        if self.pending_review_request == Some(request_id) {
+          self.pending_review_request = None;
+          match self.client.review(session.summary.id).await {
+            Ok(review_request) => self.add_pending(review_request, true),
+            Err(error) => print_error(&error),
+          }
+        }
       }
-      ServerEvent::SessionLoaded { session, .. } => {
+      ServerEvent::SessionLoaded {
+        request_id,
+        session,
+      } => {
+        self.complete_event_request(request_id);
+        self.current_persona = Some(session.persona.clone());
+        self.current_model.clone_from(&session.model);
         print_session(&session);
       }
-      ServerEvent::SessionsListed { sessions, .. } => {
-        self.open_sessions(sessions);
+      ServerEvent::SessionsListed { request_id, .. }
+      | ServerEvent::PersonasListed { request_id, .. }
+      | ServerEvent::ModelsListed { request_id, .. }
+      | ServerEvent::CommandCatalog { request_id, .. } => {
+        self.complete_event_request(request_id);
       }
-      ServerEvent::PersonasListed {
-        personas, current, ..
+      ServerEvent::PersonaUpdated {
+        request_id,
+        persona,
+        ..
       } => {
-        self.open_personas(personas, current);
-      }
-      ServerEvent::ModelsListed {
-        models, current, ..
-      } => {
-        self.open_models(models, current);
-      }
-      ServerEvent::PersonaUpdated { persona, .. } => {
+        self.complete_event_request(request_id);
+        self.current_persona = Some(persona.clone());
         println!("Persona set to: {persona}");
       }
-      ServerEvent::ModelUpdated { model, .. } => {
+      ServerEvent::ModelUpdated {
+        request_id, model, ..
+      } => {
+        self.complete_event_request(request_id);
+        self.current_model = Some(model.clone());
         println!("Model set to: {}", model.label());
-      }
-      ServerEvent::CommandCatalog { commands, .. } => {
-        print_commands(&commands);
       }
       ServerEvent::UserMessage { .. } => {}
       ServerEvent::TurnStarted { .. } => {
+        self.complete_turn_requests();
         println!("[Processing...]");
         flush();
       }
@@ -342,16 +381,131 @@ impl Adapter {
         message,
         ..
       } => {
-        if request_id.is_some() && self.new_session_request == request_id {
-          self.new_session_request = None;
+        if let Some(request_id) = request_id {
+          self.complete_pending(request_id);
+          if self.new_session_request == Some(request_id) {
+            self.new_session_request = None;
+          }
+          if self.pending_review_request == Some(request_id) {
+            self.pending_review_request = None;
+          }
         }
         println!("\nError: {message}");
         flush();
       }
-      ServerEvent::SessionStopped { .. } => {}
+      ServerEvent::SessionStopped { .. } => {
+        self.pending.clear();
+        self.turn_requests.clear();
+        self.new_session_request = None;
+        self.pending_review_request = None;
+      }
       ServerEvent::Exited => return Ok(true),
     }
     return Ok(false);
+  }
+
+  async fn create_new_session(&mut self) -> Result<()> {
+    let request_id = self.client.create_session(None, None).await?;
+    self.add_pending(request_id, false);
+    self.new_session_request = Some(request_id);
+    return Ok(());
+  }
+
+  async fn list_sessions(&mut self) -> Result<()> {
+    let sessions = self.client.sessions().await?;
+    self.open_sessions(sessions);
+    return Ok(());
+  }
+
+  async fn list_personas(&mut self) -> Result<()> {
+    let personas = self.client.personas().await?;
+    let current = self.current_persona.clone();
+    self.open_personas(personas, current);
+    return Ok(());
+  }
+
+  async fn list_models(&mut self) -> Result<()> {
+    let models = self.client.models().await?;
+    let current = self.current_model.clone();
+    self.open_models(models, current);
+    return Ok(());
+  }
+
+  async fn compact_session(&mut self) -> Result<()> {
+    let request_id = self.client.compact().await?;
+    self.add_pending(request_id, true);
+    return Ok(());
+  }
+
+  async fn review_session(&mut self) -> Result<()> {
+    match self.client.state().visible_session() {
+      Some(session_id) => {
+        let request_id = self.client.review(session_id).await?;
+        self.add_pending(request_id, true);
+      }
+      None => {
+        let request_id = self.client.create_session(None, None).await?;
+        self.add_pending(request_id, false);
+        self.pending_review_request = Some(request_id);
+      }
+    }
+    return Ok(());
+  }
+
+  async fn show_help(&mut self) -> Result<()> {
+    let session_id = self.client.state().visible_session();
+    let commands = self.client.commands(session_id).await?;
+    print_commands(&commands);
+    return Ok(());
+  }
+
+  async fn load_session(&mut self, session_id: Uuid) -> Result<()> {
+    let request_id = self.client.load_session(session_id).await?;
+    self.add_pending(request_id, false);
+    return Ok(());
+  }
+
+  async fn select_persona(&mut self, name: String) -> Result<()> {
+    let session_id = self.client.state().visible_session();
+    let request_id = self.client.set_persona_for(session_id, name).await?;
+    self.add_pending(request_id, false);
+    return Ok(());
+  }
+
+  async fn select_model(&mut self, model: Model) -> Result<()> {
+    let session_id = self.client.state().visible_session();
+    let request_id = self.client.set_model_for(session_id, model).await?;
+    self.add_pending(request_id, false);
+    return Ok(());
+  }
+
+  fn add_pending(&mut self, request_id: u64, starts_turn: bool) {
+    self.pending.insert(request_id);
+    if starts_turn {
+      self.turn_requests.insert(request_id);
+    }
+  }
+
+  fn complete_event_request(&mut self, request_id: u64) {
+    if self.turn_requests.contains(&request_id) {
+      return;
+    }
+    self.complete_pending(request_id);
+  }
+
+  fn complete_pending(&mut self, request_id: u64) {
+    self.pending.remove(&request_id);
+    self.turn_requests.remove(&request_id);
+  }
+
+  fn complete_turn_requests(&mut self) {
+    for request_id in self.turn_requests.drain() {
+      self.pending.remove(&request_id);
+    }
+  }
+
+  fn is_busy(&self) -> bool {
+    return self.client.state().is_busy() || !self.pending.is_empty();
   }
 
   fn render_token(&mut self, text: &str, reasoning: bool) {
@@ -449,12 +603,12 @@ impl Adapter {
   async fn cancel_turn(&mut self) -> Result<()> {
     println!("\n[cancelling]");
     flush();
-    self.client.cancel(None).await?;
+    self.client.cancel().await?;
     return Ok(());
   }
 
   async fn shutdown(&mut self) -> Result<()> {
-    let _ = self.client.shutdown().await;
+    let _ = self.client.disconnect().await;
     return Ok(());
   }
 }
@@ -582,6 +736,11 @@ fn parse_index(input: &str, count: usize, name: &str) -> Option<usize> {
 fn is_yes(input: &str) -> bool {
   let answer = input.trim().to_lowercase();
   return answer == "y" || answer == "yes";
+}
+
+fn print_error(error: &anyhow::Error) {
+  println!("\nError: {error}");
+  flush();
 }
 
 fn flush() {

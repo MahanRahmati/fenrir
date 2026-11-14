@@ -1,5 +1,6 @@
 pub mod api;
 mod state;
+pub mod urls;
 
 pub use state::{ClientState, PendingApproval, PendingRequest, RequestKind};
 

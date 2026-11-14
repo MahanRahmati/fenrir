@@ -1,11 +1,12 @@
 mod cli;
 
+use anyhow::{Context, Result};
 use clap::Parser;
 use fenrir_cli::input::confirm_with;
 use fenrir_core::config::Config;
 use fenrir_core::config::secrets::Secrets;
 use fenrir_core::database::DB;
-use fenrir_core::engine::broker;
+use fenrir_core::engine::broker::{self, BrokerHandle};
 use fenrir_core::engine::repo_actor::RepoActor;
 use fenrir_core::logging::{set_print_enabled, setup_logging};
 use fenrir_core::persona_manager::PersonaManager;
@@ -33,22 +34,6 @@ async fn main() {
     }
   };
 
-  let secrets = match Secrets::load().await {
-    Ok(secrets) => secrets,
-    Err(e) => {
-      eprintln!("Failed to load secrets: {e}");
-      std::process::exit(1);
-    }
-  };
-
-  let db = match DB::load().await {
-    Ok(db) => db,
-    Err(e) => {
-      eprintln!("Failed to load database: {e}");
-      std::process::exit(1);
-    }
-  };
-
   let result = match cli.command {
     Some(Commands::ResetConfig { yes }) => {
       if !yes
@@ -71,29 +56,9 @@ async fn main() {
         }
       }
     }
-    Some(Commands::Tui) => {
-      let predict_enabled = config.general.predict_next_prompt;
-      let default_persona =
-        PersonaManager::default_for(&config).name().to_string();
-      let repository = SessionRepository::new(db);
-      let repo = RepoActor::spawn(repository, config.clone());
-      let broker = broker::spawn(config, secrets, repo);
-      fenrir_tui::run(&broker, predict_enabled, &default_persona).await
-    }
-    Some(Commands::Serve) => {
-      set_print_enabled(true);
-      let repository = SessionRepository::new(db);
-      let repo = RepoActor::spawn(repository, config.clone());
-      let broker = broker::spawn(config.clone(), secrets, repo);
-      fenrir_server::run(&broker, config.server).await
-    }
-    None => {
-      set_print_enabled(true);
-      let repository = SessionRepository::new(db);
-      let repo = RepoActor::spawn(repository, config.clone());
-      let broker = broker::spawn(config, secrets, repo);
-      fenrir_cli::run(&broker).await
-    }
+    Some(Commands::Tui) => run_tui(config).await,
+    Some(Commands::Serve) => run_server(config).await,
+    None => run_cli(config).await,
   };
 
   return match result {
@@ -103,4 +68,35 @@ async fn main() {
       std::process::exit(1);
     }
   };
+}
+
+async fn run_tui(config: Config) -> Result<()> {
+  let predict_enabled = config.general.predict_next_prompt;
+  let default_persona = PersonaManager::default_for(&config).name().to_string();
+  let broker = start_broker(&config).await?;
+  return fenrir_tui::run(&broker, predict_enabled, &default_persona).await;
+}
+
+async fn run_server(config: Config) -> Result<()> {
+  set_print_enabled(true);
+  let broker = start_broker(&config).await?;
+  return fenrir_server::run(&broker, config.server).await;
+}
+
+async fn run_cli(config: Config) -> Result<()> {
+  set_print_enabled(true);
+  let broker = start_broker(&config).await?;
+  let server = fenrir_server::spawn(&broker, config.server).await?;
+  let base_url = format!("http://{}", server.address);
+  let result = fenrir_cli::run(&base_url).await;
+  server.shutdown().await;
+  return result;
+}
+
+async fn start_broker(config: &Config) -> Result<BrokerHandle> {
+  let secrets = Secrets::load().await.context("Failed to load secrets")?;
+  let db = DB::load().await.context("Failed to load database")?;
+  let repository = SessionRepository::new(db);
+  let repo = RepoActor::spawn(repository, config.clone());
+  return Ok(broker::spawn(config.clone(), secrets, repo));
 }

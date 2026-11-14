@@ -5,4 +5,4 @@ mod connections;
 mod routes;
 mod sse;
 
-pub use adapter::run;
+pub use adapter::{ServerHandle, run, spawn};
