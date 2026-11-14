@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use crate::skill_manager::{Skill, SkillRegistry};
 
 const PUNCTUATION: &[char] = &[',', ';', '.', '?', '!', ')', ']', '}'];
@@ -79,13 +81,14 @@ pub fn skill_context(mentioned: &[&Skill], text: &str) -> Option<String> {
   }
   let mut context = String::new();
   for skill in mentioned {
-    context.push_str(&format!(
+    let _ = write!(
+      context,
       "Skill: {} ({})\nDirectory: {}\n\n{}\n\n",
       skill.name,
       skill.scope.name(),
       skill.directory.display(),
       skill.content
-    ));
+    );
   }
   context.push_str("End of skill instructions.");
   let text = text.trim();

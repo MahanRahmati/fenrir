@@ -20,6 +20,10 @@ tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
 needless_return = "allow"
 uninlined_format_args = "deny"
 redundant_clone = "deny"
+assigning_clones = "deny"
+format_push_string = "deny"
+large_futures = "deny"
+collection_is_never_read = "deny"
 
 [lints]
 workspace = true

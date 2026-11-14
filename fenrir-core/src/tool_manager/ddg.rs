@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use anyhow::{Context, Result};
 
 use crate::tool_manager::cache::ToolCache;
@@ -83,8 +85,8 @@ impl Tool for DdgTool {
         .get("abstract")
         .and_then(|v| v.as_str())
         .unwrap_or("(no abstract)");
-      formatted
-        .push_str(&format!("{}. {title} ({url})\n{abstract_text}\n\n", i + 1,));
+      let _ =
+        write!(formatted, "{}. {title} ({url})\n{abstract_text}\n\n", i + 1);
     }
 
     let result = formatted.trim_end_matches('\n').to_string();

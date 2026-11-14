@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use anyhow::{Result, bail};
 
 use crate::skill_manager::SkillRegistry;
@@ -19,12 +21,13 @@ impl SkillTool {
     description.push_str("\n\nAvailable skills:");
     let mut names = Vec::new();
     for skill in skills.model_invocable() {
-      description.push_str(&format!(
+      let _ = write!(
+        description,
         "\n- {} ({}): {}",
         skill.name,
         skill.scope.name(),
         skill.description
-      ));
+      );
       names.push(skill.name.to_string());
     }
     return Self { description, names };

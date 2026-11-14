@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use anyhow::Result;
 use tokio::sync::mpsc::{self, Sender};
 use tokio_util::sync::CancellationToken;
@@ -54,10 +56,11 @@ pub fn build(
     if !transcript.is_empty() {
       transcript.push_str("\n\n");
     }
-    transcript.push_str(&format!(
+    let _ = write!(
+      transcript,
       "[{label}]: {}",
       truncate(content, MAX_MESSAGE_CHARS)
-    ));
+    );
   }
 
   if transcript.is_empty() {

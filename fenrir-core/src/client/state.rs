@@ -282,7 +282,7 @@ impl ClientState {
         messages,
       } => {
         let session = self.session_mut(*session_id);
-        session.queued_messages = messages.clone();
+        session.queued_messages.clone_from(messages);
       }
       ServerEvent::TurnFinished {
         correlation,

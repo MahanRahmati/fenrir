@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::Result;
@@ -67,7 +68,7 @@ async fn directory_section() -> String {
       }
     }
     Err(e) => {
-      listing.push_str(&format!("(error: {e})\n"));
+      let _ = writeln!(listing, "(error: {e})");
     }
   }
   return listing;
