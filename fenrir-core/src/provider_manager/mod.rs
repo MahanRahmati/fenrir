@@ -49,8 +49,7 @@ impl ProviderManager {
     {
       providers.push(Box::new(provider));
     }
-    if let Some(provider) =
-      setup_zai(config.clone(), secrets.zai_key.clone(), timeouts)
+    if let Some(provider) = setup_zai(config.clone(), secrets.zai_key, timeouts)
     {
       providers.push(Box::new(provider));
     }
@@ -231,7 +230,7 @@ fn setup_openai_compatible(
     url.clone(),
     config.name.clone(),
     api_key,
-    config.models.clone(),
+    config.models,
     timeouts,
   ));
 }
@@ -245,11 +244,7 @@ fn setup_openrouter(
   if config.models.is_empty() {
     return None;
   }
-  return Some(OpenRouterProvider::new(
-    api_key,
-    config.models.clone(),
-    timeouts,
-  ));
+  return Some(OpenRouterProvider::new(api_key, config.models, timeouts));
 }
 
 fn setup_opencode(
@@ -261,11 +256,7 @@ fn setup_opencode(
   if config.models.is_empty() {
     return None;
   }
-  return Some(OpencodeProvider::new(
-    api_key,
-    config.models.clone(),
-    timeouts,
-  ));
+  return Some(OpencodeProvider::new(api_key, config.models, timeouts));
 }
 
 fn setup_zai(
@@ -277,5 +268,5 @@ fn setup_zai(
   if config.models.is_empty() {
     return None;
   }
-  return Some(ZaiProvider::new(api_key, config.models.clone(), timeouts));
+  return Some(ZaiProvider::new(api_key, config.models, timeouts));
 }

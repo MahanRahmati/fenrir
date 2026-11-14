@@ -23,7 +23,7 @@ pub fn build(
   config: &Config,
   cwd: &str,
   model: &Model,
-  messages: Vec<Message>,
+  messages: &[Message],
   summary: Option<String>,
 ) -> PromptSpec {
   let mut system_prompt = system::build(config, &PREDICTION_PERSONA, cwd);
@@ -38,7 +38,7 @@ pub fn build(
   }
 
   let mut transcript = String::new();
-  for message in &messages {
+  for message in messages {
     if message.role != "user" && message.role != "assistant" {
       continue;
     }
@@ -160,7 +160,7 @@ async fn run(
   messages: Vec<Message>,
   summary: Option<String>,
 ) -> Result<String> {
-  let spec = build(config, cwd, model, messages, summary);
+  let spec = build(config, cwd, model, &messages, summary);
   if spec.messages.is_empty() {
     return Ok(String::new());
   }

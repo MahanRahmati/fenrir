@@ -179,7 +179,7 @@ impl<'a> PromptExecutor<'a> {
     events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
   ) -> Result<PromptOutput> {
-    let messages = with_system(&spec.system, &spec.messages);
+    let messages = with_system(&spec.system, spec.messages);
     let response = self
       .with_retries(spec.kind, correlation, events, cancel, || {
         self
@@ -225,7 +225,7 @@ impl<'a> PromptExecutor<'a> {
     events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
   ) -> Result<PromptOutput> {
-    let messages = with_system(&spec.system, &spec.messages);
+    let messages = with_system(&spec.system, spec.messages);
     let mut stream = self
       .with_retries(spec.kind, correlation, events, cancel, || {
         self
@@ -336,8 +336,7 @@ async fn idle_timeout(seconds: u64) {
   return sleep(Duration::from_secs(seconds)).await;
 }
 
-pub fn with_system(system: &str, messages: &[Message]) -> Vec<Message> {
-  let mut messages = messages.to_vec();
+pub fn with_system(system: &str, mut messages: Vec<Message>) -> Vec<Message> {
   if let Some(first) = messages.first_mut()
     && first.role == "system"
   {

@@ -153,7 +153,7 @@ async fn execute_tool_calls(
           id: tool_call.id.clone(),
           name: tool_call.name.clone(),
           arguments: tool_call.arguments.clone(),
-          preview: preview.clone(),
+          preview,
         }))
         .await;
     }

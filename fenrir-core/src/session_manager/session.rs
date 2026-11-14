@@ -136,7 +136,7 @@ impl Session {
       title: row.title,
       created_at: row.created_at,
       last_interaction: row.last_interaction,
-      persona: persona.clone(),
+      persona,
       messages: row.messages,
       summaries: row.summaries,
       model,
@@ -281,12 +281,10 @@ impl Session {
     if let Some(latest) = self.summaries.last() {
       let mut chat_context = Vec::new();
 
-      let mut system_content = self
-        .messages
-        .iter()
-        .find(|m| m.role == "system")
-        .map(|m| m.content.clone())
-        .unwrap_or_default();
+      let mut system_content = String::new();
+      if let Some(system) = self.messages.iter().find(|m| m.role == "system") {
+        system_content.push_str(&system.content);
+      }
       if !system_content.is_empty() {
         system_content.push_str("\n\n");
       }

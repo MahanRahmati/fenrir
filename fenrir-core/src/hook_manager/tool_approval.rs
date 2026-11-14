@@ -118,7 +118,7 @@ impl PreToolHook for ToolApprovalHook {
 
     if let Err(e) = context
       .repository
-      .resolve_tool_approval(&tool_call_id, status.clone())
+      .resolve_tool_approval(&tool_call_id, status)
       .await
     {
       vlog!("Failed to resolve tool approval '{tool_call_id}': {e}");
@@ -129,7 +129,7 @@ impl PreToolHook for ToolApprovalHook {
       .send(SessionEvent::Event(ServerEvent::ToolApprovalResult {
         correlation: context.correlation,
         tool_call_id: tool_call_id.clone(),
-        status: status.clone(),
+        status,
       }))
       .await;
 

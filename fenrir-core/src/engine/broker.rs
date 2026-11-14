@@ -545,10 +545,8 @@ impl Broker {
         } else {
           ToolApprovalStatus::Denied
         };
-        if let Err(error) = self
-          .repo
-          .resolve_tool_approval(&tool_call_id, status.clone())
-          .await
+        if let Err(error) =
+          self.repo.resolve_tool_approval(&tool_call_id, status).await
         {
           self.send_to(
             client_id,

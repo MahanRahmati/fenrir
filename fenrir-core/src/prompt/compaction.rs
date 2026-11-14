@@ -20,11 +20,11 @@ pub fn build(
   config: &Config,
   cwd: &str,
   model: &Model,
-  messages: Vec<Message>,
-  last_summary: Option<Summary>,
+  messages: &[Message],
+  last_summary: Option<&Summary>,
 ) -> PromptSpec {
   let mut system_prompt = system::build(config, &COMPACTION_PERSONA, cwd);
-  if let Some(ref summary) = last_summary {
+  if let Some(summary) = last_summary {
     system_prompt.push_str("\n\nPrevious summary:\n");
     system_prompt.push_str(&summary.content);
   }
@@ -52,7 +52,7 @@ pub fn build(
     .collect();
 
   let selected: Vec<&Message> = match last_summary {
-    Some(ref summary) => {
+    Some(summary) => {
       let mut selected = Vec::new();
       if let Some(first_user_message) =
         serialized.iter().find(|message| message.role == "user")
@@ -117,8 +117,8 @@ pub async fn run_once(
     config,
     &session.cwd,
     &model,
-    session.messages.clone(),
-    session.summaries.last().cloned(),
+    &session.messages,
+    session.summaries.last(),
   );
   let output = PromptExecutor::new(providers, config)
     .once(spec, None, correlation, events, cancel)
