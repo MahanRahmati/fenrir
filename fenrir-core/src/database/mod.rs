@@ -21,7 +21,11 @@ impl DB {
   pub async fn load() -> Result<Self> {
     let db_path = xdg::place_data_file(DEFAULT_DB_NAME)
       .context("Failed to initialize database")?;
-    let db = turso::Builder::new_local(db_path.to_string_lossy().as_ref())
+    return Self::load_from_path(db_path.to_string_lossy().as_ref()).await;
+  }
+
+  pub async fn load_from_path(path: &str) -> Result<Self> {
+    let db = turso::Builder::new_local(path)
       .experimental_multiprocess_wal(true)
       .build()
       .await
