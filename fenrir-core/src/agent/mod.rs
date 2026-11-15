@@ -92,6 +92,14 @@ pub async fn run_agent_loop(
 
     if let Some(usage) = output.usage {
       session.last_usage = Some(usage);
+      let _ = context
+        .events
+        .send(SessionEvent::Event(ServerEvent::Usage {
+          correlation,
+          usage: Some(usage),
+          context_window,
+        }))
+        .await;
     }
 
     if context.config.general.show_reasoning
