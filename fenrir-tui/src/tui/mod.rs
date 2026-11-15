@@ -240,7 +240,7 @@ impl Tui {
     });
 
     let slot_height = if has_messages {
-      box_height + TOP_PADDING * 2
+      box_height + TOP_PADDING
     } else {
       box_height
     };
@@ -271,10 +271,16 @@ impl Tui {
     };
 
     let input_area = if has_messages {
-      input_area.inner(Margin {
+      let inner = input_area.inner(Margin {
         horizontal: HORIZONTAL_PADDING,
-        vertical: TOP_PADDING,
-      })
+        vertical: 0,
+      });
+      Rect::new(
+        inner.x,
+        inner.y + TOP_PADDING,
+        inner.width,
+        inner.height.saturating_sub(TOP_PADDING),
+      )
     } else {
       let width = popup::constrained_width(input_area.width).saturating_sub(1);
       Rect::new(
