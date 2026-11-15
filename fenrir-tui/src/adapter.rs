@@ -107,6 +107,9 @@ pub async fn run(
       adapter.tui.set_model(&model.label());
     }
   }
+  if let Ok(sessions) = adapter.client.sessions().await {
+    adapter.tui.update_sessions(sessions);
+  }
   adapter.redraw();
 
   let result = adapter.run_loop().await;
@@ -380,7 +383,9 @@ impl Adapter {
           }
         }
       }
-      ServerEvent::TitleUpdated { .. } => {}
+      ServerEvent::TitleUpdated { session_id, title } => {
+        self.tui.update_session_title(session_id, title);
+      }
       ServerEvent::QueueUpdated { .. } => {
         self.refresh_queue_display();
       }
@@ -390,6 +395,7 @@ impl Adapter {
       } => {
         self.tui.set_processing(false);
         self.tui.reset_subagents();
+        self.tui.touch_session(correlation.session_id);
         self.predict_after_turn =
           matches!(outcome, TurnOutcome::Completed { .. });
         if let Mode::Approval {
@@ -444,6 +450,12 @@ impl Adapter {
   }
 
   async fn process_mode(&mut self) -> Result<()> {
+    if !self.client.state().creating_session
+      && let Some(session_id) = self.tui.take_session_request()
+    {
+      self.client.load_session(session_id).await?;
+    }
+
     if matches!(self.mode, Mode::Sessions) && !self.tui.sessions_popup_open() {
       self.mode = Mode::Idle;
       if let Some(session_id) = self.tui.get_selected_session() {
@@ -540,6 +552,7 @@ impl Adapter {
     if let Some(model) = &session.model {
       self.tui.set_model(&model.label());
     }
+    self.tui.sync_session(&session.summary);
     self.tui.update_messages(Some(&session.messages));
     self.refresh_queue_display();
     self.prediction_pending = false;
@@ -565,6 +578,7 @@ impl Adapter {
 
   fn open_sessions(&mut self, sessions: Vec<SessionSummary>) {
     let active_session = self.client.state().visible_session();
+    self.tui.update_sessions(sessions.clone());
     self.tui.open_sessions_popup(sessions, active_session);
     self.mode = Mode::Sessions;
   }

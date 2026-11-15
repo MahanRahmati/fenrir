@@ -13,6 +13,8 @@ mod popup_list;
 mod popup_search;
 mod queued_messages_list;
 mod sessions_popup;
+mod sessions_sidebar;
+mod sidebar;
 mod spinner;
 mod statusline;
 mod tool_view;
@@ -33,6 +35,9 @@ use crate::tui::models_popup::ModelsPopup;
 use crate::tui::personas_popup::PersonasPopup;
 use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
+use crate::tui::sessions_sidebar::{
+  MIN_TERMINAL_WIDTH, SIDEBAR_WIDTH, SessionsSidebar,
+};
 use crate::tui::statusline::StatusLine;
 use fenrir_core::engine::protocol::{CommandInfo, PersonaInfo, SessionSummary};
 use fenrir_core::provider_manager::ChatUsage;
@@ -50,6 +55,8 @@ pub struct Tui {
   running: bool,
   help_popup: HelpPopup,
   sessions_popup: SessionsPopup,
+  sessions_sidebar: SessionsSidebar,
+  pending_session: Option<Uuid>,
   personas_popup: PersonasPopup,
   models_popup: ModelsPopup,
   confirm_popup: ConfirmPopup,
@@ -68,6 +75,8 @@ impl Tui {
       running: true,
       help_popup: HelpPopup::new(),
       sessions_popup: SessionsPopup::new(),
+      sessions_sidebar: SessionsSidebar::new(),
+      pending_session: None,
       personas_popup: PersonasPopup::new(),
       models_popup: ModelsPopup::new(),
       confirm_popup: ConfirmPopup::new(),
@@ -150,8 +159,28 @@ impl Tui {
   pub fn draw(&mut self, frame: &mut Frame) {
     let has_messages = !self.messages_list.is_empty();
     let has_queued_messages = !self.queued_messages_list.is_empty();
-    let (messages_area, queued_messages_area, input_area, status_bar_area) =
-      self.compute_areas(frame, has_messages, has_queued_messages);
+    let [body_area, status_bar_area] =
+      frame.area().layout(&Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(1),
+      ]));
+    let show_sidebar = self.sessions_sidebar.is_visible()
+      && body_area.width >= MIN_TERMINAL_WIDTH;
+    let content_area = if show_sidebar {
+      let [sidebar_area, content_area] =
+        body_area.layout(&Layout::horizontal([
+          Constraint::Length(SIDEBAR_WIDTH),
+          Constraint::Min(1),
+        ]));
+      self.sessions_sidebar.draw(frame, sidebar_area);
+      content_area
+    } else {
+      self.sessions_sidebar.clear_area();
+      self.sessions_sidebar.set_focused(false);
+      body_area
+    };
+    let (messages_area, queued_messages_area, input_area) =
+      self.compute_areas(content_area, has_messages, has_queued_messages);
 
     if has_messages {
       self.messages_list.draw(frame, messages_area);
@@ -171,7 +200,9 @@ impl Tui {
       status_bar_area,
     );
 
-    if !self.any_popup_open() {
+    let sidebar_focused =
+      self.sessions_sidebar.is_shown() && self.sessions_sidebar.is_focused();
+    if !self.any_popup_open() && !sidebar_focused {
       let (cursor_row, cursor_col) = self.input.cursor_position();
       frame.set_cursor_position(Position::new(
         input_area.x + cursor_col as u16 + 2,
@@ -188,12 +219,12 @@ impl Tui {
 
   fn compute_areas(
     &mut self,
-    frame: &Frame,
+    area: Rect,
     has_messages: bool,
     has_queued_messages: bool,
-  ) -> (Rect, Rect, Rect, Rect) {
-    let screen_width = frame.area().width;
-    let screen_height = frame.area().height;
+  ) -> (Rect, Rect, Rect) {
+    let screen_width = area.width;
+    let screen_height = area.height;
 
     let box_width = if has_messages {
       screen_width.saturating_sub(HORIZONTAL_PADDING * 2)
@@ -220,46 +251,24 @@ impl Tui {
       0
     };
 
-    let (messages_area, queued_messages_area, input_area, status_bar_area) =
-      if has_messages {
-        let [
-          messages_area,
-          queued_messages_area,
-          input_area,
-          status_bar_area,
-        ] = frame.area().layout(&Layout::vertical([
+    let (messages_area, queued_messages_area, input_area) = if has_messages {
+      let [messages_area, queued_messages_area, input_area] =
+        area.layout(&Layout::vertical([
           Constraint::Min(1),
           Constraint::Length(queued_height),
           Constraint::Length(slot_height),
-          Constraint::Length(1),
         ]));
-        (
-          messages_area,
-          queued_messages_area,
-          input_area,
-          status_bar_area,
-        )
-      } else {
-        let [
-          messages_area,
-          queued_messages_area,
-          input_area,
-          _spacer,
-          status_bar_area,
-        ] = frame.area().layout(&Layout::vertical([
+      (messages_area, queued_messages_area, input_area)
+    } else {
+      let [messages_area, queued_messages_area, input_area, _spacer] = area
+        .layout(&Layout::vertical([
           Constraint::Min(1),
           Constraint::Length(0),
           Constraint::Length(slot_height),
           Constraint::Min(1),
-          Constraint::Length(1),
         ]));
-        (
-          messages_area,
-          queued_messages_area,
-          input_area,
-          status_bar_area,
-        )
-      };
+      (messages_area, queued_messages_area, input_area)
+    };
 
     let input_area = if has_messages {
       input_area.inner(Margin {
@@ -285,12 +294,7 @@ impl Tui {
       queued_messages_area
     };
 
-    return (
-      messages_area,
-      queued_messages_area,
-      input_area,
-      status_bar_area,
-    );
+    return (messages_area, queued_messages_area, input_area);
   }
 
   fn any_popup_open(&self) -> bool {
@@ -304,7 +308,16 @@ impl Tui {
 
   pub async fn handle_event(&mut self, event: Event) -> Option<String> {
     if let Event::Mouse(mouse) = &event {
-      self.messages_list.handle_mouse(mouse);
+      if !self.any_popup_open()
+        && self.sessions_sidebar.contains(mouse.column, mouse.row)
+      {
+        if let Some(session_id) = self.sessions_sidebar.handle_mouse(mouse) {
+          self.pending_session = Some(session_id);
+          self.sessions_sidebar.set_focused(false);
+        }
+      } else {
+        self.messages_list.handle_mouse(mouse);
+      }
     }
 
     if let Some(key) = event.as_key_press_event() {
@@ -327,6 +340,42 @@ impl Tui {
         return None;
       }
 
+      if key.code == KeyCode::Char('b')
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+      {
+        self.sessions_sidebar.toggle();
+        if !self.sessions_sidebar.is_visible() {
+          self.sessions_sidebar.set_focused(false);
+        }
+        return None;
+      }
+
+      if self.sessions_sidebar.is_focused() {
+        match key.code {
+          KeyCode::Esc | KeyCode::Tab => {
+            self.sessions_sidebar.set_focused(false);
+            return None;
+          }
+          KeyCode::Up
+          | KeyCode::Down
+          | KeyCode::PageUp
+          | KeyCode::PageDown
+          | KeyCode::Home
+          | KeyCode::End => {
+            self.sessions_sidebar.handle_key(key.code);
+            return None;
+          }
+          KeyCode::Enter => {
+            if let Some(session_id) = self.sessions_sidebar.selected_session() {
+              self.pending_session = Some(session_id);
+            }
+            self.sessions_sidebar.set_focused(false);
+            return None;
+          }
+          _ => self.sessions_sidebar.set_focused(false),
+        }
+      }
+
       if is_shift_enter {
         self.input.enter_char('\n');
         self.completion_popup.refresh(&self.input).await;
@@ -343,6 +392,11 @@ impl Tui {
           .handle_input(key.code, &mut self.input)
           .await
       {
+        return None;
+      }
+
+      if key.code == KeyCode::Tab && self.sessions_sidebar.is_shown() {
+        self.sessions_sidebar.set_focused(true);
         return None;
       }
 
@@ -473,6 +527,26 @@ impl Tui {
 
   pub fn sessions_popup_open(&self) -> bool {
     return self.sessions_popup.is_open();
+  }
+
+  pub fn update_sessions(&mut self, sessions: Vec<SessionSummary>) {
+    self.sessions_sidebar.update_sessions(sessions);
+  }
+
+  pub fn sync_session(&mut self, summary: &SessionSummary) {
+    self.sessions_sidebar.sync_session(summary.clone());
+  }
+
+  pub fn update_session_title(&mut self, session_id: Uuid, title: String) {
+    self.sessions_sidebar.update_title(session_id, title);
+  }
+
+  pub fn touch_session(&mut self, session_id: Uuid) {
+    self.sessions_sidebar.touch_session(session_id);
+  }
+
+  pub fn take_session_request(&mut self) -> Option<Uuid> {
+    return self.pending_session.take();
   }
 
   pub fn open_personas_popup(
