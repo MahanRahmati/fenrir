@@ -12,7 +12,8 @@ use crate::config::secrets::Secrets;
 use crate::engine::control::Control;
 use crate::engine::protocol::{
   ApprovalDecision, BrokerRequest, ClientRequest, Correlation, PersonaInfo,
-  PromptMode, ServerEvent, SessionEvent, SessionView,
+  PromptMode, ServerEvent, SessionEvent, SessionStatus, SessionSummary,
+  SessionView, TurnOutcome,
 };
 use crate::engine::repo_actor::{RepoHandle, summary_of};
 use crate::engine::session_actor::{
@@ -127,6 +128,7 @@ struct Broker {
   subscriptions: HashMap<Uuid, HashSet<Uuid>>,
   pending_approvals: HashMap<(Uuid, Uuid, String), PendingApproval>,
   evict_candidates: HashSet<Uuid>,
+  completed_sessions: HashSet<Uuid>,
   default_model: Option<Model>,
 }
 
@@ -152,6 +154,7 @@ pub fn spawn(
     subscriptions: HashMap::new(),
     pending_approvals: HashMap::new(),
     evict_candidates: HashSet::new(),
+    completed_sessions: HashSet::new(),
     default_model,
   };
   tokio::spawn(broker.run());
@@ -283,8 +286,10 @@ impl Broker {
             return Err(error);
           }
         };
-        let view = view_of(&session);
+        let mut view = view_of(&session);
         self.ensure_actor(session).await?;
+        self.completed_sessions.remove(&session_id);
+        view.summary.status = self.session_status(session_id);
         self.send_to(
           client_id,
           ServerEvent::SessionLoaded {
@@ -292,13 +297,15 @@ impl Broker {
             session: view,
           },
         );
+        self.broadcast_status(session_id);
         self.send_queue(client_id, session_id).await;
         self.send_pending_approvals(client_id, session_id).await;
         self.replay_active_turn(client_id, session_id, already_subscribed);
         return Ok(());
       }
       ClientRequest::ListSessions { request_id, limit } => {
-        let sessions = self.repo.list_sessions(limit).await?;
+        let mut sessions = self.repo.list_sessions(limit).await?;
+        self.apply_session_status(&mut sessions);
         self.send_to(
           client_id,
           ServerEvent::SessionsListed {
@@ -630,7 +637,8 @@ impl Broker {
         return Ok(());
       }
       Effect::ListSessions => {
-        let sessions = self.repo.list_sessions(None).await?;
+        let mut sessions = self.repo.list_sessions(None).await?;
+        self.apply_session_status(&mut sessions);
         self.send_to(
           client_id,
           ServerEvent::SessionsListed {
@@ -804,7 +812,18 @@ impl Broker {
           }
           _ => {}
         }
+        let status_session = match &event {
+          ServerEvent::TurnStarted { correlation, .. }
+          | ServerEvent::TurnFinished { correlation, .. }
+          | ServerEvent::ToolApprovalResult { correlation, .. } => {
+            Some(correlation.session_id)
+          }
+          _ => None,
+        };
         self.broadcast_event(event);
+        if let Some(session_id) = status_session {
+          self.broadcast_status(session_id);
+        }
       }
       SessionEvent::ApprovalRequest { event, reply } => {
         if let ServerEvent::ToolApprovalRequest {
@@ -831,7 +850,16 @@ impl Broker {
             PendingApproval { reply },
           );
         }
+        let approval_session = match &event {
+          ServerEvent::ToolApprovalRequest { correlation, .. } => {
+            Some(correlation.session_id)
+          }
+          _ => None,
+        };
         self.broadcast_event(event);
+        if let Some(session_id) = approval_session {
+          self.broadcast_status(session_id);
+        }
       }
       SessionEvent::Stopped {
         session_id,
@@ -851,6 +879,7 @@ impl Broker {
           .pending_approvals
           .retain(|(id, _, _), _| *id != session_id);
         self.broadcast_all(ServerEvent::SessionStopped { session_id });
+        self.broadcast_status(session_id);
       }
     }
   }
@@ -858,6 +887,7 @@ impl Broker {
   fn track_turn_event(&mut self, event: &ServerEvent) {
     match event {
       ServerEvent::TurnStarted { correlation, .. } => {
+        self.completed_sessions.remove(&correlation.session_id);
         if let Some(handle) = self.sessions.get_mut(&correlation.session_id) {
           handle.active_turn = Some(correlation.turn_id);
           handle.active_tokens.clear();
@@ -884,7 +914,18 @@ impl Broker {
           handle.active_tokens.clear();
         }
       }
-      ServerEvent::TurnFinished { correlation, .. } => {
+      ServerEvent::TurnFinished {
+        correlation,
+        outcome,
+      } => {
+        match outcome {
+          TurnOutcome::Completed { .. } => {
+            self.completed_sessions.insert(correlation.session_id);
+          }
+          TurnOutcome::Cancelled | TurnOutcome::Failed { .. } => {
+            self.completed_sessions.remove(&correlation.session_id);
+          }
+        }
         if let Some(handle) = self.sessions.get_mut(&correlation.session_id)
           && handle.active_turn == Some(correlation.turn_id)
         {
@@ -1035,6 +1076,39 @@ impl Broker {
         },
       );
     }
+  }
+
+  fn apply_session_status(&self, sessions: &mut [SessionSummary]) {
+    for session in sessions {
+      session.status = self.session_status(session.id);
+    }
+  }
+
+  fn session_status(&self, session_id: Uuid) -> SessionStatus {
+    let awaiting_approval = self
+      .pending_approvals
+      .keys()
+      .any(|(id, _, _)| *id == session_id);
+    if awaiting_approval {
+      return SessionStatus::AwaitingApproval;
+    }
+    let working = self
+      .sessions
+      .get(&session_id)
+      .is_some_and(|handle| handle.active_turn.is_some());
+    if working {
+      return SessionStatus::Working;
+    }
+    if self.completed_sessions.contains(&session_id) {
+      return SessionStatus::Completed;
+    }
+    return SessionStatus::Idle;
+  }
+
+  fn broadcast_status(&mut self, session_id: Uuid) {
+    let status = self.session_status(session_id);
+    self
+      .broadcast_all(ServerEvent::SessionStatusChanged { session_id, status });
   }
 
   fn broadcast_event(&mut self, event: ServerEvent) {
@@ -1241,6 +1315,7 @@ fn session_id_of(event: &ServerEvent) -> Option<Uuid> {
     | ServerEvent::Prediction { session_id, .. }
     | ServerEvent::TitleUpdated { session_id, .. }
     | ServerEvent::QueueUpdated { session_id, .. }
+    | ServerEvent::SessionStatusChanged { session_id, .. }
     | ServerEvent::SessionStopped { session_id } => Some(*session_id),
     ServerEvent::PersonaUpdated { session_id, .. }
     | ServerEvent::ModelUpdated { session_id, .. }

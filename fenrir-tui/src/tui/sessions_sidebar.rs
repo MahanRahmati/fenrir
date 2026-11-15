@@ -15,7 +15,8 @@ use ratatui::widgets::{
 use uuid::Uuid;
 
 use crate::tui::sidebar::Sidebar;
-use fenrir_core::engine::protocol::SessionSummary;
+use crate::tui::spinner::Spinner;
+use fenrir_core::engine::protocol::{SessionStatus, SessionSummary};
 use fenrir_core::utils::datetime::format_timestamp;
 
 pub struct SessionsSidebar {
@@ -27,6 +28,7 @@ pub struct SessionsSidebar {
   focused: bool,
   area: Rect,
   list_area: Rect,
+  spinner: Spinner,
 }
 
 impl SessionsSidebar {
@@ -40,6 +42,7 @@ impl SessionsSidebar {
       focused: false,
       area: Rect::default(),
       list_area: Rect::default(),
+      spinner: Spinner::new(),
     };
   }
 
@@ -78,6 +81,21 @@ impl SessionsSidebar {
     self.sessions = sessions;
     self.sort();
     self.restore_selection(selected_id);
+  }
+
+  pub fn update_session_status(
+    &mut self,
+    session_id: Uuid,
+    status: SessionStatus,
+  ) {
+    let Some(session) = self
+      .sessions
+      .iter_mut()
+      .find(|session| session.id == session_id)
+    else {
+      return;
+    };
+    session.status = status;
   }
 
   pub fn sync_session(&mut self, summary: SessionSummary) {
@@ -187,16 +205,26 @@ impl SessionsSidebar {
 
     let width = inner.width as usize;
     let current = self.current;
+    let working_icon = self.spinner.icon();
     let items: Vec<ListItem> = self
       .sessions
       .iter()
       .map(|session| {
         let is_current = current == Some(session.id);
-        let marker = if is_current { "*" } else { " " };
         let title_style = if is_current {
           Style::default().fg(Color::Yellow)
         } else {
           Style::default()
+        };
+        let (indicator, indicator_style) = match session.status {
+          SessionStatus::Idle => (" ", Style::default()),
+          SessionStatus::Working => {
+            (working_icon, Style::default().fg(Color::Cyan))
+          }
+          SessionStatus::AwaitingApproval => {
+            ("●", Style::default().fg(Color::Yellow))
+          }
+          SessionStatus::Completed => ("●", Style::default().fg(Color::Green)),
         };
         let title = truncate(
           session.title.as_deref().unwrap_or("Untitled Session"),
@@ -207,7 +235,7 @@ impl SessionsSidebar {
           width.saturating_sub(2),
         );
         let title_line = Line::from(vec![
-          Span::styled(marker, title_style),
+          Span::styled(indicator, indicator_style),
           Span::raw(" "),
           Span::styled(title, title_style),
         ]);

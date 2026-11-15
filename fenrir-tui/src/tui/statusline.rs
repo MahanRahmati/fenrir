@@ -98,21 +98,24 @@ impl StatusLine {
     return path.to_string();
   }
 
-  fn left_label(&self) -> String {
-    let left_label = match &self.state {
-      State::Processing(spinner) => match &self.retry {
-        Some(retry) => format!(
-          "{} retrying {}/{} in {}s",
-          spinner.frame(),
-          retry.attempt,
-          retry.max_attempts,
-          retry.delay_seconds
-        ),
-        None => spinner.frame().to_string(),
-      },
-      State::Idle => Self::to_relative_path(&self.cwd),
+  fn left_label(&self, sidebar_open: bool) -> String {
+    let State::Processing(spinner) = &self.state else {
+      return Self::to_relative_path(&self.cwd);
     };
-    return left_label;
+    let retry = self.retry.as_ref().map(|retry| {
+      format!(
+        "retrying {}/{} in {}s",
+        retry.attempt, retry.max_attempts, retry.delay_seconds
+      )
+    });
+    if sidebar_open {
+      return retry.unwrap_or_else(|| Self::to_relative_path(&self.cwd));
+    }
+    let spinner = spinner.frame();
+    return match retry {
+      Some(retry) => format!("{spinner} {retry}"),
+      None => spinner.to_string(),
+    };
   }
 
   fn right_label(&self) -> String {
@@ -136,8 +139,8 @@ impl StatusLine {
     return right_label;
   }
 
-  pub fn draw(&self, width: u16) -> Paragraph<'_> {
-    let left_label = self.left_label();
+  pub fn draw(&self, width: u16, sidebar_open: bool) -> Paragraph<'_> {
+    let left_label = self.left_label(sidebar_open);
     let right_label = self.right_label();
     let w = width as usize;
     let max_len = w.saturating_sub(4).max(8);

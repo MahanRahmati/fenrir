@@ -4,7 +4,7 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::engine::protocol::SessionSummary;
+use crate::engine::protocol::{SessionStatus, SessionSummary};
 use crate::provider_manager::Model;
 use crate::session_manager::repository::SessionRepository;
 use crate::session_manager::session::{Message, QueuedMessage, Session};
@@ -519,5 +519,6 @@ pub fn summary_of(session: &Session) -> SessionSummary {
     title: session.title.clone(),
     created_at: session.created_at,
     last_interaction: session.last_interaction,
+    status: SessionStatus::Idle,
   };
 }

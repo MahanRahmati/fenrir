@@ -38,7 +38,9 @@ use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
 use crate::tui::sessions_sidebar::SessionsSidebar;
 use crate::tui::statusline::StatusLine;
-use fenrir_core::engine::protocol::{CommandInfo, PersonaInfo, SessionSummary};
+use fenrir_core::engine::protocol::{
+  CommandInfo, PersonaInfo, SessionStatus, SessionSummary,
+};
 use fenrir_core::provider_manager::ChatUsage;
 use fenrir_core::provider_manager::Model;
 use fenrir_core::session_manager::Message;
@@ -188,7 +190,9 @@ impl Tui {
     frame.render_widget(self.input.widget(areas.input.height), areas.input);
 
     frame.render_widget(
-      self.statusline.draw(areas.status_bar.width),
+      self
+        .statusline
+        .draw(areas.status_bar.width, areas.sidebar.is_some()),
       areas.status_bar,
     );
 
@@ -443,6 +447,16 @@ impl Tui {
 
   pub fn update_sessions(&mut self, sessions: Vec<SessionSummary>) {
     self.sessions_sidebar.update_sessions(sessions);
+  }
+
+  pub fn update_session_status(
+    &mut self,
+    session_id: Uuid,
+    status: SessionStatus,
+  ) {
+    self
+      .sessions_sidebar
+      .update_session_status(session_id, status);
   }
 
   pub fn sync_session(&mut self, summary: &SessionSummary) {

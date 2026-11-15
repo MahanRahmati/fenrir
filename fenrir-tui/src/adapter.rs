@@ -294,6 +294,9 @@ impl Adapter {
       ServerEvent::SessionsListed { sessions, .. } => {
         self.open_sessions(sessions);
       }
+      ServerEvent::SessionStatusChanged { session_id, status } => {
+        self.tui.update_session_status(session_id, status);
+      }
       ServerEvent::PersonasListed {
         personas, current, ..
       } => {

@@ -3,7 +3,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::database::DB;
-use crate::engine::protocol::SessionSummary;
+use crate::engine::protocol::{SessionStatus, SessionSummary};
 use crate::provider_manager::Model;
 use crate::session_manager::queries::*;
 use crate::session_manager::session::{
@@ -708,6 +708,7 @@ impl SessionRepository {
         title,
         created_at,
         last_interaction,
+        status: SessionStatus::Idle,
       });
     }
 

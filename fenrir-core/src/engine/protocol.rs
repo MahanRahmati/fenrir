@@ -15,6 +15,14 @@ pub struct Correlation {
   pub turn_id: Uuid,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SessionStatus {
+  Idle,
+  Working,
+  AwaitingApproval,
+  Completed,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionSummary {
   pub id: Uuid,
@@ -22,6 +30,7 @@ pub struct SessionSummary {
   pub title: Option<String>,
   pub created_at: i64,
   pub last_interaction: i64,
+  pub status: SessionStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,6 +155,10 @@ pub enum ServerEvent {
     request_id: u64,
     sessions: Vec<SessionSummary>,
   },
+  SessionStatusChanged {
+    session_id: Uuid,
+    status: SessionStatus,
+  },
   PersonasListed {
     request_id: u64,
     personas: Vec<PersonaInfo>,
@@ -262,6 +275,7 @@ impl ServerEvent {
       ServerEvent::SessionCreated { .. } => "session_created",
       ServerEvent::SessionLoaded { .. } => "session_loaded",
       ServerEvent::SessionsListed { .. } => "sessions_listed",
+      ServerEvent::SessionStatusChanged { .. } => "session_status_changed",
       ServerEvent::PersonasListed { .. } => "personas_listed",
       ServerEvent::ModelsListed { .. } => "models_listed",
       ServerEvent::PersonaUpdated { .. } => "persona_updated",

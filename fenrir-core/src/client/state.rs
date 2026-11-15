@@ -236,6 +236,7 @@ impl ClientState {
       | ServerEvent::Compacted { .. }
       | ServerEvent::Prediction { .. }
       | ServerEvent::TitleUpdated { .. }
+      | ServerEvent::SessionStatusChanged { .. }
       | ServerEvent::Exited => {}
       ServerEvent::TurnStarted { correlation, .. } => {
         if self.visible_session.is_none() {
@@ -324,6 +325,7 @@ impl ClientState {
     return match event {
       ServerEvent::Connected { .. }
       | ServerEvent::SessionsListed { .. }
+      | ServerEvent::SessionStatusChanged { .. }
       | ServerEvent::PersonasListed { .. }
       | ServerEvent::ModelsListed { .. }
       | ServerEvent::CommandCatalog { .. }

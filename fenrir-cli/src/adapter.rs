@@ -359,6 +359,7 @@ impl Adapter {
       }
       ServerEvent::Prediction { .. } => {}
       ServerEvent::TitleUpdated { .. } => {}
+      ServerEvent::SessionStatusChanged { .. } => {}
       ServerEvent::QueueUpdated { .. } => {}
       ServerEvent::TurnFinished { .. } => {
         println!();
