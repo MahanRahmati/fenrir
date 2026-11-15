@@ -34,7 +34,7 @@ use crate::vlog;
 
 const TOOLS: &str = "Use tools when appropriate.";
 const EDIT: &str = "Before editing files, read them with `append_loc=true` for accurate line numbers. Prefer many small edits over one large one.";
-const GOAL: &str = "When the user gives a goal, do not try to finish it yourself. Delegate it with `subagent`, including the goal and its acceptance criteria. When the subagent returns, you must call `goal_check` with the goal before reporting anything. If the judge reports `Not achieved` or lists gaps, rewrite the goal to include them and delegate again with `subagent`. Repeat until the judge confirms the goal is achieved. Only then report to the user.";
+const GOAL: &str = "When the user asks for subagents, or the goal spans multiple files or areas, call `subagent` before you read, list, search, or inspect project context. You can start a todo list first. The subagent has the same tools and explores on its own, so give it the goal, the constraints, and the expected output. When a subagent returns, call `goal_check` with the goal before you report. If the judge lists gaps, add them to the goal and call `subagent` again. Report to the user only after the judge confirms the goal is achieved.";
 const TODO_LIST: &str = "For complex multi-step work, maintain a todo list with `todo_list`: keep exactly one item in_progress at a time, mark items completed as you go, and update the list after each step.";
 const VERIFY: &str = "After making changes, verify they work.";
 const CWD_RESTRICTED: &str = "Tools are restricted to the current working directory. Always use paths within the current directory; paths outside the current working directory are blocked.";

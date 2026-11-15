@@ -16,7 +16,7 @@ impl Tool for SubagentTool {
   }
 
   fn description(&self) -> &str {
-    return "Run a task in a subagent that works on its own with the same tools as you and returns a report. Include all relevant context, constraints, and the expected output. Set complexity to 'hard' when the task needs deep reasoning, such as complex refactors, subtle debugging, architecture, or careful analysis.";
+    return "Run a task in a subagent. The subagent has the same tools as you, explores on its own, and returns a report. Use it before you explore when the task spans multiple files or the user asks for delegation. Give the subagent all relevant context, the constraints, and the expected output. Set complexity to 'hard' when the task needs deep reasoning, such as complex refactors, subtle debugging, architecture, or careful analysis.";
   }
 
   fn parameters(&self) -> serde_json::Value {
