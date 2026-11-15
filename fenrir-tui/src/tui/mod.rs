@@ -18,12 +18,13 @@ mod sidebar;
 mod spinner;
 mod statusline;
 mod tool_view;
+mod view;
 
 use std::time::{Duration, Instant};
 
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
-use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
+use ratatui::layout::Position;
 use uuid::Uuid;
 
 use crate::tui::completion_popup::CompletionPopup;
@@ -35,9 +36,7 @@ use crate::tui::models_popup::ModelsPopup;
 use crate::tui::personas_popup::PersonasPopup;
 use crate::tui::queued_messages_list::QueueMessagesList;
 use crate::tui::sessions_popup::SessionsPopup;
-use crate::tui::sessions_sidebar::{
-  MIN_TERMINAL_WIDTH, SIDEBAR_WIDTH, SessionsSidebar,
-};
+use crate::tui::sessions_sidebar::SessionsSidebar;
 use crate::tui::statusline::StatusLine;
 use fenrir_core::engine::protocol::{CommandInfo, PersonaInfo, SessionSummary};
 use fenrir_core::provider_manager::ChatUsage;
@@ -159,45 +158,38 @@ impl Tui {
   pub fn draw(&mut self, frame: &mut Frame) {
     let has_messages = !self.messages_list.is_empty();
     let has_queued_messages = !self.queued_messages_list.is_empty();
-    let [body_area, status_bar_area] =
-      frame.area().layout(&Layout::vertical([
-        Constraint::Min(1),
-        Constraint::Length(1),
-      ]));
-    let show_sidebar = self.sessions_sidebar.is_visible()
-      && body_area.width >= MIN_TERMINAL_WIDTH;
-    let content_area = if show_sidebar {
-      let [sidebar_area, content_area] =
-        body_area.layout(&Layout::horizontal([
-          Constraint::Length(SIDEBAR_WIDTH),
-          Constraint::Min(1),
-        ]));
+    let areas = view::layout(
+      frame.area(),
+      &mut self.input,
+      &self.queued_messages_list,
+      has_messages,
+      has_queued_messages,
+      self.sessions_sidebar.is_visible(),
+    );
+
+    if let Some(sidebar_area) = areas.sidebar {
       self.sessions_sidebar.draw(frame, sidebar_area);
-      content_area
     } else {
       self.sessions_sidebar.clear_area();
       self.sessions_sidebar.set_focused(false);
-      body_area
-    };
-    let (messages_area, queued_messages_area, input_area) =
-      self.compute_areas(content_area, has_messages, has_queued_messages);
+    }
 
     if has_messages {
-      self.messages_list.draw(frame, messages_area);
+      self.messages_list.draw(frame, areas.messages);
     }
 
     if has_queued_messages {
-      self.queued_messages_list.draw(frame, queued_messages_area);
+      self.queued_messages_list.draw(frame, areas.queued_messages);
     }
 
-    self.completion_popup.draw(frame, input_area);
+    self.completion_popup.draw(frame, areas.input);
 
-    self.input.update_scroll_for_height(input_area.height);
-    frame.render_widget(self.input.widget(input_area.height), input_area);
+    self.input.update_scroll_for_height(areas.input.height);
+    frame.render_widget(self.input.widget(areas.input.height), areas.input);
 
     frame.render_widget(
-      self.statusline.draw(status_bar_area.width),
-      status_bar_area,
+      self.statusline.draw(areas.status_bar.width),
+      areas.status_bar,
     );
 
     let sidebar_focused =
@@ -205,8 +197,8 @@ impl Tui {
     if !self.any_popup_open() && !sidebar_focused {
       let (cursor_row, cursor_col) = self.input.cursor_position();
       frame.set_cursor_position(Position::new(
-        input_area.x + cursor_col as u16 + 2,
-        input_area.y + (cursor_row - self.input.scroll_offset) as u16 + 1,
+        areas.input.x + cursor_col as u16 + 2,
+        areas.input.y + (cursor_row - self.input.scroll_offset) as u16 + 1,
       ));
     }
 
@@ -215,92 +207,6 @@ impl Tui {
     self.models_popup.draw(frame);
     self.help_popup.draw(frame);
     self.confirm_popup.draw(frame);
-  }
-
-  fn compute_areas(
-    &mut self,
-    area: Rect,
-    has_messages: bool,
-    has_queued_messages: bool,
-  ) -> (Rect, Rect, Rect) {
-    let screen_width = area.width;
-    let screen_height = area.height;
-
-    let box_width = if has_messages {
-      screen_width.saturating_sub(HORIZONTAL_PADDING * 2)
-    } else {
-      popup::constrained_width(screen_width).saturating_sub(1)
-    };
-    self.input.set_width(box_width);
-
-    let box_height = self.input.desired_box_height(if has_messages {
-      screen_height.saturating_sub(4)
-    } else {
-      screen_height.saturating_sub(2)
-    });
-
-    let slot_height = if has_messages {
-      box_height + TOP_PADDING
-    } else {
-      box_height
-    };
-
-    let queued_height = if has_queued_messages {
-      self.queued_messages_list.desired_height(box_width)
-    } else {
-      0
-    };
-
-    let (messages_area, queued_messages_area, input_area) = if has_messages {
-      let [messages_area, queued_messages_area, input_area] =
-        area.layout(&Layout::vertical([
-          Constraint::Min(1),
-          Constraint::Length(queued_height),
-          Constraint::Length(slot_height),
-        ]));
-      (messages_area, queued_messages_area, input_area)
-    } else {
-      let [messages_area, queued_messages_area, input_area, _spacer] = area
-        .layout(&Layout::vertical([
-          Constraint::Min(1),
-          Constraint::Length(0),
-          Constraint::Length(slot_height),
-          Constraint::Min(1),
-        ]));
-      (messages_area, queued_messages_area, input_area)
-    };
-
-    let input_area = if has_messages {
-      let inner = input_area.inner(Margin {
-        horizontal: HORIZONTAL_PADDING,
-        vertical: 0,
-      });
-      Rect::new(
-        inner.x,
-        inner.y + TOP_PADDING,
-        inner.width,
-        inner.height.saturating_sub(TOP_PADDING),
-      )
-    } else {
-      let width = popup::constrained_width(input_area.width).saturating_sub(1);
-      Rect::new(
-        input_area.x + input_area.width.saturating_sub(width) / 2,
-        input_area.y,
-        width,
-        input_area.height,
-      )
-    };
-
-    let queued_messages_area = if has_queued_messages {
-      queued_messages_area.inner(Margin {
-        horizontal: HORIZONTAL_PADDING,
-        vertical: 0,
-      })
-    } else {
-      queued_messages_area
-    };
-
-    return (messages_area, queued_messages_area, input_area);
   }
 
   fn any_popup_open(&self) -> bool {

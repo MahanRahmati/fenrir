@@ -18,9 +18,6 @@ use crate::tui::sidebar::Sidebar;
 use fenrir_core::engine::protocol::SessionSummary;
 use fenrir_core::utils::datetime::format_timestamp;
 
-pub const SIDEBAR_WIDTH: u16 = 28;
-pub const MIN_TERMINAL_WIDTH: u16 = 80;
-
 pub struct SessionsSidebar {
   sidebar: Sidebar,
   sessions: Vec<SessionSummary>,
