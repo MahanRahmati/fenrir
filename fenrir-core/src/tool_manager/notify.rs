@@ -1,8 +1,8 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
+use crate::capability::notify;
 use crate::tool_manager::helpers::{get_optional_param, get_param};
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
-use crate::utils::process;
 
 pub const NOTIFY_TOOL_NAME: &str = "notify";
 
@@ -42,52 +42,8 @@ impl Tool for NotifyTool {
     let body = get_optional_param::<String>(&params, NOTIFY_TOOL_NAME, "body")
       .unwrap_or_default();
 
-    let summary_arg = format!("string:{summary}");
-    let body_arg = format!("string:{body}");
-
-    let args: Vec<&str> = vec![
-      "--session",
-      "--dest=org.freedesktop.Notifications",
-      "--type=method_call",
-      "--print-reply",
-      "/org/freedesktop/Notifications",
-      "org.freedesktop.Notifications.Notify",
-      "string:Fenrir",
-      "uint32:0",
-      "string:",
-      &summary_arg,
-      &body_arg,
-      "array:string:",
-      "dict:string:variant:",
-      "int32:-1",
-    ];
-
-    let output = process::run("dbus-send", &args)
+    return notify::send_notification(&summary, &body)
       .await
-      .context("Failed to invoke dbus-send")?;
-
-    if !output.exit_code.is_success() {
-      let stderr = output.stderr.trim();
-      let details = if stderr.is_empty() {
-        "the notification could not be sent".to_string()
-      } else {
-        stderr.to_string()
-      };
-      bail!("{details}");
-    }
-
-    return match parse_notification_id(&output.stdout) {
-      Some(id) => Ok(format!("Notification sent (id: {id})")),
-      None => Ok("Notification sent".to_string()),
-    };
+      .context("Failed to send notification");
   }
-}
-
-fn parse_notification_id(stdout: &str) -> Option<u32> {
-  return stdout.lines().find_map(|line| {
-    line
-      .trim()
-      .strip_prefix("uint32 ")
-      .and_then(|v| v.parse().ok())
-  });
 }
