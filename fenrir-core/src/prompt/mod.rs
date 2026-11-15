@@ -4,6 +4,7 @@ pub mod judge;
 pub mod prediction;
 pub mod review;
 pub mod system;
+pub mod think;
 pub mod title;
 
 use std::collections::HashMap;

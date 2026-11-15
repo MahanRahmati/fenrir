@@ -11,6 +11,7 @@ use crate::mentions::{
   split_skill_mentions, strip_attached_mentions,
 };
 use crate::network::sse::SSEChunk;
+use crate::prompt::think::strip_inline_reasoning;
 use crate::provider_manager::provider::{
   ChatResponse, ChatStreamDelta, ChatUsage, StreamToolCallDelta, ToolCall,
 };
@@ -233,6 +234,13 @@ pub async fn build_messages(
 
     let content = if msg.content.is_empty() {
       None
+    } else if msg.role == "assistant" {
+      let content = strip_inline_reasoning(&msg.content);
+      if content.is_empty() {
+        None
+      } else {
+        Some(ChatContent::Text(content))
+      }
     } else if msg.role != "user" && msg.role != "tool" {
       Some(ChatContent::Text(msg.content.clone()))
     } else {
