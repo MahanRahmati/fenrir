@@ -2,7 +2,7 @@ pub mod secrets;
 
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::files::operations;
 use crate::persona_manager::PersonaManager;
@@ -169,6 +169,7 @@ impl Default for HooksConfig {
 #[serde(default)]
 pub struct CompactionConfig {
   pub threshold: Option<u64>,
+  pub ratio: f64,
   pub tool_result_max_chars: usize,
 }
 
@@ -176,6 +177,7 @@ impl Default for CompactionConfig {
   fn default() -> Self {
     return Self {
       threshold: None,
+      ratio: 0.8,
       tool_result_max_chars: 2000,
     };
   }
@@ -270,6 +272,9 @@ impl Config {
     if let Some(name) = config.general.default_persona.as_deref() {
       PersonaManager::find(name)
         .context(format!("Unknown default persona '{name}'"))?;
+    }
+    if !(config.compaction.ratio > 0.0 && config.compaction.ratio <= 1.0) {
+      bail!("compaction.ratio must be greater than 0 and at most 1");
     }
     return Ok(config);
   }

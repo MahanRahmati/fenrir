@@ -154,38 +154,17 @@ pub async fn run_once(
   return Ok(summary.content);
 }
 
-pub async fn run_if_needed(
-  session: &mut Session,
+pub fn should_compact(
+  session: &Session,
   config: &Config,
-  provider_manager: &ProviderManager,
-  repo: &RepoHandle,
-  events: &Sender<SessionEvent>,
-  correlation: Correlation,
-  cancel: &CancellationToken,
-) -> Result<()> {
-  if !reached_compaction_threshold(session, config) {
-    return Ok(());
-  }
-  run_once(
-    session,
-    config,
-    provider_manager,
-    repo,
-    events,
-    correlation,
-    cancel,
-  )
-  .await?;
-  return Ok(());
-}
-
-fn reached_compaction_threshold(session: &Session, config: &Config) -> bool {
-  let Some(threshold) = config.compaction.threshold else {
-    return false;
-  };
+  context_window: Option<u64>,
+) -> bool {
   let Some(last_usage) = session.last_usage else {
     return false;
   };
-  return last_usage.prompt_tokens as usize
-    >= (threshold as f64 * 0.8) as usize;
+  let Some(limit) = config.compaction.threshold.or(context_window) else {
+    return false;
+  };
+  let threshold = (limit as f64 * config.compaction.ratio) as u64;
+  return last_usage.prompt_tokens >= threshold;
 }

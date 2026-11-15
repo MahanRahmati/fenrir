@@ -124,28 +124,6 @@ pub async fn run_turn(
     context.events,
   );
 
-  if let Err(e) = compaction::run_if_needed(
-    session,
-    context.config,
-    context.provider_manager,
-    context.repo,
-    context.events,
-    correlation,
-    context.cancel,
-  )
-  .await
-    && !context.cancel.is_cancelled()
-  {
-    let _ = context
-      .events
-      .send(SessionEvent::Event(ServerEvent::Error {
-        request_id: None,
-        session_id: Some(session.id),
-        message: format!("Auto-compaction failed: {e}"),
-      }))
-      .await;
-  }
-
   return TurnOutcome::Completed { assistant };
 }
 

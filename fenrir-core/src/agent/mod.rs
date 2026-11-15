@@ -14,7 +14,7 @@ use crate::hook_manager::hook::{
   HookContext, HookDecision, ToolCallContext, ToolResultContext,
 };
 use crate::persona_manager::Persona;
-use crate::prompt::{PromptExecutor, chat};
+use crate::prompt::{PromptExecutor, chat, compaction};
 use crate::provider_manager::{Model, ProviderManager, ToolCall};
 use crate::session_manager::session::Session;
 use crate::tool_manager::SUBAGENT_TOOL_NAME;
@@ -42,9 +42,11 @@ pub async fn run_agent_loop(
   let is_subagent = session.is_subagent();
   let max_iterations = context.config.subagent.max_iterations;
   let executor = PromptExecutor::new(context.provider_manager, context.config);
-  let system = chat::system_prompt(session, context.config);
+  let mut system = chat::system_prompt(session, context.config);
   let mut turns = 0usize;
   let mut assistant = String::new();
+  let mut context_window = None;
+  let mut context_window_fetched = false;
 
   loop {
     if context.cancel.is_cancelled() {
@@ -54,6 +56,26 @@ pub async fn run_agent_loop(
       assistant.push_str(&turn_limit_note(max_iterations));
       break;
     }
+
+    if !context_window_fetched && session.last_usage.is_some() {
+      context_window = context.provider_manager.context_window(&model).await;
+      context_window_fetched = true;
+    }
+
+    if compaction::should_compact(session, context.config, context_window) {
+      compaction::run_once(
+        session,
+        context.config,
+        context.provider_manager,
+        context.repo,
+        context.events,
+        correlation,
+        context.cancel,
+      )
+      .await?;
+      system = chat::system_prompt(session, context.config);
+    }
+
     turns += 1;
 
     let mut spec = chat::build(session, &model, &system);
