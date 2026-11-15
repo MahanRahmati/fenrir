@@ -318,9 +318,14 @@ impl Adapter {
       ServerEvent::CommandCatalog { commands, .. } => {
         self.tui.open_help_popup(commands);
       }
-      ServerEvent::UserMessage { content, .. } => {
+      ServerEvent::UserMessage {
+        correlation,
+        content,
+        ..
+      } => {
         self.tui.clear_suggestion();
         self.tui.add_message(content);
+        self.tui.touch_session(correlation.session_id);
         self.prediction_pending = false;
         self.predict_after_turn = false;
       }

@@ -88,6 +88,7 @@ impl SessionRepository {
       )
       .await
       .context(format!("Failed to insert message '{}'", msg.id))?;
+    self.touch_session(session_id, msg.timestamp).await?;
     return Ok(());
   }
 
@@ -110,6 +111,25 @@ impl SessionRepository {
       )
       .await
       .context(format!("Failed to insert summary '{}'", summary.id))?;
+    self.touch_session(session_id, summary.created_at).await?;
+    return Ok(());
+  }
+
+  async fn touch_session(
+    &self,
+    session_id: Uuid,
+    timestamp: i64,
+  ) -> Result<()> {
+    self
+      .db
+      .execute(
+        UPDATE_SESSION_INTERACTION,
+        (timestamp, session_id.to_string()),
+      )
+      .await
+      .context(format!(
+        "Failed to update interaction time for session '{session_id}'"
+      ))?;
     return Ok(());
   }
 

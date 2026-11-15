@@ -5,6 +5,8 @@ pub const LIST_SESSIONS: &str = include_str!("queries/list_sessions.sql");
 pub const INSERT_SESSION: &str = include_str!("queries/insert_session.sql");
 pub const UPDATE_SESSION_TITLE: &str =
   include_str!("queries/update_session_title.sql");
+pub const UPDATE_SESSION_INTERACTION: &str =
+  include_str!("queries/update_session_interaction.sql");
 pub const UPDATE_SESSION_PERSONA: &str =
   include_str!("queries/update_session_persona.sql");
 pub const UPDATE_SESSION_MODEL: &str =
