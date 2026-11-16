@@ -1,5 +1,4 @@
 use super::{TOOL_CALL_ICON, ToolCallView};
-use fenrir_core::tool_manager::task_summary;
 use fenrir_core::tool_manager::tool::parse_tool_params;
 
 pub fn view(arguments: &str) -> Option<ToolCallView> {
@@ -9,12 +8,12 @@ pub fn view(arguments: &str) -> Option<ToolCallView> {
     return None;
   }
   let label = match params.get("complexity").map(String::as_str) {
-    Some("hard") => format!("Subagent (hard) › {}", task_summary(task)),
-    _ => format!("Subagent › {}", task_summary(task)),
+    Some("hard") => "Subagent (hard)",
+    _ => "Subagent",
   };
   return Some(ToolCallView {
     icon: TOOL_CALL_ICON,
-    label,
+    label: label.to_string(),
     body: Vec::new(),
     show_result: false,
   });

@@ -28,6 +28,8 @@ pub struct ToolContext<'a> {
   pub correlation: Correlation,
   pub cancel: &'a CancellationToken,
   pub session_id: Uuid,
+  pub tool_call_id: &'a str,
+  pub tool_name: &'a str,
   pub cwd: &'a str,
 }
 

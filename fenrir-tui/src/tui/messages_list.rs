@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use ratatui::Frame;
 use ratatui::crossterm::event::{MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
@@ -7,7 +9,9 @@ use ratatui::widgets::{
 
 use crate::tui::message_item::{MessageItem, Role};
 use fenrir_core::session_manager::Message;
-use fenrir_core::tool_manager::ToolPreview;
+use fenrir_core::tool_manager::{
+  ToolPreview, runs_subagent, tool::parse_tool_params,
+};
 
 pub struct MessagesList {
   messages: Vec<MessageItem>,
@@ -15,6 +19,8 @@ pub struct MessagesList {
   follow: bool,
   viewport_height: u16,
   line_count: usize,
+  subagent_calls: HashSet<String>,
+  subagent_streams: HashMap<String, usize>,
 }
 
 impl MessagesList {
@@ -25,6 +31,8 @@ impl MessagesList {
       follow: true,
       viewport_height: 0,
       line_count: 0,
+      subagent_calls: HashSet::new(),
+      subagent_streams: HashMap::new(),
     };
   }
 
@@ -156,17 +164,33 @@ impl MessagesList {
     arguments: String,
     preview: Option<ToolPreview>,
   ) {
+    let is_subagent = runs_subagent(&name);
+    let task = if is_subagent {
+      subagent_task(&arguments)
+    } else {
+      None
+    };
+    if is_subagent {
+      self.subagent_calls.insert(id.clone());
+    }
     let message = MessageItem::new_tool_call(id, name, arguments, preview);
     self.messages.push(message);
+    if let Some(task) = task {
+      self.add_subagent_task(&task);
+    }
     self.select_last();
   }
 
   pub fn add_tool_result(&mut self, id: String, result: String, error: bool) {
-    if let Some(call) = self
-      .messages
-      .iter_mut()
-      .rev()
-      .find(|message| message.is_pending_tool_call(&id))
+    if self.subagent_calls.remove(&id) {
+      self.add_subagent_report(&id, result, error);
+      return;
+    }
+    self.subagent_streams.remove(&id);
+    if let Some(call) =
+      self.messages.iter_mut().rev().find(|message| {
+        message.depth() == 0 && message.is_pending_tool_call(&id)
+      })
     {
       call.push_tool_result(result, error);
     } else {
@@ -177,6 +201,140 @@ impl MessagesList {
     self.select_last();
   }
 
+  pub fn add_subagent_token(
+    &mut self,
+    tool_call_id: &str,
+    text: &str,
+    reasoning: bool,
+  ) {
+    let role = if reasoning {
+      Role::Reasoning
+    } else {
+      Role::Assistant
+    };
+    let index =
+      self
+        .subagent_streams
+        .get(tool_call_id)
+        .copied()
+        .filter(|index| {
+          self.messages.get(*index).is_some_and(|message| {
+            message.depth() == 1
+              && if reasoning {
+                message.is_reasoning()
+              } else {
+                message.is_assistant()
+              }
+          })
+        });
+    match index {
+      Some(index) => {
+        if let Some(message) = self.messages.get_mut(index) {
+          message.push_string(text);
+        }
+      }
+      None => {
+        let message = MessageItem::new(String::new(), role).with_depth(1);
+        self.messages.push(message);
+        let index = self.messages.len() - 1;
+        self
+          .subagent_streams
+          .insert(tool_call_id.to_string(), index);
+        if let Some(message) = self.messages.get_mut(index) {
+          message.push_string(text);
+        }
+      }
+    }
+    self.select_last();
+  }
+
+  pub fn add_subagent_tool_call(
+    &mut self,
+    tool_call_id: &str,
+    id: String,
+    name: String,
+    arguments: String,
+    preview: Option<ToolPreview>,
+  ) {
+    self.subagent_streams.remove(tool_call_id);
+    let message =
+      MessageItem::new_tool_call(id, name, arguments, preview).with_depth(1);
+    self.messages.push(message);
+    self.select_last();
+  }
+
+  pub fn add_subagent_tool_result(
+    &mut self,
+    tool_call_id: &str,
+    id: String,
+    result: String,
+    error: bool,
+  ) {
+    self.subagent_streams.remove(tool_call_id);
+    if let Some(call) =
+      self.messages.iter_mut().rev().find(|message| {
+        message.depth() == 1 && message.is_pending_tool_call(&id)
+      })
+    {
+      call.push_tool_result(result, error);
+    } else {
+      let message = MessageItem::new(result, Role::ToolResult)
+        .with_error(error)
+        .with_depth(1);
+      self.messages.push(message);
+    }
+    self.select_last();
+  }
+
+  pub fn add_subagent_retry(
+    &mut self,
+    tool_call_id: &str,
+    attempt: u32,
+    max_attempts: u32,
+    delay_seconds: u64,
+  ) {
+    self.subagent_streams.remove(tool_call_id);
+    let message = MessageItem::new(
+      format!(
+        "Retrying in {delay_seconds}s (attempt {attempt}/{max_attempts})"
+      ),
+      Role::Reasoning,
+    )
+    .with_depth(1);
+    self.messages.push(message);
+    self.select_last();
+  }
+
+  pub fn add_subagent_report(
+    &mut self,
+    tool_call_id: &str,
+    result: String,
+    error: bool,
+  ) {
+    self.subagent_streams.remove(tool_call_id);
+    let report = result.trim();
+    let duplicate = !report.is_empty()
+      && self.messages.last().is_some_and(|last| {
+        last.depth() == 1 && last.is_assistant() && last.text().trim() == report
+      });
+    if !report.is_empty() && !duplicate {
+      let message = MessageItem::new(result, Role::SubagentReport)
+        .with_error(error)
+        .with_depth(1);
+      self.messages.push(message);
+    }
+  }
+
+  fn add_subagent_task(&mut self, task: &str) {
+    let task = task.trim();
+    if task.is_empty() {
+      return;
+    }
+    let message =
+      MessageItem::new(task.to_string(), Role::SubagentTask).with_depth(1);
+    self.messages.push(message);
+  }
+
   pub fn add_summary(&mut self, summary: String) {
     let message = MessageItem::new(summary, Role::Compaction);
     self.messages.push(message);
@@ -184,7 +342,11 @@ impl MessagesList {
   }
 
   pub fn ensure_reasoning_line(&mut self) {
-    if self.messages.last().is_none_or(|last| !last.is_reasoning()) {
+    if self
+      .messages
+      .last()
+      .is_none_or(|last| last.depth() != 0 || !last.is_reasoning())
+    {
       let message = MessageItem::new(String::new(), Role::Reasoning);
       self.messages.push(message);
       self.select_last();
@@ -192,7 +354,11 @@ impl MessagesList {
   }
 
   pub fn ensure_content_line(&mut self) {
-    if self.messages.last().is_none_or(|last| !last.is_assistant()) {
+    if self
+      .messages
+      .last()
+      .is_none_or(|last| last.depth() != 0 || !last.is_assistant())
+    {
       let message = MessageItem::new(String::new(), Role::Assistant);
       self.messages.push(message);
       self.select_last();
@@ -200,7 +366,9 @@ impl MessagesList {
   }
 
   pub fn append_to_last_message(&mut self, text: &str) {
-    if let Some(last) = self.messages.last_mut() {
+    if let Some(last) = self.messages.last_mut()
+      && last.depth() == 0
+    {
       last.push_string(text);
     } else {
       let message = MessageItem::new(text.to_string(), Role::Assistant);
@@ -211,6 +379,8 @@ impl MessagesList {
 
   pub fn update_messages(&mut self, messages: Option<&[Message]>) {
     self.messages.clear();
+    self.subagent_calls.clear();
+    self.subagent_streams.clear();
     if let Some(messages) = messages {
       let mut i = 0;
       while i < messages.len() {
@@ -233,8 +403,15 @@ impl MessagesList {
               )
             })
             .unwrap_or_default();
+          let is_subagent = runs_subagent(&name);
+          let task = if is_subagent {
+            subagent_task(&arguments)
+          } else {
+            None
+          };
           let mut item =
             MessageItem::new_tool_call(id, name, arguments, preview);
+          let mut report = None;
           if let Some(call_id) = &msg.tool_call_id {
             for (j, result_msg) in messages.iter().enumerate().skip(i + 1) {
               if result_msg.role == "tool"
@@ -245,13 +422,28 @@ impl MessagesList {
                   .strip_prefix("Tool result: ")
                   .unwrap_or(&result_msg.content);
                 let error = content.starts_with("Tool error: ");
-                item.push_tool_result(content.to_string(), error);
+                if is_subagent {
+                  report = Some((content.to_string(), error));
+                } else {
+                  item.push_tool_result(content.to_string(), error);
+                }
                 i = j;
                 break;
               }
             }
           }
           self.messages.push(item);
+          if let Some(task) = task {
+            self.add_subagent_task(&task);
+          }
+          if let Some((content, error)) = report
+            && !content.trim().is_empty()
+          {
+            let message = MessageItem::new(content, Role::SubagentReport)
+              .with_error(error)
+              .with_depth(1);
+            self.messages.push(message);
+          }
           i += 1;
           continue;
         }
@@ -283,4 +475,13 @@ impl MessagesList {
     }
     self.select_last();
   }
+}
+
+fn subagent_task(arguments: &str) -> Option<String> {
+  let mut params = parse_tool_params(arguments);
+  let task = params.remove("task").or_else(|| params.remove("goal"))?;
+  if task.trim().is_empty() {
+    return None;
+  }
+  return Some(task);
 }

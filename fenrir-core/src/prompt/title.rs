@@ -28,6 +28,7 @@ pub fn build(
     tools: Vec::new(),
     stream: false,
     emit_tokens: false,
+    subagent: None,
   };
 }
 

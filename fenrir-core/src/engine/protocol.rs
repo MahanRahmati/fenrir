@@ -15,6 +15,12 @@ pub struct Correlation {
   pub turn_id: Uuid,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SubagentRef {
+  pub session_id: Uuid,
+  pub tool_call_id: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionStatus {
   Idle,
@@ -196,6 +202,8 @@ pub enum ServerEvent {
     correlation: Correlation,
     text: String,
     reasoning: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subagent: Option<SubagentRef>,
   },
   ToolCall {
     correlation: Correlation,
@@ -203,6 +211,8 @@ pub enum ServerEvent {
     name: String,
     arguments: String,
     preview: Option<crate::tool_manager::ToolPreview>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subagent: Option<SubagentRef>,
   },
   ToolApprovalRequest {
     correlation: Correlation,
@@ -220,6 +230,8 @@ pub enum ServerEvent {
     id: String,
     result: String,
     error: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subagent: Option<SubagentRef>,
   },
   Usage {
     correlation: Correlation,
@@ -236,6 +248,8 @@ pub enum ServerEvent {
     max_attempts: u32,
     delay_seconds: u64,
     reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subagent: Option<SubagentRef>,
   },
   Compacted {
     session_id: Uuid,
@@ -269,6 +283,16 @@ pub enum ServerEvent {
 }
 
 impl ServerEvent {
+  pub fn subagent(&self) -> Option<&SubagentRef> {
+    return match self {
+      ServerEvent::Token { subagent, .. }
+      | ServerEvent::ToolCall { subagent, .. }
+      | ServerEvent::ToolResult { subagent, .. }
+      | ServerEvent::Retrying { subagent, .. } => subagent.as_ref(),
+      _ => None,
+    };
+  }
+
   pub fn name(&self) -> &'static str {
     return match self {
       ServerEvent::Connected { .. } => "connected",

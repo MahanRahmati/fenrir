@@ -414,6 +414,7 @@ impl SessionActor {
         repo: &repo,
         events: &events,
         cancel: &cancel,
+        subagent: None,
       };
       let outcome = run_turn(
         &mut session,
@@ -477,6 +478,7 @@ impl SessionActor {
         repo: &repo,
         events: &events,
         cancel: &cancel,
+        subagent: None,
       };
       let outcome =
         run_compact(&mut session, turn_id, request_id, &context).await;

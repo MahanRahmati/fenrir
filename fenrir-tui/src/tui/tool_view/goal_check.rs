@@ -1,5 +1,5 @@
 use super::{TOOL_CALL_ICON, ToolCallView};
-use fenrir_core::tool_manager::{task_summary, tool::parse_tool_params};
+use fenrir_core::tool_manager::tool::parse_tool_params;
 
 pub fn view(arguments: &str) -> Option<ToolCallView> {
   let params = parse_tool_params(arguments);
@@ -9,7 +9,7 @@ pub fn view(arguments: &str) -> Option<ToolCallView> {
   }
   return Some(ToolCallView {
     icon: TOOL_CALL_ICON,
-    label: format!("Check: {}", task_summary(goal)),
+    label: "Goal check".to_string(),
     body: Vec::new(),
     show_result: false,
   });

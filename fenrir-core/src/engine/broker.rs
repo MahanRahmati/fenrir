@@ -897,7 +897,11 @@ impl Broker {
         correlation,
         text,
         reasoning,
+        subagent,
       } => {
+        if subagent.is_some() {
+          return;
+        }
         if let Some(handle) = self.sessions.get_mut(&correlation.session_id)
           && handle.active_turn == Some(correlation.turn_id)
         {
@@ -907,7 +911,14 @@ impl Broker {
           });
         }
       }
-      ServerEvent::ToolCall { correlation, .. } => {
+      ServerEvent::ToolCall {
+        correlation,
+        subagent,
+        ..
+      } => {
+        if subagent.is_some() {
+          return;
+        }
         if let Some(handle) = self.sessions.get_mut(&correlation.session_id)
           && handle.active_turn == Some(correlation.turn_id)
         {
@@ -1026,6 +1037,7 @@ impl Broker {
           correlation,
           text: token.text,
           reasoning: token.reasoning,
+          subagent: None,
         },
       );
     }

@@ -9,6 +9,8 @@ use fenrir_core::tool_manager::{
 };
 
 const TEXT_EXTRA_PADDING: u16 = 1;
+const GUIDE: &str = "   │ ";
+const GUIDE_WIDTH: u16 = 4;
 
 #[derive(PartialEq)]
 pub enum Role {
@@ -17,6 +19,8 @@ pub enum Role {
   Reasoning,
   ToolCall,
   ToolResult,
+  SubagentTask,
+  SubagentReport,
   Compaction,
   Error,
 }
@@ -27,9 +31,11 @@ impl Role {
       Role::User | Role::ToolCall | Role::ToolResult | Role::Compaction => {
         HORIZONTAL_PADDING
       }
-      Role::Assistant | Role::Reasoning | Role::Error => {
-        HORIZONTAL_PADDING + TEXT_EXTRA_PADDING
-      }
+      Role::Assistant
+      | Role::Reasoning
+      | Role::SubagentTask
+      | Role::SubagentReport
+      | Role::Error => HORIZONTAL_PADDING + TEXT_EXTRA_PADDING,
     };
   }
 }
@@ -38,6 +44,7 @@ pub struct MessageItem {
   text: String,
   role: Role,
   error: bool,
+  depth: u16,
   tool_call_id: Option<String>,
   tool_name: Option<String>,
   tool_view: ToolCallView,
@@ -51,6 +58,7 @@ impl MessageItem {
       text,
       role,
       error: false,
+      depth: 0,
       tool_call_id: None,
       tool_name: None,
       tool_view: ToolCallView::default(),
@@ -65,6 +73,20 @@ impl MessageItem {
     return self;
   }
 
+  pub fn with_depth(mut self, depth: u16) -> Self {
+    self.depth = depth;
+    self.wrapped = None;
+    return self;
+  }
+
+  pub fn depth(&self) -> u16 {
+    return self.depth;
+  }
+
+  pub fn text(&self) -> &str {
+    return &self.text;
+  }
+
   pub fn new_tool_call(
     id: String,
     name: String,
@@ -76,6 +98,7 @@ impl MessageItem {
       text: String::new(),
       role: Role::ToolCall,
       error: false,
+      depth: 0,
       tool_call_id: Some(id),
       tool_name: Some(name),
       tool_view,
@@ -108,13 +131,22 @@ impl MessageItem {
       .as_ref()
       .is_some_and(|(cached_width, _)| *cached_width == width);
     if !is_cached {
-      let horizontal_padding = self.horizontal_padding();
-      let inner_width = width.saturating_sub(horizontal_padding * 2);
+      let horizontal_padding = if self.depth > 0 {
+        0
+      } else {
+        self.horizontal_padding()
+      };
+      let guide_width = GUIDE_WIDTH.saturating_mul(self.depth);
+      let inner_width = width
+        .saturating_sub(horizontal_padding * 2)
+        .saturating_sub(guide_width);
       let container = match self.role {
         Role::User => self.user_list_item(),
         Role::Assistant => self.llm_list_item(),
         Role::Reasoning => self.reasoning_list_item(),
         Role::ToolCall | Role::ToolResult => self.tool_list_item(inner_width),
+        Role::SubagentTask => self.llm_list_item(),
+        Role::SubagentReport => self.subagent_report_list_item(),
         Role::Compaction => self.compaction_list_item(),
         Role::Error => self.error_list_item(),
       };
@@ -130,6 +162,15 @@ impl MessageItem {
       }
       for _ in 0..TOP_PADDING {
         lines.insert(0, Line::default());
+      }
+      if self.depth > 0 {
+        let guide = Span::styled(
+          GUIDE.repeat(self.depth as usize),
+          Style::default().dim(),
+        );
+        for line in &mut lines {
+          line.spans.insert(0, guide.clone());
+        }
       }
       self.wrapped = Some((width, lines));
     }
@@ -161,6 +202,18 @@ impl MessageItem {
     return Container::builder(self.text.clone())
       .borderless()
       .style(Style::default().fg(Color::Red))
+      .build();
+  }
+
+  fn subagent_report_list_item(&self) -> Container<'static> {
+    let style = if self.error {
+      Style::default().fg(Color::Red)
+    } else {
+      Style::default()
+    };
+    return Container::builder(self.text.clone())
+      .borderless()
+      .style(style)
       .build();
   }
 

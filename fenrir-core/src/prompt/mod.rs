@@ -18,7 +18,9 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
+use crate::engine::protocol::{
+  Correlation, ServerEvent, SessionEvent, SubagentRef,
+};
 use crate::network::retry::{self, RetryDelay, RetryPolicy};
 use crate::persona_manager::Persona;
 use crate::provider_manager::{ChatUsage, Model, ProviderManager, ToolCall};
@@ -59,6 +61,7 @@ pub struct PromptSpec {
   pub tools: Vec<ToolSpec>,
   pub stream: bool,
   pub emit_tokens: bool,
+  pub subagent: Option<SubagentRef>,
 }
 
 pub struct PromptOutput {
@@ -109,6 +112,7 @@ impl<'a> PromptExecutor<'a> {
     correlation: Correlation,
     events: &Sender<SessionEvent>,
     cancel: &CancellationToken,
+    subagent: Option<&SubagentRef>,
     mut attempt: F,
   ) -> Result<T>
   where
@@ -166,6 +170,7 @@ impl<'a> PromptExecutor<'a> {
             max_attempts,
             delay_seconds: delay.as_secs(),
             reason,
+            subagent: subagent.cloned(),
           }))
           .await;
       }
@@ -188,11 +193,21 @@ impl<'a> PromptExecutor<'a> {
   ) -> Result<PromptOutput> {
     let messages = with_system(&spec.system, spec.messages);
     let response = self
-      .with_retries(spec.kind, correlation, events, cancel, || {
-        self
-          .provider_manager
-          .chat(&spec.model, &messages, &spec.tools, skills)
-      })
+      .with_retries(
+        spec.kind,
+        correlation,
+        events,
+        cancel,
+        spec.subagent.as_ref(),
+        || {
+          self.provider_manager.chat(
+            &spec.model,
+            &messages,
+            &spec.tools,
+            skills,
+          )
+        },
+      )
       .await?;
     if spec.emit_tokens {
       if self.config.general.show_reasoning
@@ -203,6 +218,7 @@ impl<'a> PromptExecutor<'a> {
             correlation,
             text: reasoning.to_string(),
             reasoning: true,
+            subagent: spec.subagent.clone(),
           }))
           .await;
       }
@@ -212,6 +228,7 @@ impl<'a> PromptExecutor<'a> {
             correlation,
             text: content.to_string(),
             reasoning: false,
+            subagent: spec.subagent.clone(),
           }))
           .await;
       }
@@ -234,14 +251,21 @@ impl<'a> PromptExecutor<'a> {
   ) -> Result<PromptOutput> {
     let messages = with_system(&spec.system, spec.messages);
     let mut stream = self
-      .with_retries(spec.kind, correlation, events, cancel, || {
-        self.provider_manager.chat_stream(
-          &spec.model,
-          &messages,
-          &spec.tools,
-          skills,
-        )
-      })
+      .with_retries(
+        spec.kind,
+        correlation,
+        events,
+        cancel,
+        spec.subagent.as_ref(),
+        || {
+          self.provider_manager.chat_stream(
+            &spec.model,
+            &messages,
+            &spec.tools,
+            skills,
+          )
+        },
+      )
       .await?;
 
     let mut content = String::new();
@@ -283,6 +307,7 @@ impl<'a> PromptExecutor<'a> {
               correlation,
               text,
               reasoning: false,
+              subagent: spec.subagent.clone(),
             }))
             .await;
         }
@@ -295,6 +320,7 @@ impl<'a> PromptExecutor<'a> {
               correlation,
               text,
               reasoning: true,
+              subagent: spec.subagent.clone(),
             }))
             .await;
         }

@@ -25,5 +25,6 @@ pub fn build(session: &Session, model: &Model, system: &str) -> PromptSpec {
     tools,
     stream: true,
     emit_tokens: true,
+    subagent: None,
   };
 }

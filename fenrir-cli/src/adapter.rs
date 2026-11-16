@@ -52,6 +52,7 @@ struct Adapter {
   current_model: Option<Model>,
   reasoning_open: bool,
   reasoning_ends_with_newline: bool,
+  subagent_calls: HashSet<String>,
 }
 
 pub async fn run(base_url: &str) -> Result<()> {
@@ -79,6 +80,7 @@ pub async fn run(base_url: &str) -> Result<()> {
     current_model,
     reasoning_open: false,
     reasoning_ends_with_newline: false,
+    subagent_calls: HashSet::new(),
   };
   return adapter.run().await;
 }
@@ -299,23 +301,35 @@ impl Adapter {
         flush();
       }
       ServerEvent::Token {
-        text, reasoning, ..
+        text,
+        reasoning,
+        subagent,
+        ..
       } => {
-        self.render_token(&text, reasoning);
+        if subagent.is_none() {
+          self.render_token(&text, reasoning);
+        }
       }
       ServerEvent::ToolCall {
-        name, arguments, ..
+        id,
+        name,
+        arguments,
+        subagent,
+        ..
       } => {
-        self.close_reasoning();
-        if name == SUBAGENT_TOOL_NAME {
-          let task = parse_tool_params(&arguments)
-            .remove("task")
-            .unwrap_or_default();
-          println!("[subagent] {}", task_summary(&task));
-        } else {
-          println!("[tool] {name}({arguments})");
+        if subagent.is_none() {
+          self.close_reasoning();
+          if name == SUBAGENT_TOOL_NAME {
+            let task = parse_tool_params(&arguments)
+              .remove("task")
+              .unwrap_or_default();
+            println!("[subagent] {}", task_summary(&task));
+            self.subagent_calls.insert(id);
+          } else {
+            println!("[tool] {name}({arguments})");
+          }
+          flush();
         }
-        flush();
       }
       ServerEvent::ToolApprovalRequest {
         correlation,
@@ -333,13 +347,22 @@ impl Adapter {
         };
       }
       ServerEvent::ToolApprovalResult { .. } => {}
-      ServerEvent::ToolResult { result, error, .. } => {
-        if error {
-          println!("[error] {result}");
-        } else {
-          println!("[result] {result}");
+      ServerEvent::ToolResult {
+        id,
+        result,
+        error,
+        subagent,
+        ..
+      } => {
+        if subagent.is_none() {
+          let is_subagent = self.subagent_calls.remove(&id);
+          if error {
+            println!("[error] {result}");
+          } else if !is_subagent {
+            println!("[result] {result}");
+          }
+          flush();
         }
-        flush();
       }
       ServerEvent::Usage {
         usage,
@@ -370,12 +393,15 @@ impl Adapter {
         max_attempts,
         delay_seconds,
         reason,
+        subagent,
         ..
       } => {
-        println!(
-          "\n[retry] attempt {attempt}/{max_attempts} in {delay_seconds}s: {reason}"
-        );
-        flush();
+        if subagent.is_none() {
+          println!(
+            "\n[retry] attempt {attempt}/{max_attempts} in {delay_seconds}s: {reason}"
+          );
+          flush();
+        }
       }
       ServerEvent::Error {
         request_id,

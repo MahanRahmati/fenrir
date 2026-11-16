@@ -8,7 +8,9 @@ pub use turn::{run_compact, run_turn};
 
 use crate::config::Config;
 use crate::config::secrets::Secrets;
-use crate::engine::protocol::{Correlation, ServerEvent, SessionEvent};
+use crate::engine::protocol::{
+  Correlation, ServerEvent, SessionEvent, SubagentRef,
+};
 use crate::engine::repo_actor::RepoHandle;
 use crate::hook_manager::hook::{
   HookContext, HookDecision, ToolCallContext, ToolResultContext,
@@ -17,7 +19,6 @@ use crate::persona_manager::Persona;
 use crate::prompt::{PromptExecutor, chat, compaction};
 use crate::provider_manager::{Model, ProviderManager, ToolCall};
 use crate::session_manager::session::Session;
-use crate::tool_manager::SUBAGENT_TOOL_NAME;
 use crate::tool_manager::runs_subagent;
 use crate::tool_manager::tool::{ToolContext, parse_tool_params};
 use crate::vlog;
@@ -29,6 +30,7 @@ pub struct AgentContext<'a> {
   pub repo: &'a RepoHandle,
   pub events: &'a Sender<SessionEvent>,
   pub cancel: &'a CancellationToken,
+  pub subagent: Option<SubagentRef>,
 }
 
 pub async fn run_agent_loop(
@@ -79,7 +81,8 @@ pub async fn run_agent_loop(
     turns += 1;
 
     let mut spec = chat::build(session, &model, &system);
-    spec.emit_tokens = !is_subagent;
+    spec.emit_tokens = true;
+    spec.subagent.clone_from(&context.subagent);
     let output = executor
       .once(
         spec,
@@ -92,14 +95,16 @@ pub async fn run_agent_loop(
 
     if let Some(usage) = output.usage {
       session.last_usage = Some(usage);
-      let _ = context
-        .events
-        .send(SessionEvent::Event(ServerEvent::Usage {
-          correlation,
-          usage: Some(usage),
-          context_window,
-        }))
-        .await;
+      if context.subagent.is_none() {
+        let _ = context
+          .events
+          .send(SessionEvent::Event(ServerEvent::Usage {
+            correlation,
+            usage: Some(usage),
+            context_window,
+          }))
+          .await;
+      }
     }
 
     if context.config.general.show_reasoning
@@ -174,9 +179,11 @@ async fn execute_tool_calls(
     }
 
     let params = parse_tool_params(&tool_call.arguments);
-    let is_subagent_tool = tool_call.name == SUBAGENT_TOOL_NAME;
+    let is_subagent_tool = runs_subagent(&tool_call.name);
+    let emit_tool_events =
+      is_subagent_tool || context.config.general.show_tools;
 
-    if context.config.general.show_tools && !is_subagent {
+    if emit_tool_events {
       let _ = context
         .events
         .send(SessionEvent::Event(ServerEvent::ToolCall {
@@ -185,6 +192,7 @@ async fn execute_tool_calls(
           name: tool_call.name.clone(),
           arguments: tool_call.arguments.clone(),
           preview,
+          subagent: context.subagent.clone(),
         }))
         .await;
     }
@@ -212,7 +220,7 @@ async fn execute_tool_calls(
       HookDecision::Deny { reason, error } => {
         session.add_tool_result_message(&tool_call.id, &reason);
         session.persist_last_message(context.repo).await?;
-        if context.config.general.show_tools && !is_subagent {
+        if emit_tool_events {
           let _ = context
             .events
             .send(SessionEvent::Event(ServerEvent::ToolResult {
@@ -220,6 +228,7 @@ async fn execute_tool_calls(
               id: tool_call.id.clone(),
               result: reason,
               error,
+              subagent: context.subagent.clone(),
             }))
             .await;
         }
@@ -240,6 +249,8 @@ async fn execute_tool_calls(
         correlation,
         cancel: context.cancel,
         session_id: session.id,
+        tool_call_id: &tool_call.id,
+        tool_name: &tool_call.name,
         cwd: session.cwd.as_str(),
       };
       if runs_subagent(&tool_call.name) {
@@ -312,10 +323,7 @@ async fn execute_tool_calls(
     session.add_tool_result_message(&tool_call.id, &result_str);
     session.persist_last_message(context.repo).await?;
 
-    if context.config.general.show_tools
-      && !is_subagent
-      && (!is_subagent_tool || error)
-    {
+    if emit_tool_events {
       let _ = context
         .events
         .send(SessionEvent::Event(ServerEvent::ToolResult {
@@ -323,6 +331,7 @@ async fn execute_tool_calls(
           id: tool_call.id.clone(),
           result: result_str,
           error,
+          subagent: context.subagent.clone(),
         }))
         .await;
     }
@@ -379,6 +388,10 @@ impl Session {
       repo: context.repository,
       events: context.events,
       cancel: context.cancel,
+      subagent: Some(SubagentRef {
+        session_id,
+        tool_call_id: context.tool_call_id.to_string(),
+      }),
     };
     let result =
       run_agent_loop(&mut session, &agent_context, context.correlation).await;

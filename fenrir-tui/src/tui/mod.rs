@@ -398,6 +398,64 @@ impl Tui {
     self.messages_list.add_tool_result(id, result, error);
   }
 
+  pub fn add_subagent_token(
+    &mut self,
+    tool_call_id: &str,
+    text: &str,
+    reasoning: bool,
+  ) {
+    self
+      .messages_list
+      .add_subagent_token(tool_call_id, text, reasoning);
+  }
+
+  pub fn add_subagent_tool_call(
+    &mut self,
+    tool_call_id: &str,
+    id: String,
+    name: String,
+    arguments: String,
+    preview: Option<ToolPreview>,
+  ) {
+    self.messages_list.add_subagent_tool_call(
+      tool_call_id,
+      id,
+      name,
+      arguments,
+      preview,
+    );
+  }
+
+  pub fn add_subagent_tool_result(
+    &mut self,
+    tool_call_id: &str,
+    id: String,
+    result: String,
+    error: bool,
+  ) {
+    self.messages_list.add_subagent_tool_result(
+      tool_call_id,
+      id,
+      result,
+      error,
+    );
+  }
+
+  pub fn add_subagent_retry(
+    &mut self,
+    tool_call_id: &str,
+    attempt: u32,
+    max_attempts: u32,
+    delay_seconds: u64,
+  ) {
+    self.messages_list.add_subagent_retry(
+      tool_call_id,
+      attempt,
+      max_attempts,
+      delay_seconds,
+    );
+  }
+
   pub fn add_summary(&mut self, summary: String) {
     self.messages_list.add_summary(summary);
   }

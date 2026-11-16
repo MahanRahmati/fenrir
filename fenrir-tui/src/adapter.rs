@@ -338,32 +338,65 @@ impl Adapter {
         self.tui.set_processing(true);
       }
       ServerEvent::Token {
-        text, reasoning, ..
+        text,
+        reasoning,
+        subagent,
+        ..
       } => {
-        self.tui.clear_retrying();
-        if reasoning {
-          self.tui.ensure_reasoning_line();
+        if let Some(subagent) = subagent {
+          self
+            .tui
+            .add_subagent_token(&subagent.tool_call_id, &text, reasoning);
         } else {
-          self.tui.ensure_content_line();
+          self.tui.clear_retrying();
+          if reasoning {
+            self.tui.ensure_reasoning_line();
+          } else {
+            self.tui.ensure_content_line();
+          }
+          self.tui.append_to_last_message(&text);
         }
-        self.tui.append_to_last_message(&text);
       }
       ServerEvent::ToolCall {
         id,
         name,
         arguments,
         preview,
+        subagent,
         ..
       } => {
-        self.tui.clear_retrying();
-        self.tui.add_tool_call(id, name, arguments, preview);
+        if let Some(subagent) = subagent {
+          self.tui.add_subagent_tool_call(
+            &subagent.tool_call_id,
+            id,
+            name,
+            arguments,
+            preview,
+          );
+        } else {
+          self.tui.clear_retrying();
+          self.tui.add_tool_call(id, name, arguments, preview);
+        }
       }
       ServerEvent::ToolApprovalRequest { .. } => {}
       ServerEvent::ToolApprovalResult { .. } => {}
       ServerEvent::ToolResult {
-        id, result, error, ..
+        id,
+        result,
+        error,
+        subagent,
+        ..
       } => {
-        self.tui.add_tool_result(id, result, error);
+        if let Some(subagent) = subagent {
+          self.tui.add_subagent_tool_result(
+            &subagent.tool_call_id,
+            id,
+            result,
+            error,
+          );
+        } else {
+          self.tui.add_tool_result(id, result, error);
+        }
       }
       ServerEvent::Usage {
         usage,
@@ -422,9 +455,19 @@ impl Adapter {
         attempt,
         max_attempts,
         delay_seconds,
+        subagent,
         ..
       } => {
-        self.tui.set_retrying(attempt, max_attempts, delay_seconds);
+        if let Some(subagent) = subagent {
+          self.tui.add_subagent_retry(
+            &subagent.tool_call_id,
+            attempt,
+            max_attempts,
+            delay_seconds,
+          );
+        } else {
+          self.tui.set_retrying(attempt, max_attempts, delay_seconds);
+        }
       }
       ServerEvent::Error {
         request_id,
