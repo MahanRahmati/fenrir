@@ -77,6 +77,7 @@ pub async fn run_turn(
         context.config,
         session.persona_manager.current(),
         &session.cwd,
+        session.is_subagent(),
       ));
       if let Some(request_id) = request_id {
         let _ = context

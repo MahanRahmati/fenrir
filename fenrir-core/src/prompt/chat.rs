@@ -4,8 +4,12 @@ use crate::provider_manager::Model;
 use crate::session_manager::session::Session;
 
 pub fn system_prompt(session: &Session, config: &Config) -> String {
-  let mut prompt =
-    system::build(config, session.persona_manager.current(), &session.cwd);
+  let mut prompt = system::build(
+    config,
+    session.persona_manager.current(),
+    &session.cwd,
+    session.is_subagent(),
+  );
   if let Some(latest) = session.summaries.last() {
     prompt.push_str("\n\n");
     prompt.push_str(&latest.content);

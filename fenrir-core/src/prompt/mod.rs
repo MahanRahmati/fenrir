@@ -399,7 +399,12 @@ pub struct Prompt {
 }
 
 impl Prompt {
-  pub fn new(config: &Config, persona: &Persona, cwd: &str) -> Self {
+  pub fn new(
+    config: &Config,
+    persona: &Persona,
+    cwd: &str,
+    is_subagent: bool,
+  ) -> Self {
     let mut parts: Vec<String> = Vec::new();
     parts.push(persona.identity().to_string());
 
@@ -422,7 +427,8 @@ impl Prompt {
     if can_write {
       guidelines.push(VERIFY);
     }
-    if config.subagent.enabled
+    if !is_subagent
+      && config.subagent.enabled
       && config.permissions.goal_check
       && persona.allowed_tools().allows(SUBAGENT_TOOL_NAME)
       && persona.allowed_tools().allows(GOAL_CHECK_TOOL_NAME)

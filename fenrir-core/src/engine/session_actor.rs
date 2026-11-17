@@ -507,6 +507,7 @@ impl SessionActor {
                 &self.config,
                 session.persona_manager.current(),
                 &session.cwd,
+                session.is_subagent(),
               );
               session.replace_system_message(&prompt);
             }

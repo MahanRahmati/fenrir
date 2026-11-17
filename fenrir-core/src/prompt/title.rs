@@ -23,7 +23,7 @@ pub fn build(
   return PromptSpec {
     kind: PromptKind::Title,
     model: model.clone(),
-    system: system::build(config, &TITLES_PERSONA, cwd),
+    system: system::build(config, &TITLES_PERSONA, cwd, false),
     messages: vec![first_message],
     tools: Vec::new(),
     stream: false,

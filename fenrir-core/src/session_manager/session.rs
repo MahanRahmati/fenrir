@@ -165,7 +165,12 @@ impl Session {
     if self.has_system_message() {
       return Ok(());
     }
-    let prompt = Prompt::new(config, self.persona_manager.current(), &self.cwd);
+    let prompt = Prompt::new(
+      config,
+      self.persona_manager.current(),
+      &self.cwd,
+      self.is_subagent(),
+    );
     self.add_system_message(prompt.get_system_prompt());
     self.persist_last_message(repository).await?;
     return Ok(());
