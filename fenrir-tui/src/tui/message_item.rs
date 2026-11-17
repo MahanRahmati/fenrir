@@ -131,14 +131,16 @@ impl MessageItem {
       .as_ref()
       .is_some_and(|(cached_width, _)| *cached_width == width);
     if !is_cached {
-      let horizontal_padding = if self.depth > 0 {
+      let left_padding = if self.depth > 0 {
         0
       } else {
         self.horizontal_padding()
       };
+      let right_padding = self.horizontal_padding();
       let guide_width = GUIDE_WIDTH.saturating_mul(self.depth);
       let inner_width = width
-        .saturating_sub(horizontal_padding * 2)
+        .saturating_sub(left_padding)
+        .saturating_sub(right_padding)
         .saturating_sub(guide_width);
       let container = match self.role {
         Role::User => self.user_list_item(),
@@ -154,8 +156,8 @@ impl MessageItem {
       if lines.is_empty() {
         lines.push(Line::default());
       }
-      if horizontal_padding > 0 {
-        let padding = " ".repeat(horizontal_padding as usize);
+      if left_padding > 0 {
+        let padding = " ".repeat(left_padding as usize);
         for line in &mut lines {
           line.spans.insert(0, Span::raw(padding.clone()));
         }
