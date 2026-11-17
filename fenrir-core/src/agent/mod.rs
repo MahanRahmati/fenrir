@@ -47,6 +47,8 @@ pub async fn run_agent_loop(
   let mut system = chat::system_prompt(session, context.config);
   let mut turns = 0usize;
   let mut assistant = String::new();
+  let mut last_content: Option<String> = None;
+  let mut reached_turn_limit = false;
   let mut context_window = None;
   let mut context_window_fetched = false;
 
@@ -54,10 +56,7 @@ pub async fn run_agent_loop(
     if context.cancel.is_cancelled() {
       break;
     }
-    if is_subagent && turns >= max_iterations {
-      assistant.push_str(&turn_limit_note(max_iterations));
-      break;
-    }
+    let final_turn = is_subagent && turns >= max_iterations;
 
     if !context_window_fetched && session.last_usage.is_some() {
       context_window = context.provider_manager.context_window(&model).await;
@@ -78,7 +77,15 @@ pub async fn run_agent_loop(
       system = chat::system_prompt(session, context.config);
     }
 
-    turns += 1;
+    if final_turn && !reached_turn_limit {
+      session.add_user_message(FINAL_TURN_INSTRUCTION);
+      session.persist_last_message(context.repo).await?;
+      reached_turn_limit = true;
+    }
+
+    if !final_turn {
+      turns += 1;
+    }
 
     let mut spec = chat::build(session, &model, &system);
     spec.emit_tokens = true;
@@ -119,8 +126,13 @@ pub async fn run_agent_loop(
       && !content.is_empty()
     {
       assistant.push_str(content);
+      last_content = Some(content.to_string());
       session.add_assistant_message(content);
       session.persist_last_message(context.repo).await?;
+    }
+
+    if final_turn {
+      break;
     }
 
     if output.tool_calls.is_empty() {
@@ -135,6 +147,12 @@ pub async fn run_agent_loop(
       &output.tool_calls,
     )
     .await?;
+  }
+
+  if reached_turn_limit {
+    let report = last_content
+      .unwrap_or_else(|| format!("[Subagent transcript: {}]", session.id));
+    return Ok(format!("{TURN_LIMIT_MARKER}\n\n{report}"));
   }
 
   return Ok(assistant);
@@ -422,10 +440,8 @@ impl Session {
   }
 }
 
-fn turn_limit_note(max_iterations: usize) -> String {
-  return format!(
-    "\n\n[Subagent stopped after reaching its limit of {max_iterations} turns. Its report is partial and may omit remaining work.]"
-  );
-}
+const FINAL_TURN_INSTRUCTION: &str = "You have used all of your working turns. This is your final turn: do not call any tools. Write your report now, in full: (1) what you found and verified, (2) every file you created or changed, with paths, (3) what is still incomplete or unverified, (4) the exact next steps the parent should take. Do not omit partial work; the parent relies on this report.";
+
+const TURN_LIMIT_MARKER: &str = "[Reached turn limit; this report was written on the final turn and may be incomplete.]";
 
 const CANCELLED_TOOL_RESULT: &str = "Tool call cancelled by the user before completion. Do not retry unless the user asks.";
