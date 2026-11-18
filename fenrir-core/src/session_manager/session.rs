@@ -9,7 +9,7 @@ use crate::config::Config;
 use crate::engine::repo_actor::RepoHandle;
 use crate::hook_manager::HookManager;
 use crate::persona_manager::PersonaManager;
-use crate::prompt::Prompt;
+use crate::prompt::{Prompt, PromptKind};
 use crate::provider_manager::{ChatUsage, Model};
 use crate::session_manager::repository::SessionRow;
 use crate::session_manager::summary::Summary;
@@ -170,6 +170,7 @@ impl Session {
       self.persona_manager.current(),
       &self.cwd,
       self.is_subagent(),
+      PromptKind::Chat,
     );
     self.add_system_message(prompt.get_system_prompt());
     self.persist_last_message(repository).await?;

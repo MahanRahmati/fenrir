@@ -508,6 +508,7 @@ impl SessionActor {
                 session.persona_manager.current(),
                 &session.cwd,
                 session.is_subagent(),
+                crate::prompt::PromptKind::Chat,
               );
               session.replace_system_message(&prompt);
             }

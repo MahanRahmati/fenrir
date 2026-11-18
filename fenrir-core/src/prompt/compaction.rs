@@ -23,8 +23,13 @@ pub fn build(
   messages: &[Message],
   last_summary: Option<&Summary>,
 ) -> PromptSpec {
-  let mut system_prompt =
-    system::build(config, &COMPACTION_PERSONA, cwd, false);
+  let mut system_prompt = system::build(
+    config,
+    &COMPACTION_PERSONA,
+    cwd,
+    false,
+    PromptKind::Compaction,
+  );
   if let Some(summary) = last_summary {
     system_prompt.push_str("\n\nPrevious summary:\n");
     system_prompt.push_str(&summary.content);

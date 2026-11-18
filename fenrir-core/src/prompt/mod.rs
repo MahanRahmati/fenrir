@@ -40,7 +40,12 @@ const GOAL: &str = "When a task needs more than one trivial step, call `subagent
 const TODO_LIST: &str = "For complex multi-step work, maintain a todo list with `todo_list`: keep exactly one item in_progress at a time, mark items completed as you go, and update the list after each step.";
 const VERIFY: &str = "After making changes, verify they work.";
 const CWD_RESTRICTED: &str = "Tools are restricted to the current working directory. Always use paths within the current directory; paths outside the current working directory are blocked.";
-const CONCISE: &str = "Be concise and direct.";
+const FORMAT_LEAD: &str = "Lead with the next action: a command, path, or snippet, not context or a plan. Example: `Edit src/main.rs:22` to update cli input.";
+const FORMAT_STEPS: &str = "Number multi-step work so each step is one bounded action, and use the fewest steps that work. Example: `1. Open src/auth.rs; 2. Replace verify_token; 3. Run cargo test.`";
+const FORMAT_FOCUS: &str = "Finish the current issue before raising another. Offer the second as a separate question. Example: `Fixed the token check. Separately, the lockfile is stale; want me to update it next?`";
+const FORMAT_DONE: &str = "When work is done, restate the step and say what now works. Example: `Step 3 of 5 done: Token refresh now works.`";
+const FORMAT_ERRORS: &str = "State errors as cause and fix, without apology. Example: `Test fails at auth::verify: expected 200, got 401. Cause: missing auth header. Fix: add Authorization: Bearer <token>.`";
+const FORMAT_CLOSE: &str = "Do not open by announcing what you will do, recap what you did, or ask whether the user needs anything else. When something is open, end with one concrete next action; otherwise stop. Example: start with `Next: run cargo test`, not `I'll check your tests.`";
 const PATHS: &str = "Show file paths clearly when working with files.";
 const MENTIONS: &str = "Files mentioned with @path are automatically attached to the message (as text, or as an image). Never use read_file on an attached file.";
 const SKILLS: &str = "Skills stay active for the whole session, whether you load one with the skill tool or the user attaches one with @skill-id. Apply a skill immediately. Never announce that it is loaded, describe it, or ask the user for input before acting. Never call the skill tool for a skill the user attached with @skill-id.";
@@ -404,6 +409,7 @@ impl Prompt {
     persona: &Persona,
     cwd: &str,
     is_subagent: bool,
+    kind: PromptKind,
   ) -> Self {
     let mut parts: Vec<String> = Vec::new();
     parts.push(persona.identity().to_string());
@@ -440,7 +446,14 @@ impl Prompt {
     {
       guidelines.push(TODO_LIST);
     }
-    guidelines.push(CONCISE);
+    if kind == PromptKind::Chat {
+      guidelines.push(FORMAT_LEAD);
+      guidelines.push(FORMAT_STEPS);
+      guidelines.push(FORMAT_FOCUS);
+      guidelines.push(FORMAT_DONE);
+      guidelines.push(FORMAT_ERRORS);
+      guidelines.push(FORMAT_CLOSE);
+    }
     guidelines.push(PATHS);
     guidelines.push(MENTIONS);
     guidelines.push(SKILLS);

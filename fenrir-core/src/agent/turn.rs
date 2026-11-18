@@ -8,7 +8,7 @@ use crate::engine::protocol::{
   Correlation, PromptMode, ServerEvent, SessionEvent, TurnOutcome,
 };
 use crate::persona_manager::REVIEWER_PERSONA;
-use crate::prompt::{compaction, review, system};
+use crate::prompt::{PromptKind, compaction, review, system};
 use crate::session_manager::session::Session;
 
 pub async fn run_turn(
@@ -78,6 +78,7 @@ pub async fn run_turn(
         session.persona_manager.current(),
         &session.cwd,
         session.is_subagent(),
+        PromptKind::Chat,
       ));
       if let Some(request_id) = request_id {
         let _ = context

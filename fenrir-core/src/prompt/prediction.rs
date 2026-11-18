@@ -28,8 +28,13 @@ pub fn build(
   messages: &[Message],
   summary: Option<String>,
 ) -> PromptSpec {
-  let mut system_prompt =
-    system::build(config, &PREDICTION_PERSONA, cwd, false);
+  let mut system_prompt = system::build(
+    config,
+    &PREDICTION_PERSONA,
+    cwd,
+    false,
+    PromptKind::Prediction,
+  );
 
   if let Some(summary) = summary
     .as_deref()

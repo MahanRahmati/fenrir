@@ -9,6 +9,7 @@ pub fn system_prompt(session: &Session, config: &Config) -> String {
     session.persona_manager.current(),
     &session.cwd,
     session.is_subagent(),
+    PromptKind::Chat,
   );
   if let Some(latest) = session.summaries.last() {
     prompt.push_str("\n\n");
