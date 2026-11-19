@@ -295,6 +295,7 @@ impl Adapter {
         println!("Model set to: {}", model.label());
       }
       ServerEvent::UserMessage { .. } => {}
+      ServerEvent::PromptHistoryListed { .. } => {}
       ServerEvent::TurnStarted { .. } => {
         self.complete_turn_requests();
         println!("[Processing...]");

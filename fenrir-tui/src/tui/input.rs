@@ -60,6 +60,21 @@ impl Input {
     return true;
   }
 
+  pub fn set_content(&mut self, content: String) {
+    self.suggestion = None;
+    self.content = content;
+    self.character_index = self.content.chars().count();
+    self.scroll_offset = 0;
+  }
+
+  pub fn at_start(&self) -> bool {
+    return self.character_index == 0;
+  }
+
+  pub fn at_end(&self) -> bool {
+    return self.character_index >= self.content.chars().count();
+  }
+
   pub fn move_cursor_left(&mut self) {
     let cursor_moved_left = self.character_index.saturating_sub(1);
     self.character_index = self.clamp_cursor(cursor_moved_left);

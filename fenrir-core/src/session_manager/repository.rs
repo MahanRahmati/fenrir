@@ -661,6 +661,37 @@ impl SessionRepository {
     return Ok(());
   }
 
+  pub async fn insert_prompt_history(&self, content: &str) -> Result<()> {
+    self
+      .db
+      .execute(
+        INSERT_PROMPT_HISTORY,
+        (Uuid::now_v7().to_string(), content, Utc::now().timestamp()),
+      )
+      .await
+      .context("Failed to insert prompt history")?;
+    return Ok(());
+  }
+
+  pub async fn load_prompt_history(&self) -> Result<Vec<String>> {
+    let mut rows = self
+      .db
+      .query(LOAD_PROMPT_HISTORY, ())
+      .await
+      .context("Failed to load prompt history")?;
+
+    let mut prompts = Vec::new();
+    while let Ok(Some(row)) = rows.next().await {
+      let content: String = match row.get(1) {
+        Ok(v) => v,
+        Err(_) => continue,
+      };
+      prompts.push(content);
+    }
+    prompts.reverse();
+    return Ok(prompts);
+  }
+
   pub async fn list_summaries(
     &self,
     limit: Option<u32>,

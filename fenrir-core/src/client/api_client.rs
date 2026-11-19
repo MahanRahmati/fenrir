@@ -9,8 +9,8 @@ use uuid::Uuid;
 use crate::client::api::{
   ApiResponse, ApprovalRequest, CancelRequest, CommandsData, CompactRequest,
   ConnectionData, CreateConnectionRequest, CreateSessionRequest, DefaultsData,
-  ModelRequest, ModelsData, PersonaRequest, PersonasData, PromptRequest,
-  ReviewRequest, SessionsData, SubscribeRequest,
+  ModelRequest, ModelsData, PersonaRequest, PersonasData, PromptHistoryData,
+  PromptRequest, ReviewRequest, SessionsData, SubscribeRequest,
 };
 use crate::client::state::{
   ClientState, PendingApproval, PendingRequest, RequestKind,
@@ -108,6 +108,11 @@ impl ApiClient {
   ) -> Result<Vec<CommandInfo>> {
     let data: CommandsData = self.get(&urls::commands(session_id)).await?;
     return Ok(data.commands);
+  }
+
+  pub async fn prompt_history(&self) -> Result<Vec<String>> {
+    let data: PromptHistoryData = self.get(urls::PROMPT_HISTORY).await?;
+    return Ok(data.prompts);
   }
 
   pub async fn create_session(

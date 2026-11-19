@@ -128,6 +128,9 @@ pub enum ClientRequest {
     request_id: u64,
     session_id: Uuid,
   },
+  ListPromptHistory {
+    request_id: u64,
+  },
   Predict {
     session_id: Uuid,
   },
@@ -188,6 +191,10 @@ pub enum ServerEvent {
   CommandCatalog {
     request_id: u64,
     commands: Vec<CommandInfo>,
+  },
+  PromptHistoryListed {
+    request_id: u64,
+    prompts: Vec<String>,
   },
   UserMessage {
     correlation: Correlation,
@@ -305,6 +312,7 @@ impl ServerEvent {
       ServerEvent::PersonaUpdated { .. } => "persona_updated",
       ServerEvent::ModelUpdated { .. } => "model_updated",
       ServerEvent::CommandCatalog { .. } => "command_catalog",
+      ServerEvent::PromptHistoryListed { .. } => "prompt_history_listed",
       ServerEvent::UserMessage { .. } => "user_message",
       ServerEvent::TurnStarted { .. } => "turn_started",
       ServerEvent::Token { .. } => "token",

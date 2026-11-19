@@ -3,6 +3,7 @@ mod completion_popup;
 mod confirm_popup;
 mod container;
 mod help_popup;
+mod history;
 mod input;
 mod message_item;
 mod messages_list;
@@ -30,6 +31,7 @@ use uuid::Uuid;
 use crate::tui::completion_popup::CompletionPopup;
 use crate::tui::confirm_popup::ConfirmPopup;
 use crate::tui::help_popup::HelpPopup;
+use crate::tui::history::PromptHistory;
 use crate::tui::input::Input;
 use crate::tui::messages_list::MessagesList;
 use crate::tui::models_popup::ModelsPopup;
@@ -63,12 +65,14 @@ pub struct Tui {
   confirm_popup: ConfirmPopup,
   completion_popup: CompletionPopup,
   statusline: StatusLine,
+  history: PromptHistory,
+  history_enabled: bool,
   cancel_requested: bool,
   last_escape_time: Option<Instant>,
 }
 
 impl Tui {
-  pub fn new(cwd: &str) -> Self {
+  pub fn new(cwd: &str, history_enabled: bool) -> Self {
     return Self {
       input: Input::new(),
       messages_list: MessagesList::new(),
@@ -83,6 +87,8 @@ impl Tui {
       confirm_popup: ConfirmPopup::new(),
       completion_popup: CompletionPopup::new(cwd),
       statusline: StatusLine::new(cwd),
+      history: PromptHistory::new(),
+      history_enabled,
       cancel_requested: false,
       last_escape_time: None,
     };
@@ -135,6 +141,20 @@ impl Tui {
 
   pub fn set_model(&mut self, name: &str) {
     self.input.set_model(name);
+  }
+
+  pub fn set_history(&mut self, entries: Vec<String>) {
+    if !self.history_enabled {
+      return;
+    }
+    self.history.replace(entries);
+  }
+
+  pub fn push_history(&mut self, content: String) {
+    if !self.history_enabled {
+      return;
+    }
+    self.history.push(content);
   }
 
   pub fn set_suggestion(&mut self, suggestion: String) {
@@ -293,12 +313,14 @@ impl Tui {
       }
 
       if is_shift_enter {
+        self.history.reset();
         self.input.enter_char('\n');
         self.completion_popup.refresh(&self.input).await;
         return None;
       }
 
       if key.code == KeyCode::Tab && self.input.accept_suggestion() {
+        self.history.reset();
         return None;
       }
 
@@ -333,32 +355,45 @@ impl Tui {
       match key.code {
         KeyCode::Enter => {
           let input = self.input.submit_content();
+          self.history.reset();
           if input.is_empty() {
             return None;
           }
           return Some(input);
         }
         KeyCode::Char(to_insert) => {
+          self.history.reset();
           self.input.enter_char(to_insert);
           self.completion_popup.refresh(&self.input).await;
         }
         KeyCode::Backspace => {
+          self.history.reset();
           self.input.delete_char();
           self.completion_popup.refresh(&self.input).await;
         }
         KeyCode::Left => {
+          self.history.disarm();
           self.input.move_cursor_left();
           self.completion_popup.refresh(&self.input).await;
         }
         KeyCode::Right => {
+          self.history.disarm();
           self.input.move_cursor_right();
           self.completion_popup.refresh(&self.input).await;
         }
+        KeyCode::Up
+          if (self.history.is_fresh() || self.input.at_start())
+            && self.history.previous(&mut self.input) => {}
         KeyCode::Up => {
+          self.history.disarm();
           self.input.move_cursor_up();
           self.completion_popup.refresh(&self.input).await;
         }
+        KeyCode::Down
+          if (self.history.is_fresh() || self.input.at_end())
+            && self.history.next(&mut self.input) => {}
         KeyCode::Down => {
+          self.history.disarm();
           self.input.move_cursor_down();
           self.completion_popup.refresh(&self.input).await;
         }

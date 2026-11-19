@@ -57,6 +57,7 @@ struct Adapter {
 pub async fn run(
   base_url: &str,
   predict_enabled: bool,
+  prompt_history_enabled: bool,
   default_persona: &str,
 ) -> Result<()> {
   let cwd = std::env::current_dir()
@@ -67,7 +68,7 @@ pub async fn run(
   spawn_input_task(input_tx);
   let mut adapter = Adapter {
     client,
-    tui: Tui::new(&cwd),
+    tui: Tui::new(&cwd, prompt_history_enabled),
     terminal: ratatui::init(),
     input: input_rx,
     input_open: true,
@@ -109,6 +110,11 @@ pub async fn run(
   }
   if let Ok(sessions) = adapter.client.sessions().await {
     adapter.tui.update_sessions(sessions);
+  }
+  if prompt_history_enabled
+    && let Ok(prompts) = adapter.client.prompt_history().await
+  {
+    adapter.tui.set_history(prompts);
   }
   adapter.redraw();
 
@@ -215,6 +221,7 @@ impl Adapter {
 
   async fn send_prompt(&mut self, text: &str) -> Result<()> {
     self.client.send_prompt(text.to_string()).await?;
+    self.tui.push_history(text.to_string());
     return Ok(());
   }
 
@@ -321,6 +328,7 @@ impl Adapter {
       ServerEvent::CommandCatalog { commands, .. } => {
         self.tui.open_help_popup(commands);
       }
+      ServerEvent::PromptHistoryListed { .. } => {}
       ServerEvent::UserMessage {
         correlation,
         content,

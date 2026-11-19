@@ -143,6 +143,13 @@ impl AdapterHandle {
     return result;
   }
 
+  pub async fn list_prompt_history(&self) -> Result<Vec<String>> {
+    let mut client = self.connect().await?;
+    let result = client.list_prompt_history().await;
+    client.disconnect().await;
+    return result;
+  }
+
   async fn shutdown(&self) {
     let Ok(client) = self.connect().await else {
       return;

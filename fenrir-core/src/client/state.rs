@@ -224,7 +224,8 @@ impl ClientState {
       | ServerEvent::ModelsListed { request_id, .. }
       | ServerEvent::PersonaUpdated { request_id, .. }
       | ServerEvent::ModelUpdated { request_id, .. }
-      | ServerEvent::CommandCatalog { request_id, .. } => {
+      | ServerEvent::CommandCatalog { request_id, .. }
+      | ServerEvent::PromptHistoryListed { request_id, .. } => {
         self.remove_pending(*request_id);
       }
       ServerEvent::UserMessage { .. }
@@ -329,6 +330,7 @@ impl ClientState {
       | ServerEvent::PersonasListed { .. }
       | ServerEvent::ModelsListed { .. }
       | ServerEvent::CommandCatalog { .. }
+      | ServerEvent::PromptHistoryListed { .. }
       | ServerEvent::Exited => true,
       ServerEvent::SessionCreated { session, .. }
       | ServerEvent::SessionLoaded { session, .. } => {

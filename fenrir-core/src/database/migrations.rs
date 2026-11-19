@@ -29,5 +29,9 @@ pub fn list_migrations() -> Vec<Migration> {
       name: "005_create_queued_messages".into(),
       sql: include_str!("../migrations/005_create_queued_messages.sql").into(),
     },
+    Migration {
+      name: "006_create_prompt_history".into(),
+      sql: include_str!("../migrations/006_create_prompt_history.sql").into(),
+    },
   ];
 }

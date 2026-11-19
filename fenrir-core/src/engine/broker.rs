@@ -473,6 +473,13 @@ impl Broker {
         };
         self.ensure_session(session_id).await?;
         self.require_subscription(client_id, session_id)?;
+        if self.config.general.prompt_history
+          && let Some(text) = &text
+          && !text.trim().is_empty()
+          && let Err(error) = self.repo.insert_prompt_history(text).await
+        {
+          vlog!("Failed to record prompt history: {error}");
+        }
         let handle = self
           .sessions
           .get(&session_id)
@@ -515,6 +522,21 @@ impl Broker {
             client_id,
           })
           .await?;
+        return Ok(());
+      }
+      ClientRequest::ListPromptHistory { request_id } => {
+        let prompts = if self.config.general.prompt_history {
+          self.repo.load_prompt_history().await?
+        } else {
+          Vec::new()
+        };
+        self.send_to(
+          client_id,
+          ServerEvent::PromptHistoryListed {
+            request_id,
+            prompts,
+          },
+        );
         return Ok(());
       }
       ClientRequest::Predict { session_id } => {
@@ -1308,6 +1330,7 @@ fn session_id_of(event: &ServerEvent) -> Option<Uuid> {
     | ServerEvent::PersonasListed { .. }
     | ServerEvent::ModelsListed { .. }
     | ServerEvent::CommandCatalog { .. }
+    | ServerEvent::PromptHistoryListed { .. }
     | ServerEvent::Connected { .. }
     | ServerEvent::Exited => None,
     ServerEvent::UserMessage { correlation, .. }
@@ -1346,7 +1369,8 @@ fn request_id_of(request: &ClientRequest) -> Option<u64> {
     | ClientRequest::SetModel { request_id, .. }
     | ClientRequest::SendPrompt { request_id, .. }
     | ClientRequest::RunCommand { request_id, .. }
-    | ClientRequest::Compact { request_id, .. } => Some(*request_id),
+    | ClientRequest::Compact { request_id, .. }
+    | ClientRequest::ListPromptHistory { request_id } => Some(*request_id),
     ClientRequest::Disconnect
     | ClientRequest::Subscribe { .. }
     | ClientRequest::Unsubscribe { .. }
@@ -1387,6 +1411,7 @@ fn session_id_of_request(request: &ClientRequest) -> Option<Uuid> {
     | ClientRequest::ListSessions { .. }
     | ClientRequest::ListPersonas { .. }
     | ClientRequest::ListModels { .. }
+    | ClientRequest::ListPromptHistory { .. }
     | ClientRequest::SetPersona {
       session_id: None, ..
     }

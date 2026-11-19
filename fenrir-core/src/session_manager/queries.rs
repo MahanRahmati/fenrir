@@ -37,3 +37,7 @@ pub const RESET_PROCESSING_QUEUED_MESSAGES: &str =
   include_str!("queries/reset_processing_queued_messages.sql");
 pub const CLEAR_QUEUED_MESSAGES: &str =
   include_str!("queries/clear_queued_messages.sql");
+pub const INSERT_PROMPT_HISTORY: &str =
+  include_str!("queries/insert_prompt_history.sql");
+pub const LOAD_PROMPT_HISTORY: &str =
+  include_str!("queries/load_prompt_history.sql");

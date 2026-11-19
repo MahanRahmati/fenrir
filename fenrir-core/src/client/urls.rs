@@ -8,6 +8,7 @@ pub const SESSION: &str = "/api/sessions/{session_id}";
 pub const MODELS: &str = "/api/models";
 pub const PERSONAS: &str = "/api/personas";
 pub const COMMANDS: &str = "/api/commands";
+pub const PROMPT_HISTORY: &str = "/api/prompt-history";
 
 pub const CONNECTION: &str = "/api/connections/{client_id}";
 pub const CONNECTION_EVENTS: &str = "/api/connections/{client_id}/events";

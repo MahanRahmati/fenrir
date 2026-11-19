@@ -101,6 +101,13 @@ pub enum RepoRequest {
     status: ToolApprovalStatus,
     reply: oneshot::Sender<Result<()>>,
   },
+  InsertPromptHistory {
+    content: String,
+    reply: oneshot::Sender<Result<()>>,
+  },
+  LoadPromptHistory {
+    reply: oneshot::Sender<Result<Vec<String>>>,
+  },
 }
 
 impl RepoHandle {
@@ -353,6 +360,27 @@ impl RepoHandle {
       .await?;
     return rx.await?;
   }
+
+  pub async fn insert_prompt_history(&self, content: &str) -> Result<()> {
+    let (reply, rx) = oneshot::channel();
+    self
+      .tx
+      .send(RepoRequest::InsertPromptHistory {
+        content: content.to_string(),
+        reply,
+      })
+      .await?;
+    return rx.await?;
+  }
+
+  pub async fn load_prompt_history(&self) -> Result<Vec<String>> {
+    let (reply, rx) = oneshot::channel();
+    self
+      .tx
+      .send(RepoRequest::LoadPromptHistory { reply })
+      .await?;
+    return rx.await?;
+  }
 }
 
 pub struct RepoActor {
@@ -506,6 +534,14 @@ impl RepoActor {
       } => {
         let result =
           self.repo.resolve_tool_approval(&tool_call_id, status).await;
+        let _ = reply.send(result);
+      }
+      RepoRequest::InsertPromptHistory { content, reply } => {
+        let result = self.repo.insert_prompt_history(&content).await;
+        let _ = reply.send(result);
+      }
+      RepoRequest::LoadPromptHistory { reply } => {
+        let result = self.repo.load_prompt_history().await;
         let _ = reply.send(result);
       }
     }

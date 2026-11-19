@@ -3,6 +3,7 @@ mod connections;
 mod health;
 mod models;
 mod personas;
+mod prompt_history;
 mod sessions;
 mod stream;
 
@@ -23,6 +24,10 @@ pub fn router() -> Router<AdapterHandle> {
     .route(urls::MODELS, get(models::list_models))
     .route(urls::PERSONAS, get(personas::list_personas))
     .route(urls::COMMANDS, get(commands::list_commands))
+    .route(
+      urls::PROMPT_HISTORY,
+      get(prompt_history::list_prompt_history),
+    )
     .route(urls::CONNECTION, delete(connections::delete))
     .route(urls::CONNECTION_EVENTS, get(connections::events))
     .route(urls::CONNECTION_SESSIONS, post(connections::create_session))

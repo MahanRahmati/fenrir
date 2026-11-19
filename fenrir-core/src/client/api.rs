@@ -71,6 +71,11 @@ pub struct CommandsData {
   pub commands: Vec<CommandInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptHistoryData {
+  pub prompts: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CreateConnectionRequest {
   pub cwd: Option<String>,

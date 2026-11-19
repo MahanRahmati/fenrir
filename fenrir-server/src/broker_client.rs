@@ -90,6 +90,23 @@ impl TempClient {
       .await;
   }
 
+  pub async fn list_prompt_history(&mut self) -> Result<Vec<String>> {
+    let request_id = self.take_request_id();
+    self
+      .sender
+      .send(ClientRequest::ListPromptHistory { request_id })
+      .await?;
+    return self
+      .await_event(request_id, |event| match event {
+        ServerEvent::PromptHistoryListed {
+          request_id: id,
+          prompts,
+        } if id == request_id => Some(prompts),
+        _ => None,
+      })
+      .await;
+  }
+
   pub async fn load_session(
     &mut self,
     session_id: Uuid,
