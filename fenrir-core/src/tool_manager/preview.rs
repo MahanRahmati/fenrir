@@ -23,6 +23,8 @@ impl ToolPreview {
 pub struct ToolPreviewLine {
   pub kind: ToolPreviewLineKind,
   pub text: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub line_number: Option<usize>,
 }
 
 impl ToolPreviewLine {
@@ -30,6 +32,19 @@ impl ToolPreviewLine {
     return Self {
       kind,
       text: text.into(),
+      line_number: None,
+    };
+  }
+
+  pub fn numbered(
+    kind: ToolPreviewLineKind,
+    line_number: usize,
+    text: impl Into<String>,
+  ) -> Self {
+    return Self {
+      kind,
+      text: text.into(),
+      line_number: Some(line_number),
     };
   }
 
@@ -39,6 +54,10 @@ impl ToolPreviewLine {
 
   pub fn header(text: impl Into<String>) -> Self {
     return Self::new(ToolPreviewLineKind::Header, text);
+  }
+
+  pub fn hunk() -> Self {
+    return Self::new(ToolPreviewLineKind::Hunk, String::new());
   }
 
   pub fn warning(text: impl Into<String>) -> Self {
@@ -54,5 +73,6 @@ pub enum ToolPreviewLineKind {
   Added,
   Removed,
   Header,
+  Hunk,
   Warning,
 }

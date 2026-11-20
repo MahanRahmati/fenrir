@@ -142,17 +142,11 @@ impl MessageItem {
         .saturating_sub(left_padding)
         .saturating_sub(right_padding)
         .saturating_sub(guide_width);
-      let container = match self.role {
-        Role::User => self.user_list_item(),
-        Role::Assistant => self.llm_list_item(),
-        Role::Reasoning => self.reasoning_list_item(),
-        Role::ToolCall | Role::ToolResult => self.tool_list_item(inner_width),
-        Role::SubagentTask => self.llm_list_item(),
-        Role::SubagentReport => self.subagent_report_list_item(),
-        Role::Compaction => self.compaction_list_item(),
-        Role::Error => self.error_list_item(),
+      let mut lines = match self.role {
+        Role::ToolCall => self.tool_call_lines(inner_width),
+        Role::ToolResult => self.tool_result_lines(inner_width),
+        _ => self.list_item().render_lines(inner_width),
       };
-      let mut lines = container.render_lines(inner_width);
       if lines.is_empty() {
         lines.push(Line::default());
       }
@@ -219,18 +213,31 @@ impl MessageItem {
       .build();
   }
 
-  fn tool_list_item(&self, width: u16) -> Container<'static> {
-    if self.role == Role::ToolResult {
-      return Container::builder(self.text.clone())
-        .borderless()
-        .style(if self.error {
-          Style::default().fg(Color::Red)
-        } else {
-          Style::default().dim()
-        })
-        .build();
-    }
+  fn list_item(&self) -> Container<'static> {
+    return match self.role {
+      Role::User => self.user_list_item(),
+      Role::Assistant | Role::SubagentTask => self.llm_list_item(),
+      Role::Reasoning => self.reasoning_list_item(),
+      Role::SubagentReport => self.subagent_report_list_item(),
+      Role::Compaction => self.compaction_list_item(),
+      Role::Error => self.error_list_item(),
+      Role::ToolCall | Role::ToolResult => self.llm_list_item(),
+    };
+  }
 
+  fn tool_result_lines(&self, width: u16) -> Vec<Line<'static>> {
+    return Container::builder(self.text.clone())
+      .borderless()
+      .style(if self.error {
+        Style::default().fg(Color::Red)
+      } else {
+        Style::default().dim()
+      })
+      .build()
+      .render_lines(width);
+  }
+
+  fn tool_call_lines(&self, width: u16) -> Vec<Line<'static>> {
     let view = &self.tool_view;
     let label = match (&self.tool_name, &self.tool_result) {
       (Some(name), Some((result, false))) => {
@@ -240,9 +247,21 @@ impl MessageItem {
       _ => view.label.clone(),
     };
     let label = format!("{} {}", view.icon, label);
-    let label = Line::from(truncate_line(&label, width));
-    let mut lines: Vec<Line<'static>> = vec![label];
-    lines.extend(view.body.iter().map(preview_line));
+    let mut lines: Vec<Line<'static>> =
+      vec![Line::from(truncate_line(&label, width))];
+
+    for (index, group) in hunk_groups(&view.body).iter().enumerate() {
+      if index > 0 {
+        lines.push(Line::default());
+      }
+      let number_width = gutter_width(group);
+      let group_lines: Vec<Line<'static>> = group
+        .iter()
+        .map(|line| preview_line(line, number_width))
+        .collect();
+      lines.extend(boxed_lines(group_lines, width));
+    }
+
     if let Some((result, error)) = &self.tool_result
       && (view.show_result || *error)
     {
@@ -257,7 +276,7 @@ impl MessageItem {
           .map(|line| Line::from(line.to_string()).patch_style(style)),
       );
     }
-    return Container::builder(lines).borderless().trim(false).build();
+    return lines;
   }
 
   fn compaction_list_item(&self) -> Container<'static> {
@@ -286,17 +305,90 @@ impl MessageItem {
   }
 }
 
-fn preview_line(line: &ToolPreviewLine) -> Line<'static> {
-  let style = match line.kind {
-    ToolPreviewLineKind::Added => Style::default().fg(Color::Green),
-    ToolPreviewLineKind::Removed => Style::default().fg(Color::Red),
-    ToolPreviewLineKind::Header => Style::default().fg(Color::Cyan),
+fn preview_line(line: &ToolPreviewLine, number_width: usize) -> Line<'static> {
+  let mut spans = vec![Span::raw("  ")];
+
+  let marker = match line.kind {
+    ToolPreviewLineKind::Added => {
+      Some(("+", Style::default().fg(Color::Green)))
+    }
+    ToolPreviewLineKind::Removed => {
+      Some(("-", Style::default().fg(Color::Red)))
+    }
+    ToolPreviewLineKind::Context => Some((" ", Style::default())),
+    _ => None,
+  };
+  if let Some((marker, style)) = marker {
+    spans.push(Span::styled(format!("{marker} "), style));
+  }
+
+  if let Some(number) = line.line_number {
+    let number_style = match line.kind {
+      ToolPreviewLineKind::Added | ToolPreviewLineKind::Plain => {
+        Style::default().fg(Color::Green)
+      }
+      ToolPreviewLineKind::Removed => Style::default().fg(Color::Red),
+      _ => Style::default().dim(),
+    };
+    spans.push(Span::styled(
+      format!("{number:>number_width$} "),
+      number_style,
+    ));
+    spans.push(Span::styled("│ ", Style::default().dim()));
+  }
+
+  let text_style = match line.kind {
     ToolPreviewLineKind::Warning => Style::default().fg(Color::Yellow),
-    ToolPreviewLineKind::Plain | ToolPreviewLineKind::Context => {
+    ToolPreviewLineKind::Header | ToolPreviewLineKind::Hunk => {
       Style::default().dim()
     }
+    _ => Style::default(),
   };
-  return Line::from(line.text.clone()).patch_style(style);
+  let text = line.text.replace('\t', "    ");
+  spans.push(Span::styled(text, text_style));
+  return Line::from(spans);
+}
+
+fn hunk_groups(body: &[ToolPreviewLine]) -> Vec<Vec<&ToolPreviewLine>> {
+  let mut groups: Vec<Vec<&ToolPreviewLine>> = Vec::new();
+  let mut current: Vec<&ToolPreviewLine> = Vec::new();
+  for line in body {
+    if line.kind == ToolPreviewLineKind::Hunk {
+      if !current.is_empty() {
+        groups.push(std::mem::take(&mut current));
+      }
+    } else {
+      current.push(line);
+    }
+  }
+  if !current.is_empty() {
+    groups.push(current);
+  }
+  return groups;
+}
+
+fn gutter_width(lines: &[&ToolPreviewLine]) -> usize {
+  return lines
+    .iter()
+    .filter_map(|line| line.line_number)
+    .map(|number| number.to_string().len())
+    .max()
+    .unwrap_or(1);
+}
+
+fn boxed_lines(lines: Vec<Line<'static>>, width: u16) -> Vec<Line<'static>> {
+  let padded: Vec<Line<'static>> = lines
+    .into_iter()
+    .map(|mut line| {
+      line.spans.insert(0, Span::raw(" "));
+      line
+    })
+    .collect();
+  return Container::builder(padded)
+    .color(Color::DarkGray)
+    .trim(false)
+    .build()
+    .render_lines(width);
 }
 
 fn truncate_line(text: &str, width: u16) -> String {

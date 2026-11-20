@@ -9,7 +9,6 @@ use crate::tool_manager::preview::{
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 const PREVIEW_CONTEXT_RADIUS: usize = 3;
-const MAX_PREVIEW_LINES: usize = 80;
 
 pub const EDIT_FILE_TOOL_NAME: &str = "edit_file";
 
@@ -128,31 +127,20 @@ impl EditPlan {
     }
 
     let diff = TextDiff::from_lines(&self.old_content, &self.new_file);
-    let width = diff.old_len().max(diff.new_len()).to_string().len();
-    let width = width.max(1);
     let mut lines = Vec::new();
     let mut added = 0;
     let mut removed = 0;
-    let mut omitted = 0;
-    let mut full = false;
-    let hunks: Vec<_> = diff
+    let mut hunks = 0;
+
+    for hunk in diff
       .unified_diff()
       .context_radius(PREVIEW_CONTEXT_RADIUS)
       .iter_hunks()
-      .collect();
-    let show_headers = hunks.len() > 1;
-
-    for hunk in hunks {
-      if show_headers {
-        if full {
-          omitted += 1;
-        } else if lines.len() < MAX_PREVIEW_LINES {
-          lines.push(ToolPreviewLine::header(hunk.header().to_string()));
-        } else {
-          full = true;
-          omitted += 1;
-        }
+    {
+      if hunks > 0 {
+        lines.push(ToolPreviewLine::hunk());
       }
+      hunks += 1;
 
       for change in hunk.iter_changes() {
         match change.tag() {
@@ -160,51 +148,32 @@ impl EditPlan {
           ChangeTag::Delete => removed += 1,
           ChangeTag::Equal => {}
         }
-        if full {
-          omitted += 1;
-          continue;
-        }
 
-        let (kind, marker, index) = match change.tag() {
+        let (kind, index) = match change.tag() {
           ChangeTag::Equal => {
-            (ToolPreviewLineKind::Context, ' ', change.old_index())
+            (ToolPreviewLineKind::Context, change.new_index())
           }
           ChangeTag::Delete => {
-            (ToolPreviewLineKind::Removed, '-', change.old_index())
+            (ToolPreviewLineKind::Removed, change.old_index())
           }
-          ChangeTag::Insert => {
-            (ToolPreviewLineKind::Added, '+', change.new_index())
-          }
+          ChangeTag::Insert => (ToolPreviewLineKind::Added, change.new_index()),
         };
         let number = index.unwrap_or_default() + 1;
         let text = change.value().trim_end_matches(['\n', '\r']);
-        let line = ToolPreviewLine::new(
-          kind,
-          format!("{number:>width$} {marker} {text}"),
-        );
-        if lines.len() < MAX_PREVIEW_LINES {
-          lines.push(line);
-        } else {
-          full = true;
-          omitted += 1;
-        }
+        lines.push(ToolPreviewLine::numbered(kind, number, text));
       }
     }
 
-    if omitted > 0 {
-      if lines.len() >= MAX_PREVIEW_LINES {
-        lines.pop();
-        omitted += 1;
-      }
-      let noun = if omitted == 1 { "line" } else { "lines" };
-      lines.push(ToolPreviewLine::warning(format!("… {omitted} more {noun}")));
-    }
-
-    return ToolPreview::with_summary(lines, self.summary(added, removed));
+    return ToolPreview::with_summary(
+      lines,
+      self.summary(added, removed, hunks),
+    );
   }
 
-  fn summary(&self, added: usize, removed: usize) -> String {
-    let range = if self.appended {
+  fn summary(&self, added: usize, removed: usize, hunks: usize) -> String {
+    let range = if hunks > 1 {
+      format!("{hunks} hunks")
+    } else if self.appended {
       let noun = if self.new_line_count == 1 {
         "line"
       } else {

@@ -28,8 +28,8 @@ use fenrir_core::tool_manager::{
   MUSIC_TOOL_NAME, NOTIFY_TOOL_NAME, PROJECT_CONTEXT_TOOL_NAME,
   READ_FILE_TOOL_NAME, READ_PDF_TOOL_NAME, REMOVE_FILE_TOOL_NAME,
   SCREENSHOT_TOOL_NAME, SKILL_TOOL_NAME, SUBAGENT_TOOL_NAME,
-  TODO_LIST_TOOL_NAME, ToolPreview, ToolPreviewLine, ToolPreviewLineKind,
-  WEATHER_TOOL_NAME, WRITE_FILE_TOOL_NAME,
+  TODO_LIST_TOOL_NAME, ToolPreview, ToolPreviewLine, WEATHER_TOOL_NAME,
+  WRITE_FILE_TOOL_NAME,
 };
 
 const TOOL_CALL_ICON: &str = "●";
@@ -93,10 +93,7 @@ pub fn tool_call_view(
   return view.unwrap_or_else(|| ToolCallView {
     icon: TOOL_CALL_ICON,
     label: name.to_string(),
-    body: vec![ToolPreviewLine {
-      kind: ToolPreviewLineKind::Warning,
-      text: String::from("Invalid or missing arguments"),
-    }],
+    body: vec![ToolPreviewLine::warning("Invalid or missing arguments")],
     show_result: false,
   });
 }
