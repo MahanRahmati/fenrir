@@ -107,6 +107,14 @@ pub async fn run_turn(
     }))
     .await;
 
+  jobs::spawn_title(
+    session,
+    context.config,
+    context.secrets,
+    context.repo,
+    context.events,
+  );
+
   let result = run_agent_loop(session, context, correlation).await;
 
   if context.cancel.is_cancelled() {
@@ -117,14 +125,6 @@ pub async fn run_turn(
     Ok(assistant) => assistant,
     Err(e) => return failed(context.events, correlation, e).await,
   };
-
-  jobs::spawn_title(
-    session,
-    context.config,
-    context.secrets,
-    context.repo,
-    context.events,
-  );
 
   return TurnOutcome::Completed { assistant };
 }
