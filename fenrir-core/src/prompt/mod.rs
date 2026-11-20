@@ -277,7 +277,7 @@ impl<'a> PromptExecutor<'a> {
     let mut reasoning = String::new();
     let mut usage = None;
     let mut tool_calls: HashMap<usize, ToolCall> = HashMap::new();
-    let idle_seconds = self.config.network.stream_idle_timeout_seconds;
+    let idle_seconds = self.config.network.request_timeout_seconds;
 
     loop {
       let delta = tokio::select! {
