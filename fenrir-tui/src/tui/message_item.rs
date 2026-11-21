@@ -193,6 +193,7 @@ impl MessageItem {
     return Container::builder(self.text.clone())
       .borderless()
       .style(Style::default().dim())
+      .trim(false)
       .build();
   }
 
