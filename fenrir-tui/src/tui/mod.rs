@@ -106,6 +106,18 @@ impl Tui {
     self.statusline.set_processing(processing);
   }
 
+  pub fn start_working(&mut self, started_at: i64) {
+    self.messages_list.start_working(started_at);
+  }
+
+  pub fn finish_working(&mut self, duration_seconds: u64) {
+    self.messages_list.finish_working(duration_seconds);
+  }
+
+  pub fn clear_working(&mut self) {
+    self.messages_list.clear_working();
+  }
+
   pub fn set_retrying(
     &mut self,
     attempt: u32,

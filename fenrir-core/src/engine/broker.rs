@@ -813,6 +813,7 @@ impl Broker {
           ServerEvent::TurnFinished {
             correlation,
             outcome: _,
+            ..
           } => {
             self
               .pending_approvals
@@ -908,10 +909,15 @@ impl Broker {
 
   fn track_turn_event(&mut self, event: &ServerEvent) {
     match event {
-      ServerEvent::TurnStarted { correlation, .. } => {
+      ServerEvent::TurnStarted {
+        correlation,
+        started_at,
+        ..
+      } => {
         self.completed_sessions.remove(&correlation.session_id);
         if let Some(handle) = self.sessions.get_mut(&correlation.session_id) {
           handle.active_turn = Some(correlation.turn_id);
+          handle.active_turn_started_at = Some(*started_at);
           handle.active_tokens.clear();
         }
       }
@@ -950,6 +956,7 @@ impl Broker {
       ServerEvent::TurnFinished {
         correlation,
         outcome,
+        ..
       } => {
         match outcome {
           TurnOutcome::Completed { .. } => {
@@ -963,6 +970,7 @@ impl Broker {
           && handle.active_turn == Some(correlation.turn_id)
         {
           handle.active_turn = None;
+          handle.active_turn_started_at = None;
           handle.active_tokens.clear();
         }
         self.evict_candidates.insert(correlation.session_id);
@@ -1032,11 +1040,13 @@ impl Broker {
     if already_subscribed {
       return;
     }
-    let Some((turn_id, tokens)) =
+    let Some((turn_id, started_at, tokens)) =
       self.sessions.get(&session_id).and_then(|handle| {
-        handle
-          .active_turn
-          .map(|turn_id| (turn_id, handle.active_tokens.clone()))
+        handle.active_turn.and_then(|turn_id| {
+          handle.active_turn_started_at.map(|started_at| {
+            (turn_id, started_at, handle.active_tokens.clone())
+          })
+        })
       })
     else {
       return;
@@ -1050,6 +1060,7 @@ impl Broker {
       ServerEvent::TurnStarted {
         correlation,
         client_id,
+        started_at,
       },
     );
     for token in tokens {

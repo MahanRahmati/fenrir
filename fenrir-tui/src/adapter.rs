@@ -340,10 +340,11 @@ impl Adapter {
         self.prediction_pending = false;
         self.predict_after_turn = false;
       }
-      ServerEvent::TurnStarted { .. } => {
+      ServerEvent::TurnStarted { started_at, .. } => {
         self.prediction_pending = false;
         self.predict_after_turn = false;
         self.tui.set_processing(true);
+        self.tui.start_working(started_at);
       }
       ServerEvent::Token {
         text,
@@ -441,8 +442,10 @@ impl Adapter {
       ServerEvent::TurnFinished {
         correlation,
         outcome,
+        duration_seconds,
       } => {
         self.tui.set_processing(false);
+        self.tui.finish_working(duration_seconds);
         self.tui.reset_subagents();
         self.tui.touch_session(correlation.session_id);
         self.predict_after_turn =
@@ -492,6 +495,7 @@ impl Adapter {
         self.pending_review_request = None;
         self.prediction_pending = false;
         self.tui.set_processing(false);
+        self.tui.clear_working();
         self.tui.reset_subagents();
         self.refresh_queue_display();
         if let Mode::Approval { .. } = self.mode {

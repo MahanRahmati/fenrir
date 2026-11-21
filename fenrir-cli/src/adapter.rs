@@ -16,6 +16,9 @@ use fenrir_core::tool_manager::SUBAGENT_TOOL_NAME;
 use fenrir_core::tool_manager::task_summary;
 use fenrir_core::tool_manager::tool::parse_tool_params;
 use fenrir_core::utils::datetime::format_timestamp;
+use fenrir_core::utils::duration::{
+  elapsed_seconds, finished_in, format_duration,
+};
 use fenrir_core::utils::usage::format_usage;
 
 use fenrir_core::client::ApiClient;
@@ -296,9 +299,14 @@ impl Adapter {
       }
       ServerEvent::UserMessage { .. } => {}
       ServerEvent::PromptHistoryListed { .. } => {}
-      ServerEvent::TurnStarted { .. } => {
+      ServerEvent::TurnStarted { started_at, .. } => {
         self.complete_turn_requests();
-        println!("[Processing...]");
+        let elapsed = elapsed_seconds(started_at);
+        if elapsed > 0 {
+          println!("Working for {}", format_duration(elapsed));
+        } else {
+          println!("[Processing...]");
+        }
         flush();
       }
       ServerEvent::Token {
@@ -385,8 +393,11 @@ impl Adapter {
       ServerEvent::TitleUpdated { .. } => {}
       ServerEvent::SessionStatusChanged { .. } => {}
       ServerEvent::QueueUpdated { .. } => {}
-      ServerEvent::TurnFinished { .. } => {
+      ServerEvent::TurnFinished {
+        duration_seconds, ..
+      } => {
         println!();
+        println!("{}", finished_in(duration_seconds));
         flush();
       }
       ServerEvent::Retrying {

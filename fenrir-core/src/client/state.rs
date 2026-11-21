@@ -289,6 +289,7 @@ impl ClientState {
       ServerEvent::TurnFinished {
         correlation,
         outcome,
+        ..
       } => {
         self.finish_turn_requests(correlation.session_id);
         let session = self.session_mut(correlation.session_id);

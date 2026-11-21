@@ -204,6 +204,7 @@ pub enum ServerEvent {
   TurnStarted {
     correlation: Correlation,
     client_id: Uuid,
+    started_at: i64,
   },
   Token {
     correlation: Correlation,
@@ -277,6 +278,7 @@ pub enum ServerEvent {
   TurnFinished {
     correlation: Correlation,
     outcome: TurnOutcome,
+    duration_seconds: u64,
   },
   Error {
     request_id: Option<u64>,

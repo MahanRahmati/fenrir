@@ -12,6 +12,11 @@ use fenrir_core::session_manager::Message;
 use fenrir_core::tool_manager::{
   ToolPreview, runs_subagent, tool::parse_tool_params,
 };
+use fenrir_core::utils::duration::{elapsed_seconds, finished_in, working_for};
+
+struct WorkingTimer {
+  started_at: i64,
+}
 
 pub struct MessagesList {
   messages: Vec<MessageItem>,
@@ -21,6 +26,7 @@ pub struct MessagesList {
   line_count: usize,
   subagent_calls: HashSet<String>,
   subagent_streams: HashMap<String, usize>,
+  working: Option<WorkingTimer>,
 }
 
 impl MessagesList {
@@ -33,6 +39,7 @@ impl MessagesList {
       line_count: 0,
       subagent_calls: HashSet::new(),
       subagent_streams: HashMap::new(),
+      working: None,
     };
   }
 
@@ -40,10 +47,36 @@ impl MessagesList {
     return self.messages.is_empty();
   }
 
+  pub fn start_working(&mut self, started_at: i64) {
+    self.working = Some(WorkingTimer { started_at });
+  }
+
+  pub fn finish_working(&mut self, duration_seconds: u64) {
+    self.working = None;
+    let message =
+      MessageItem::new(finished_in(duration_seconds), Role::Duration);
+    self.messages.push(message);
+    self.select_last();
+  }
+
+  pub fn clear_working(&mut self) {
+    self.working = None;
+  }
+
   pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
     self.viewport_height = area.height;
     let mut items: Vec<ListItem> = Vec::new();
     for message in &mut self.messages {
+      items.extend(
+        message
+          .lines(area.width)
+          .iter()
+          .map(|line| ListItem::new(line.clone())),
+      );
+    }
+    if let Some(working) = &self.working {
+      let text = working_for(elapsed_seconds(working.started_at));
+      let mut message = MessageItem::new(text, Role::Duration);
       items.extend(
         message
           .lines(area.width)
@@ -381,6 +414,7 @@ impl MessagesList {
     self.messages.clear();
     self.subagent_calls.clear();
     self.subagent_streams.clear();
+    self.working = None;
     if let Some(messages) = messages {
       let mut i = 0;
       while i < messages.len() {

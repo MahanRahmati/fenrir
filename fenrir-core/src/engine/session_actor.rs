@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use chrono::Utc;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
@@ -18,12 +19,14 @@ use crate::engine::repo_actor::RepoHandle;
 use crate::persona_manager::PersonaManager;
 use crate::provider_manager::{Model, ProviderManager};
 use crate::session_manager::session::Session;
+use crate::utils::duration::elapsed_seconds;
 
 pub struct SessionHandle {
   pub requests: Sender<SessionRequest>,
   pub control: Sender<Control>,
   pub actor_id: Uuid,
   pub active_turn: Option<Uuid>,
+  pub active_turn_started_at: Option<i64>,
   pub active_tokens: Vec<TokenChunk>,
 }
 
@@ -72,6 +75,7 @@ struct TurnResult {
   provider_manager: ProviderManager,
   turn_id: Uuid,
   outcome: TurnOutcome,
+  started_at: i64,
 }
 
 pub struct SessionActor {
@@ -122,6 +126,7 @@ impl SessionActor {
       control: control_tx,
       actor_id,
       active_turn: None,
+      active_turn_started_at: None,
       active_tokens: Vec::new(),
     };
   }
@@ -294,6 +299,7 @@ impl SessionActor {
             provider_manager,
             turn_id,
             outcome,
+            started_at,
           } = result;
 
           self.session = Some(session);
@@ -320,6 +326,7 @@ impl SessionActor {
           self.emit(ServerEvent::TurnFinished {
             correlation,
             outcome,
+            duration_seconds: elapsed_seconds(started_at),
           }).await;
 
           if completed {
@@ -391,6 +398,7 @@ impl SessionActor {
     *current_turn = Some(turn_id);
     *current_cancel = Some(cancel.clone());
 
+    let started_at = Utc::now().timestamp();
     self
       .emit(ServerEvent::TurnStarted {
         correlation: Correlation {
@@ -398,6 +406,7 @@ impl SessionActor {
           turn_id,
         },
         client_id,
+        started_at,
       })
       .await;
 
@@ -431,6 +440,7 @@ impl SessionActor {
         provider_manager,
         turn_id,
         outcome,
+        started_at,
       }
     }));
   }
@@ -455,6 +465,7 @@ impl SessionActor {
     *current_turn = Some(turn_id);
     *current_cancel = Some(cancel.clone());
 
+    let started_at = Utc::now().timestamp();
     self
       .emit(ServerEvent::TurnStarted {
         correlation: Correlation {
@@ -462,6 +473,7 @@ impl SessionActor {
           turn_id,
         },
         client_id,
+        started_at,
       })
       .await;
 
@@ -487,6 +499,7 @@ impl SessionActor {
         provider_manager,
         turn_id,
         outcome,
+        started_at,
       }
     }));
   }

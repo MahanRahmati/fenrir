@@ -22,6 +22,7 @@ pub enum Role {
   SubagentTask,
   SubagentReport,
   Compaction,
+  Duration,
   Error,
 }
 
@@ -35,6 +36,7 @@ impl Role {
       | Role::Reasoning
       | Role::SubagentTask
       | Role::SubagentReport
+      | Role::Duration
       | Role::Error => HORIZONTAL_PADDING + TEXT_EXTRA_PADDING,
     };
   }
@@ -213,6 +215,13 @@ impl MessageItem {
       .build();
   }
 
+  fn duration_list_item(&self) -> Container<'static> {
+    return Container::builder(self.text.clone())
+      .borderless()
+      .style(Style::default().dim())
+      .build();
+  }
+
   fn list_item(&self) -> Container<'static> {
     return match self.role {
       Role::User => self.user_list_item(),
@@ -220,6 +229,7 @@ impl MessageItem {
       Role::Reasoning => self.reasoning_list_item(),
       Role::SubagentReport => self.subagent_report_list_item(),
       Role::Compaction => self.compaction_list_item(),
+      Role::Duration => self.duration_list_item(),
       Role::Error => self.error_list_item(),
       Role::ToolCall | Role::ToolResult => self.llm_list_item(),
     };
