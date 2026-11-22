@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use anyhow::{Error, Result, bail};
 use futures::StreamExt;
+use jiff::Timestamp;
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -396,7 +397,7 @@ pub fn with_system(system: &str, mut messages: Vec<Message>) -> Vec<Message> {
       content: system.to_string(),
       tool_call_id: None,
       tool_calls: None,
-      timestamp: chrono::Utc::now().timestamp(),
+      timestamp: Timestamp::now().as_second(),
     },
   );
   return messages;

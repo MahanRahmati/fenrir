@@ -1,3 +1,4 @@
+use jiff::Timestamp;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -72,7 +73,7 @@ pub fn spawn_if_needed(
   let events = events.clone();
 
   tokio::spawn(async move {
-    let now = chrono::Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     let message = Message {
       id: Uuid::now_v7(),
       msg_type: None,

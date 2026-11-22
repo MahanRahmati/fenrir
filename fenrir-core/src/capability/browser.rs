@@ -2,6 +2,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, anyhow, bail};
+use jiff::ZonedDateTime;
 
 use crate::capability::keyboard;
 use crate::capability::window;
@@ -147,7 +148,7 @@ fn pdf_destination(dir: &str) -> String {
 }
 
 fn pdf_filename() -> String {
-  let timestamp = chrono::Local::now().format("%Y_%m_%d_%H_%M_%S");
+  let timestamp = ZonedDateTime::now().strftime("%Y_%m_%d_%H_%M_%S");
   return format!("pdf_{timestamp}.pdf");
 }
 

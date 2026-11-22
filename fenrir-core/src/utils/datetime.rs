@@ -1,24 +1,16 @@
-use chrono::{Datelike, Local, TimeZone, Weekday};
+use jiff::{Timestamp, ZonedDateTime, tz::TimeZone};
 
 pub fn get_current_datetime() -> String {
-  let now = Local::now();
-  let datetime = now.format("%Y-%m-%d %H:%M:%S").to_string();
-  let day = match now.weekday() {
-    Weekday::Mon => "Monday",
-    Weekday::Tue => "Tuesday",
-    Weekday::Wed => "Wednesday",
-    Weekday::Thu => "Thursday",
-    Weekday::Fri => "Friday",
-    Weekday::Sat => "Saturday",
-    Weekday::Sun => "Sunday",
-  };
+  let now = ZonedDateTime::now();
+  let datetime = now.strftime("%Y-%m-%d %H:%M:%S");
+  let day = now.strftime("%A");
   return format!("Current date: {datetime} ({day})\n");
 }
 
 pub fn format_timestamp(timestamp: i64) -> String {
-  let dt = Local.timestamp_opt(timestamp, 0);
-  return match dt {
-    chrono::LocalResult::Single(dt) => dt.format("%Y-%m-%d %H:%M").to_string(),
-    _ => String::new(),
+  let Ok(timestamp) = Timestamp::from_second(timestamp) else {
+    return String::new();
   };
+  let datetime = timestamp.to_zoned_datetime(TimeZone::system());
+  return datetime.strftime("%Y-%m-%d %H:%M").to_string();
 }

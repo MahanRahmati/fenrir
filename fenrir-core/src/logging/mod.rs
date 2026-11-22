@@ -103,8 +103,7 @@ pub(crate) fn set_log_file(file: File) -> Result<(), String> {
 ///
 /// Returns an error if the log file cannot be created or opened.
 pub(crate) fn init_file_logging() -> Result<(), String> {
-  let now = chrono::Local::now();
-  let timestamp = now.format("%Y%m%d_%H%M%S");
+  let timestamp = format_current_time("%Y%m%d_%H%M%S");
   let filename = format!("fenrir_{timestamp}.log");
   let path = place_state_file(&filename)
     .map_err(|e| format!("Failed to create log file: {e}"))?;
@@ -135,6 +134,18 @@ pub fn setup_logging(value: bool) -> Result<(), String> {
   set_verbose(value);
   init_file_logging()?;
   return Ok(());
+}
+
+/// Formats the current local time using the given strftime format.
+///
+/// Used by [`vlog!`] so that the macro does not require callers to depend
+/// on the date-time crate directly.
+///
+/// # Arguments
+///
+/// * `format` - The strftime format string.
+pub fn format_current_time(format: &str) -> String {
+  return jiff::ZonedDateTime::now().strftime(format).to_string();
 }
 
 /// Writes a message to the log file.
@@ -169,8 +180,7 @@ pub fn write_to_log_file(msg: String) {
 #[macro_export]
 macro_rules! vlog {
     ($($arg:tt)*) => {
-        let now = chrono::Local::now();
-        let timestamp = now.format("%H:%M:%S");
+        let timestamp = $crate::logging::format_current_time("%H:%M:%S");
         let msg = format!("[{timestamp}] {}", format!($($arg)*));
         if $crate::logging::is_verbose() {
             if $crate::logging::is_print_enabled() {

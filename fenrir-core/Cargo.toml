@@ -10,7 +10,7 @@ xdg = "3.0.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 similar = "3.2.1"
-chrono = { version = "0.4.45", features = ["serde"] }
+jiff = "1.0.2"
 reqwest = { version = "0.13.5", features = ["json", "stream"] }
 anyhow = "1.0.104"
 tokio = { version = "1.54.1", features = [
@@ -24,10 +24,10 @@ tokio = { version = "1.54.1", features = [
 tokio-util = { version = "0.7.20", features = ["rt"] }
 futures = "0.3.34"
 bytes = "1.12.2"
-turso = "0.8.4"
+turso = { version = "0.8.4", default-features = false, features = ["mimalloc"] }
 async-trait = "0.1.92"
 base64 = "0.23.1"
-uuid = { version = "1.29.3", features = ["v7"] }
+uuid = { version = "1.29.3", features = ["v7", "serde"] }
 
 [lints]
 workspace = true

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail};
+use jiff::Timestamp;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -94,7 +95,7 @@ pub fn build(
       content,
       tool_call_id: None,
       tool_calls: None,
-      timestamp: chrono::Utc::now().timestamp(),
+      timestamp: Timestamp::now().as_second(),
     }],
     tools: Vec::new(),
     stream: false,

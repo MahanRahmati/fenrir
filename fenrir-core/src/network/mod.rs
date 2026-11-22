@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use reqwest::header::HeaderMap;
 use reqwest::{Client, RequestBuilder, Response};
 use serde::Serialize;
@@ -285,9 +285,7 @@ fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
   if let Ok(seconds) = value.parse::<u64>() {
     return Some(Duration::from_secs(seconds));
   }
-  let date = DateTime::parse_from_rfc2822(value)
-    .or_else(|_| DateTime::parse_from_str(value, "%a, %d %b %Y %H:%M:%S GMT"))
-    .ok()?;
-  let target = date.with_timezone(&Utc);
-  return Some((target - Utc::now()).to_std().unwrap_or(Duration::ZERO));
+  let target = jiff::fmt::rfc2822::parse(value).ok()?.timestamp();
+  let remaining = target.duration_since(Timestamp::now());
+  return Some(Duration::try_from(remaining).unwrap_or(Duration::ZERO));
 }

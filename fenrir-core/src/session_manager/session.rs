@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use chrono::Utc;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -96,7 +96,7 @@ impl Session {
     config: &Config,
     cwd: &str,
   ) -> Self {
-    let now = Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     let row = SessionRow {
       id: Uuid::now_v7(),
       parent_id,
@@ -256,7 +256,7 @@ impl Session {
     tool_call_id: Option<String>,
     tool_calls: Option<Vec<ToolCall>>,
   ) {
-    let now = Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     let message = Message {
       id: Uuid::now_v7(),
       msg_type: None,
@@ -271,7 +271,7 @@ impl Session {
   }
 
   pub fn add_summary(&mut self, content: &str, covers_message_id: Uuid) {
-    let now = Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     let summary = Summary {
       id: Uuid::now_v7(),
       session_id: self.id,

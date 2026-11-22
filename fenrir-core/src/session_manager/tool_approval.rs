@@ -1,4 +1,4 @@
-use chrono::Utc;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -20,7 +20,7 @@ impl ToolApprovalRequest {
     tool_name: String,
     message: String,
   ) -> Self {
-    let now = Utc::now().timestamp();
+    let now = Timestamp::now().as_second();
     return Self {
       tool_call_id,
       session_id,

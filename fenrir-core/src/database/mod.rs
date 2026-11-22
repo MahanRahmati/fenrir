@@ -4,7 +4,7 @@ mod queries;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use chrono::Utc;
+use jiff::Timestamp;
 use turso::{Database, Rows};
 
 use crate::database::migrations::list_migrations;
@@ -63,7 +63,7 @@ impl DB {
       let record = conn
         .execute(
           RECORD_MIGRATION,
-          (migration.name.as_str(), Utc::now().timestamp()),
+          (migration.name.as_str(), Timestamp::now().as_second()),
         )
         .await;
       if let Err(e) = record {

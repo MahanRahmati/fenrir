@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use jiff::ZonedDateTime;
 
 use crate::files::operations::{
   create_directory_all, file_exists, get_file_size, validate_file_exists,
@@ -85,7 +86,7 @@ fn image_prefix(pdf: &str) -> String {
     .file_stem()
     .map(|stem| stem.to_string_lossy().to_string())
     .unwrap_or_else(|| "pdf".to_string());
-  let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+  let timestamp = ZonedDateTime::now().strftime("%Y%m%d_%H%M%S");
   return format!("{stem}_{timestamp}");
 }
 

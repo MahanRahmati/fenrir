@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use chrono::Utc;
+use jiff::Timestamp;
 use uuid::Uuid;
 
 use crate::database::DB;
@@ -436,7 +436,7 @@ impl SessionRepository {
     tool_call_id: &str,
     status: ToolApprovalStatus,
   ) -> Result<()> {
-    let decided_at = Utc::now().timestamp();
+    let decided_at = Timestamp::now().as_second();
     self
       .db
       .execute(
@@ -457,7 +457,7 @@ impl SessionRepository {
       id: Uuid::now_v7(),
       session_id,
       content: content.to_string(),
-      created_at: Utc::now().timestamp(),
+      created_at: Timestamp::now().as_second(),
     };
     self
       .db
@@ -666,7 +666,11 @@ impl SessionRepository {
       .db
       .execute(
         INSERT_PROMPT_HISTORY,
-        (Uuid::now_v7().to_string(), content, Utc::now().timestamp()),
+        (
+          Uuid::now_v7().to_string(),
+          content,
+          Timestamp::now().as_second(),
+        ),
       )
       .await
       .context("Failed to insert prompt history")?;

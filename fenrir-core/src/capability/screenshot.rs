@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail};
-use chrono::Local;
+use jiff::ZonedDateTime;
 use tokio::time;
 
 use crate::files::operations::{
@@ -129,7 +129,7 @@ async fn resolve_destination(destination: String) -> Result<String> {
 }
 
 fn timestamped_name(prefix: &str) -> String {
-  let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
+  let timestamp = ZonedDateTime::now().strftime("%Y-%m-%d_%H-%M-%S");
   return format!("{prefix}_{timestamp}.png");
 }
 

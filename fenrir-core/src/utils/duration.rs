@@ -1,4 +1,4 @@
-use chrono::Utc;
+use jiff::Timestamp;
 
 pub fn format_duration(seconds: u64) -> String {
   let hours = seconds / 3600;
@@ -26,7 +26,7 @@ pub fn finished_in(seconds: u64) -> String {
 }
 
 pub fn elapsed_seconds(started_at: i64) -> u64 {
-  let now = Utc::now().timestamp();
+  let now = Timestamp::now().as_second();
   return now.saturating_sub(started_at).max(0) as u64;
 }
 

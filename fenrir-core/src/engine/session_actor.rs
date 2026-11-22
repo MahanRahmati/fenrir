@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use chrono::Utc;
+use jiff::Timestamp;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
@@ -398,7 +398,7 @@ impl SessionActor {
     *current_turn = Some(turn_id);
     *current_cancel = Some(cancel.clone());
 
-    let started_at = Utc::now().timestamp();
+    let started_at = Timestamp::now().as_second();
     self
       .emit(ServerEvent::TurnStarted {
         correlation: Correlation {
@@ -465,7 +465,7 @@ impl SessionActor {
     *current_turn = Some(turn_id);
     *current_cancel = Some(cancel.clone());
 
-    let started_at = Utc::now().timestamp();
+    let started_at = Timestamp::now().as_second();
     self
       .emit(ServerEvent::TurnStarted {
         correlation: Correlation {

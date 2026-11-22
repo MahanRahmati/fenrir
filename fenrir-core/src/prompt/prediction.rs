@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use jiff::Timestamp;
 use tokio::sync::mpsc::{self, Sender};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -87,7 +88,7 @@ pub fn build(
     "Recent conversation:\n{transcript}\n\nPredict the user's next message. Output only the message text."
   );
 
-  let now = chrono::Utc::now().timestamp();
+  let now = Timestamp::now().as_second();
   let user_message = Message {
     id: Uuid::now_v7(),
     msg_type: None,
