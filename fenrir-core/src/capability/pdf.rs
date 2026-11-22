@@ -49,6 +49,7 @@ pub async fn render_page(pdf: &str, page: u32) -> Result<String> {
       pdf,
       &output_path,
     ],
+    None,
   )
   .await
   .context(format!("Failed to run pdftoppm for '{pdf}'"))?;
@@ -89,7 +90,7 @@ fn image_prefix(pdf: &str) -> String {
 }
 
 async fn pdf_page_count(pdf: &str) -> Result<u32> {
-  let output = process::run("pdfinfo", &[pdf])
+  let output = process::run("pdfinfo", &[pdf], None)
     .await
     .context(format!("Failed to run pdfinfo for '{pdf}'"))?;
   if !output.exit_code.is_success() {

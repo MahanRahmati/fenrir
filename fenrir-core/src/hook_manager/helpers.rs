@@ -19,7 +19,9 @@ pub async fn run_command(
 
   vlog!("Hook '{}' running '{}'", hook, command);
 
-  let output = match time::timeout(timeout, process::run(program, args)).await {
+  let output = match time::timeout(timeout, process::run(program, args, None))
+    .await
+  {
     Ok(Ok(output)) => output,
     Ok(Err(reason)) => {
       return format!("\n\nHook '{hook}' failed to run '{command}': {reason}");

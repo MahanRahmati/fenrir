@@ -72,7 +72,7 @@ impl Tool for MusicTool {
       let mut found = false;
       for search_type in &["title", "artist", "album"] {
         let search_args = ["search", search_type, &query];
-        let search_output = process::run("mpc", &search_args)
+        let search_output = process::run("mpc", &search_args, None)
           .await
           .context("Failed to search song")?;
 
@@ -85,7 +85,7 @@ impl Tool for MusicTool {
           continue;
         }
 
-        let add_output = process::run("mpc", &["add", file_path])
+        let add_output = process::run("mpc", &["add", file_path], None)
           .await
           .context("Failed to add song")?;
         if !add_output.exit_code.is_success() {
@@ -93,7 +93,7 @@ impl Tool for MusicTool {
         }
 
         let playlist =
-          process::run("mpc", &["playlist", "-f", "%position%:%file%"])
+          process::run("mpc", &["playlist", "-f", "%position%:%file%"], None)
             .await
             .context("Failed to read queue")?;
 
@@ -110,7 +110,7 @@ impl Tool for MusicTool {
           continue;
         };
 
-        let output = process::run("mpc", &["play", &position])
+        let output = process::run("mpc", &["play", &position], None)
           .await
           .context("Failed to play")?;
 
@@ -130,7 +130,7 @@ impl Tool for MusicTool {
     let args = build_mpc_args(&action, &params)?;
     let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-    let output = process::run("mpc", &args_refs)
+    let output = process::run("mpc", &args_refs, None)
       .await
       .context("Failed to execute mpc")?;
 
@@ -147,8 +147,8 @@ impl Tool for MusicTool {
 }
 
 async fn ensure_modes() -> Result<()> {
-  let _ = process::run("mpc", &["random", "on"]).await;
-  let _ = process::run("mpc", &["repeat", "on"]).await;
+  let _ = process::run("mpc", &["random", "on"], None).await;
+  let _ = process::run("mpc", &["repeat", "on"], None).await;
   return Ok(());
 }
 

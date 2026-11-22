@@ -15,6 +15,7 @@ pub async fn optimize_image(path: &str) -> String {
       "85",
       jpeg_path.as_str(),
     ],
+    None,
   )
   .await;
   if let Ok(output) = output
@@ -23,7 +24,7 @@ pub async fn optimize_image(path: &str) -> String {
     let _ = remove_file(path).await;
     return jpeg_path;
   }
-  let _ = process::run("optipng", &["-quiet", "-o2", path]).await;
+  let _ = process::run("optipng", &["-quiet", "-o2", path], None).await;
   return path.to_string();
 }
 

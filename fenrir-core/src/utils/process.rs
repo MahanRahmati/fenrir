@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::Stdio;
 
 use anyhow::{Context, Result};
@@ -27,9 +28,17 @@ pub struct Output {
   pub exit_code: ExitCode,
 }
 
-pub async fn run(program: &str, args: &[&str]) -> Result<Output> {
-  let output = Command::new(program)
-    .args(args)
+pub async fn run(
+  program: &str,
+  args: &[&str],
+  cwd: Option<&Path>,
+) -> Result<Output> {
+  let mut command = Command::new(program);
+  command.args(args);
+  if let Some(cwd) = cwd {
+    command.current_dir(cwd);
+  }
+  let output = command
     .stdout(Stdio::piped())
     .stderr(Stdio::piped())
     .kill_on_drop(true)

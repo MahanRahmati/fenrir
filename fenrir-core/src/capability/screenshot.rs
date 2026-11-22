@@ -41,7 +41,7 @@ pub async fn screenshot(
   let snapshot = existing_pngs(&dirs).await;
   let call_start = SystemTime::now();
 
-  let output = process::run("dbus-send", SCREENSHOT_ARGS)
+  let output = process::run("dbus-send", SCREENSHOT_ARGS, None)
     .await
     .context("Failed to run dbus-send")?;
 

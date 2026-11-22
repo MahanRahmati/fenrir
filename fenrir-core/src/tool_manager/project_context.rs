@@ -36,17 +36,18 @@ impl Tool for ProjectContextTool {
   async fn execute(
     &self,
     _params: ToolParams,
-    _context: &mut ToolContext<'_>,
+    context: &mut ToolContext<'_>,
   ) -> Result<String> {
+    let cwd = Path::new(context.cwd);
     let mut sections: Vec<String> = Vec::new();
 
-    sections.push(directory_section().await);
+    sections.push(directory_section(cwd).await);
 
-    if let Some(section) = git_section().await {
+    if let Some(section) = git_section(cwd).await {
       sections.push(section);
     }
 
-    if let Some(section) = agents_section().await {
+    if let Some(section) = agents_section(cwd).await {
       sections.push(section);
     }
 
@@ -54,9 +55,9 @@ impl Tool for ProjectContextTool {
   }
 }
 
-async fn directory_section() -> String {
+async fn directory_section(cwd: &Path) -> String {
   let mut listing = String::from("## Directory Structure\n");
-  match operations::read_dir(".").await {
+  match operations::read_dir(&cwd.to_string_lossy()).await {
     Ok(entries) => {
       for (name, is_dir) in &entries {
         listing.push_str(name);
@@ -74,11 +75,11 @@ async fn directory_section() -> String {
   return listing;
 }
 
-async fn git_section() -> Option<String> {
-  if !Path::new(".git").is_dir() {
+async fn git_section(cwd: &Path) -> Option<String> {
+  if !cwd.join(".git").is_dir() {
     return None;
   }
-  let output = process::run("git", &["branch", "--show-current"])
+  let output = process::run("git", &["branch", "--show-current"], Some(cwd))
     .await
     .ok()?;
   if !output.exit_code.is_success() {
@@ -91,10 +92,12 @@ async fn git_section() -> Option<String> {
   return Some(format!("## Git Branch\n{s}"));
 }
 
-async fn agents_section() -> Option<String> {
-  if !operations::file_exists("AGENTS.md").await {
+async fn agents_section(cwd: &Path) -> Option<String> {
+  let path = cwd.join("AGENTS.md");
+  let path = path.to_string_lossy();
+  if !operations::file_exists(&path).await {
     return None;
   }
-  let content = operations::read_to_string("AGENTS.md").await.ok()?;
+  let content = operations::read_to_string(&path).await.ok()?;
   return Some(format!("## AGENTS.md\n{}", content.trim()));
 }

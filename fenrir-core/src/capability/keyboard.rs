@@ -3,7 +3,7 @@ use anyhow::{Context, Result, bail};
 use crate::utils::process;
 
 pub async fn type_with_keyboard(text: &str) -> Result<String> {
-  let output = process::run("ydotool", &["type", text])
+  let output = process::run("ydotool", &["type", text], None)
     .await
     .context("Failed to run ydotool")?;
   if !output.exit_code.is_success() {
@@ -21,7 +21,7 @@ pub async fn press_key_on_keyboard(key: &str) -> Result<String> {
     .collect();
   let mut cmd = vec!["key"];
   cmd.extend(args.iter().map(|arg| arg.as_str()));
-  let output = process::run("ydotool", &cmd)
+  let output = process::run("ydotool", &cmd, None)
     .await
     .context("Failed to run ydotool")?;
   if !output.exit_code.is_success() {

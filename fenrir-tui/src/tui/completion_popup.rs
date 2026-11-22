@@ -282,7 +282,7 @@ fn byte_index(content: &str, character_index: usize) -> usize {
 }
 
 async fn run_fd(args: &[&str]) -> Option<Vec<String>> {
-  let output = process::run("fd", args).await.ok()?;
+  let output = process::run("fd", args, None).await.ok()?;
   if !output.exit_code.is_success() {
     return None;
   }

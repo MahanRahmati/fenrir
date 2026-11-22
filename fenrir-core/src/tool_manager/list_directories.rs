@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::files::operations;
 use crate::tool_manager::helpers::*;
 use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
+use crate::utils::path::resolve_path;
 
 const DEFAULT_PATH: &str = ".";
 
@@ -39,13 +40,13 @@ impl Tool for ListDirectoriesTool {
   async fn execute(
     &self,
     params: ToolParams,
-    _context: &mut ToolContext<'_>,
+    context: &mut ToolContext<'_>,
   ) -> Result<String> {
     let path =
       get_optional_param::<String>(&params, "list_directories", "path")
         .unwrap_or(DEFAULT_PATH.to_string());
 
-    let path = Path::new(&path);
+    let path = resolve_path(&path, Path::new(context.cwd));
 
     if !path.exists() {
       bail!("Path '{}' does not exist", path.display());

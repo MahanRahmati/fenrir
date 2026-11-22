@@ -23,7 +23,7 @@ pub async fn send_notification(summary: &str, body: &str) -> Result<String> {
     "int32:-1",
   ];
 
-  let output = process::run("dbus-send", &args)
+  let output = process::run("dbus-send", &args, None)
     .await
     .context("Failed to invoke dbus-send")?;
 

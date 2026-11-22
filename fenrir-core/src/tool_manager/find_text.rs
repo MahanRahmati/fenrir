@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::{Context, Result, bail};
 
 use crate::tool_manager::helpers::*;
@@ -43,7 +45,7 @@ impl Tool for FindTextTool {
   async fn execute(
     &self,
     params: ToolParams,
-    _context: &mut ToolContext<'_>,
+    context: &mut ToolContext<'_>,
   ) -> Result<String> {
     let pattern = get_param::<String>(&params, "find_text", "pattern")?;
     let path = get_optional_param::<String>(&params, "find_text", "path")
@@ -79,7 +81,7 @@ impl Tool for FindTextTool {
     args.push(pattern.as_str());
     args.push(path.as_str());
 
-    let output = process::run("rg", &args)
+    let output = process::run("rg", &args, Some(Path::new(context.cwd)))
       .await
       .context("Failed to run rg")?;
 

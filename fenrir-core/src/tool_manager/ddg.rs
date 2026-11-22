@@ -60,9 +60,10 @@ impl Tool for DdgTool {
       return Ok(cached);
     }
 
-    let output = process::run("ddgr", &["-x", "--json", keyword.as_str()])
-      .await
-      .context("Failed to run ddgr")?;
+    let output =
+      process::run("ddgr", &["-x", "--json", keyword.as_str()], None)
+        .await
+        .context("Failed to run ddgr")?;
 
     let results: Vec<serde_json::Value> = serde_json::from_str(&output.stdout)
       .context("Failed to parse ddgr JSON output")?;

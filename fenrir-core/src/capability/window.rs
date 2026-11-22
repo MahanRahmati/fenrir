@@ -4,7 +4,7 @@ use crate::utils::process;
 use crate::utils::sleep::delay;
 
 pub async fn window_ids() -> Result<Vec<String>> {
-  let output = process::run("kdotool", &["search", ".+"])
+  let output = process::run("kdotool", &["search", ".+"], None)
     .await
     .context("Failed to run kdotool")?;
   if !output.exit_code.is_success() {
@@ -20,7 +20,7 @@ pub async fn window_ids() -> Result<Vec<String>> {
 }
 
 pub async fn window_class(id: &str) -> Result<String> {
-  let output = process::run("kdotool", &["getwindowclassname", id])
+  let output = process::run("kdotool", &["getwindowclassname", id], None)
     .await
     .context("Failed to run kdotool")?;
   if !output.exit_code.is_success() {
@@ -34,7 +34,7 @@ pub async fn window_class(id: &str) -> Result<String> {
 
 pub async fn focus_window(id: &str, duration: Option<u64>) -> Result<String> {
   delay(duration).await;
-  let output = process::run("kdotool", &["windowactivate", id])
+  let output = process::run("kdotool", &["windowactivate", id], None)
     .await
     .context("Failed to run kdotool")?;
   if !output.exit_code.is_success() {

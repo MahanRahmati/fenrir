@@ -83,7 +83,7 @@ impl Tool for FindFileTool {
       args.push(exclude);
     }
 
-    let output = process::run("fd", &args)
+    let output = process::run("fd", &args, None)
       .await
       .context("Failed to run fd")?;
 

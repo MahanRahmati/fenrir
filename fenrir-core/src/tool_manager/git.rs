@@ -75,7 +75,7 @@ impl Tool for GitTool {
       args.push(path);
     }
 
-    let output = process::run("git", &args)
+    let output = process::run("git", &args, None)
       .await
       .context("Failed to execute git")?;
 

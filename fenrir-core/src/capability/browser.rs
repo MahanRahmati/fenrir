@@ -20,7 +20,7 @@ const SAVE_POLL_TIMEOUT_SECS: u64 = 30;
 const SAVE_POLL_INTERVAL_MS: u64 = 300;
 
 pub async fn open_url(url: &str) -> Result<String> {
-  let output = process::run("xdg-open", &[url])
+  let output = process::run("xdg-open", &[url], None)
     .await
     .context(format!("Failed to run xdg-open for '{url}'"))?;
 
