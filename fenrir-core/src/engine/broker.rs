@@ -813,7 +813,7 @@ impl Broker {
           ServerEvent::TurnFinished {
             correlation,
             outcome: _,
-            ..
+            duration_seconds: _,
           } => {
             self
               .pending_approvals
