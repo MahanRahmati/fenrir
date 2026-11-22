@@ -31,5 +31,6 @@ pub fn build(session: &Session, model: &Model, system: &str) -> PromptSpec {
     stream: true,
     emit_tokens: true,
     subagent: None,
+    cwd: session.cwd.clone(),
   };
 }

@@ -129,10 +129,11 @@ impl ProviderManager {
     messages: &[Message],
     tools: &[ToolSpec],
     skills: Option<&SkillRegistry>,
+    cwd: &str,
   ) -> Result<ChatResponse> {
     return self
       .get_provider(&model.provider)?
-      .chat(messages, tools, &model.name, skills)
+      .chat(messages, tools, &model.name, skills, cwd)
       .await;
   }
 
@@ -142,10 +143,11 @@ impl ProviderManager {
     messages: &[Message],
     tools: &[ToolSpec],
     skills: Option<&SkillRegistry>,
+    cwd: &str,
   ) -> Result<ChatStream> {
     return self
       .get_provider(&model.provider)?
-      .chat_stream(messages, tools, &model.name, skills)
+      .chat_stream(messages, tools, &model.name, skills, cwd)
       .await;
   }
 }

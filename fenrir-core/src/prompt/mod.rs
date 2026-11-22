@@ -67,6 +67,7 @@ pub struct PromptSpec {
   pub stream: bool,
   pub emit_tokens: bool,
   pub subagent: Option<SubagentRef>,
+  pub cwd: String,
 }
 
 pub struct PromptOutput {
@@ -210,6 +211,7 @@ impl<'a> PromptExecutor<'a> {
             &messages,
             &spec.tools,
             skills,
+            &spec.cwd,
           )
         },
       )
@@ -268,6 +270,7 @@ impl<'a> PromptExecutor<'a> {
             &messages,
             &spec.tools,
             skills,
+            &spec.cwd,
           )
         },
       )

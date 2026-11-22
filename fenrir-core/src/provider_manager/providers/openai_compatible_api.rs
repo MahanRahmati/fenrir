@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,7 @@ use crate::provider_manager::provider::{
 use crate::session_manager::Message;
 use crate::skill_manager::SkillRegistry;
 use crate::tool_manager::tool::ToolSpec;
+use crate::utils::path::resolve_path;
 use crate::vlog;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
@@ -225,6 +227,7 @@ pub fn build_chat_tools(tools: &[ToolSpec]) -> Vec<ChatTool> {
 pub async fn build_messages(
   messages: &[Message],
   skills: Option<&SkillRegistry>,
+  cwd: &str,
 ) -> Result<Vec<ChatMessage>> {
   let mut chat_messages: Vec<ChatMessage> = Vec::new();
   for msg in messages {
@@ -245,7 +248,10 @@ pub async fn build_messages(
       Some(ChatContent::Text(msg.content.clone()))
     } else {
       let skills = if msg.role == "user" { skills } else { None };
-      Some(build_content_parts(&msg.content, msg.role == "user", skills).await?)
+      Some(
+        build_content_parts(&msg.content, msg.role == "user", skills, cwd)
+          .await?,
+      )
     };
 
     let tool_calls = msg.tool_calls.as_ref().map(|calls| {
@@ -279,8 +285,9 @@ pub async fn build_request(
   stream: bool,
   extra_body: Option<ExtraBody>,
   skills: Option<&SkillRegistry>,
+  cwd: &str,
 ) -> Result<ChatCompletionRequest> {
-  let chat_messages = build_messages(messages, skills).await?;
+  let chat_messages = build_messages(messages, skills, cwd).await?;
   let chat_tools = build_chat_tools(tools);
   return Ok(ChatCompletionRequest {
     model: model.to_string(),
@@ -391,7 +398,9 @@ async fn build_content_parts(
   content: &str,
   strict: bool,
   skills: Option<&SkillRegistry>,
+  cwd: &str,
 ) -> Result<ChatContent> {
+  let cwd = Path::new(cwd);
   let mut text = content.to_string();
   let mut mentioned = Vec::new();
   if let Some(skills) = skills {
@@ -415,9 +424,10 @@ async fn build_content_parts(
         continue;
       }
     };
+    let resolved = resolve_path(&path, cwd).to_string_lossy().to_string();
     match kind {
       PathKind::Image => {
-        let bytes = match read_bytes(&path).await {
+        let bytes = match read_bytes(&resolved).await {
           Ok(bytes) => bytes,
           Err(e) => {
             if strict {
@@ -444,7 +454,7 @@ async fn build_content_parts(
         attached.push(path);
       }
       PathKind::Text => {
-        let contents = match read_to_string(&path).await {
+        let contents = match read_to_string(&resolved).await {
           Ok(contents) => contents,
           Err(e) => {
             if strict {
@@ -459,7 +469,7 @@ async fn build_content_parts(
         attached.push(path);
       }
       PathKind::Pdf => {
-        let info = match pdf::pdf_info(&path).await {
+        let info = match pdf::pdf_info(&resolved).await {
           Ok(info) => info,
           Err(e) => {
             if strict {

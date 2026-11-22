@@ -70,6 +70,7 @@ pub trait Provider: Send + Sync {
     tools: &[ToolSpec],
     model: &str,
     skills: Option<&SkillRegistry>,
+    cwd: &str,
   ) -> Result<ChatResponse>;
   async fn chat_stream(
     &self,
@@ -77,5 +78,6 @@ pub trait Provider: Send + Sync {
     tools: &[ToolSpec],
     model: &str,
     skills: Option<&SkillRegistry>,
+    cwd: &str,
   ) -> Result<ChatStream>;
 }

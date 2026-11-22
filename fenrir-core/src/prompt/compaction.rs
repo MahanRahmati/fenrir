@@ -100,6 +100,7 @@ pub fn build(
     stream: false,
     emit_tokens: false,
     subagent: None,
+    cwd: cwd.to_string(),
   };
 }
 

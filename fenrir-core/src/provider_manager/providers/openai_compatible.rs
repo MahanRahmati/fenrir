@@ -61,8 +61,10 @@ impl OpenAICompatibleProvider {
     tools: &[ToolSpec],
     stream: bool,
     skills: Option<&SkillRegistry>,
+    cwd: &str,
   ) -> Result<ChatCompletionRequest> {
-    return build_request(model, messages, tools, stream, None, skills).await;
+    return build_request(model, messages, tools, stream, None, skills, cwd)
+      .await;
   }
 }
 
@@ -92,9 +94,10 @@ impl Provider for OpenAICompatibleProvider {
     tools: &[ToolSpec],
     model: &str,
     skills: Option<&SkillRegistry>,
+    cwd: &str,
   ) -> Result<ChatResponse> {
     let request = self
-      .build_request(model, messages, tools, false, skills)
+      .build_request(model, messages, tools, false, skills, cwd)
       .await?;
     let headers = self.build_headers();
 
@@ -115,9 +118,10 @@ impl Provider for OpenAICompatibleProvider {
     tools: &[ToolSpec],
     model: &str,
     skills: Option<&SkillRegistry>,
+    cwd: &str,
   ) -> Result<ChatStream> {
     let request = self
-      .build_request(model, messages, tools, true, skills)
+      .build_request(model, messages, tools, true, skills, cwd)
       .await?;
     let headers = self.build_headers();
 
