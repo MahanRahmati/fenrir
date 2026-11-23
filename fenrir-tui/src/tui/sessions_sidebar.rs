@@ -228,19 +228,20 @@ impl SessionsSidebar {
         };
         let title = truncate(
           session.title.as_deref().unwrap_or("Untitled Session"),
-          width.saturating_sub(2),
+          width.saturating_sub(3),
         );
         let timestamp = truncate(
           &format_timestamp(session.last_interaction),
-          width.saturating_sub(2),
+          width.saturating_sub(3),
         );
         let title_line = Line::from(vec![
+          Span::raw(" "),
           Span::styled(indicator, indicator_style),
           Span::raw(" "),
           Span::styled(title, title_style),
         ]);
         let timestamp_line = Line::from(vec![
-          Span::raw("  "),
+          Span::raw("   "),
           Span::styled(timestamp, Style::default().fg(Color::DarkGray)),
         ]);
         ListItem::new(vec![title_line, timestamp_line])
