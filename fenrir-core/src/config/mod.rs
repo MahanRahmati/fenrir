@@ -38,6 +38,7 @@ pub struct GeneralConfig {
   pub restrict_write_tools_to_cwd: bool,
   pub predict_next_prompt: bool,
   pub prompt_history: bool,
+  pub auto_continue: bool,
 }
 
 impl Default for GeneralConfig {
@@ -54,6 +55,7 @@ impl Default for GeneralConfig {
       restrict_write_tools_to_cwd: true,
       predict_next_prompt: true,
       prompt_history: true,
+      auto_continue: true,
     };
   }
 }

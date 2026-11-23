@@ -1,4 +1,5 @@
 mod compaction;
+mod continuation;
 mod default;
 mod judge;
 mod persona;
@@ -11,6 +12,7 @@ use anyhow::{Result, bail};
 
 use crate::config::Config;
 pub use crate::persona_manager::compaction::COMPACTION_PERSONA;
+pub use crate::persona_manager::continuation::CONTINUATION_PERSONA;
 pub use crate::persona_manager::default::DEFAULT_PERSONA;
 pub use crate::persona_manager::judge::JUDGE_PERSONA;
 pub use crate::persona_manager::persona::{Persona, ToolAccess};

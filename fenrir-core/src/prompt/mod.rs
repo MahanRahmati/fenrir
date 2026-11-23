@@ -1,5 +1,6 @@
 pub mod chat;
 pub mod compaction;
+pub mod continuation;
 pub mod judge;
 pub mod prediction;
 pub mod review;
@@ -57,6 +58,7 @@ pub enum PromptKind {
   Title,
   Compaction,
   Prediction,
+  Continuation,
 }
 
 pub struct PromptSpec {

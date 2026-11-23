@@ -3,6 +3,7 @@ mod turn;
 use anyhow::{Result, bail};
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 pub use turn::{run_compact, run_turn};
 
@@ -16,7 +17,7 @@ use crate::hook_manager::hook::{
   HookContext, HookDecision, ToolCallContext, ToolResultContext,
 };
 use crate::persona_manager::Persona;
-use crate::prompt::{PromptExecutor, chat, compaction};
+use crate::prompt::{PromptExecutor, chat, compaction, continuation};
 use crate::provider_manager::{Model, ProviderManager, ToolCall};
 use crate::session_manager::session::Session;
 use crate::tool_manager::runs_subagent;
@@ -31,6 +32,7 @@ pub struct AgentContext<'a> {
   pub events: &'a Sender<SessionEvent>,
   pub cancel: &'a CancellationToken,
   pub subagent: Option<SubagentRef>,
+  pub client_id: Option<Uuid>,
 }
 
 pub async fn run_agent_loop(
@@ -136,6 +138,38 @@ pub async fn run_agent_loop(
     }
 
     if output.tool_calls.is_empty() {
+      let had_content = output
+        .content
+        .as_deref()
+        .is_some_and(|content| !content.is_empty());
+      if had_content
+        && context.config.general.auto_continue
+        && continuation::should_continue(
+          session,
+          context.config,
+          context.provider_manager,
+          correlation,
+          context.events,
+          context.cancel,
+        )
+        .await
+      {
+        session.add_user_message(continuation::CONTINUE_INSTRUCTION);
+        session.persist_last_message(context.repo).await?;
+        if let Some(client_id) = context.client_id
+          && context.subagent.is_none()
+        {
+          let _ = context
+            .events
+            .send(SessionEvent::Event(ServerEvent::UserMessage {
+              correlation,
+              client_id,
+              content: continuation::CONTINUE_INSTRUCTION.to_string(),
+            }))
+            .await;
+        }
+        continue;
+      }
       break;
     }
 
@@ -410,6 +444,7 @@ impl Session {
         session_id,
         tool_call_id: context.tool_call_id.to_string(),
       }),
+      client_id: None,
     };
     let result =
       run_agent_loop(&mut session, &agent_context, context.correlation).await;
