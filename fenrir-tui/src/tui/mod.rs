@@ -72,10 +72,14 @@ pub struct Tui {
 }
 
 impl Tui {
-  pub fn new(cwd: &str, history_enabled: bool) -> Self {
+  pub fn new(
+    cwd: &str,
+    history_enabled: bool,
+    expanded_reasoning: bool,
+  ) -> Self {
     return Self {
       input: Input::new(),
-      messages_list: MessagesList::new(),
+      messages_list: MessagesList::new(expanded_reasoning),
       queued_messages_list: QueueMessagesList::new(),
       running: true,
       help_popup: HelpPopup::new(),

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use ratatui::Frame;
-use ratatui::crossterm::event::{MouseEvent, MouseEventKind};
-use ratatui::layout::Rect;
+use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::{Position, Rect};
 use ratatui::widgets::{
   List, ListItem, ListState, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
@@ -24,19 +24,25 @@ pub struct MessagesList {
   follow: bool,
   viewport_height: u16,
   line_count: usize,
+  list_area: Rect,
+  line_ranges: Vec<(usize, usize, usize)>,
+  expanded_reasoning: bool,
   subagent_calls: HashSet<String>,
   subagent_streams: HashMap<String, usize>,
   working: Option<WorkingTimer>,
 }
 
 impl MessagesList {
-  pub fn new() -> Self {
+  pub fn new(expanded_reasoning: bool) -> Self {
     return Self {
       messages: Vec::new(),
       list_state: ListState::default(),
       follow: true,
       viewport_height: 0,
       line_count: 0,
+      list_area: Rect::default(),
+      line_ranges: Vec::new(),
+      expanded_reasoning,
       subagent_calls: HashSet::new(),
       subagent_streams: HashMap::new(),
       working: None,
@@ -66,13 +72,13 @@ impl MessagesList {
   pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
     self.viewport_height = area.height;
     let mut items: Vec<ListItem> = Vec::new();
-    for message in &mut self.messages {
-      items.extend(
-        message
-          .lines(area.width)
-          .iter()
-          .map(|line| ListItem::new(line.clone())),
-      );
+    self.line_ranges.clear();
+    for (index, message) in self.messages.iter_mut().enumerate() {
+      let start = items.len();
+      let lines = message.lines(area.width);
+      let end = start + lines.len();
+      items.extend(lines.iter().map(|line| ListItem::new(line.clone())));
+      self.line_ranges.push((index, start, end));
     }
     if let Some(working) = &self.working {
       let text = working_for(elapsed_seconds(working.started_at));
@@ -104,6 +110,7 @@ impl MessagesList {
       area.width,
       list_height,
     );
+    self.list_area = list_area;
     frame.render_stateful_widget(
       List::new(items),
       list_area,
@@ -135,7 +142,34 @@ impl MessagesList {
     match mouse.kind {
       MouseEventKind::ScrollUp => self.scroll_older(),
       MouseEventKind::ScrollDown => self.scroll_newer(),
+      MouseEventKind::Down(MouseButton::Left) => {
+        self.toggle_reasoning(mouse.column, mouse.row);
+      }
       _ => {}
+    }
+  }
+
+  fn toggle_reasoning(&mut self, column: u16, row: u16) {
+    if !self.list_area.contains(Position::new(column, row)) {
+      return;
+    }
+    if self.line_count > self.viewport_height as usize
+      && column == self.list_area.right().saturating_sub(1)
+    {
+      return;
+    }
+    let visible_row = (row - self.list_area.y) as usize;
+    let line = self.list_state.offset() + visible_row;
+    let index = self
+      .line_ranges
+      .iter()
+      .find(|(_, start, end)| line >= *start && line < *end)
+      .map(|(index, _, _)| *index);
+    if let Some(index) = index
+      && let Some(message) = self.messages.get_mut(index)
+      && message.is_reasoning()
+    {
+      message.toggle_expanded();
     }
   }
 
@@ -267,7 +301,13 @@ impl MessagesList {
         }
       }
       None => {
-        let message = MessageItem::new(String::new(), role).with_depth(1);
+        let message = MessageItem::new(String::new(), role)
+          .with_depth(1)
+          .with_expanded(if reasoning {
+            self.expanded_reasoning
+          } else {
+            true
+          });
         self.messages.push(message);
         let index = self.messages.len() - 1;
         self
@@ -331,7 +371,7 @@ impl MessagesList {
       format!(
         "Retrying in {delay_seconds}s (attempt {attempt}/{max_attempts})"
       ),
-      Role::Reasoning,
+      Role::Duration,
     )
     .with_depth(1);
     self.messages.push(message);
@@ -380,7 +420,8 @@ impl MessagesList {
       .last()
       .is_none_or(|last| last.depth() != 0 || !last.is_reasoning())
     {
-      let message = MessageItem::new(String::new(), Role::Reasoning);
+      let message = MessageItem::new(String::new(), Role::Reasoning)
+        .with_expanded(self.expanded_reasoning);
       self.messages.push(message);
       self.select_last();
     }
@@ -412,6 +453,7 @@ impl MessagesList {
 
   pub fn update_messages(&mut self, messages: Option<&[Message]>) {
     self.messages.clear();
+    self.line_ranges.clear();
     self.subagent_calls.clear();
     self.subagent_streams.clear();
     self.working = None;
@@ -502,7 +544,12 @@ impl MessagesList {
             continue;
           }
         };
-        let message = MessageItem::new(msg.content.clone(), role);
+        let message = MessageItem::new(msg.content.clone(), role)
+          .with_expanded(if msg.role == "reasoning" {
+            self.expanded_reasoning
+          } else {
+            true
+          });
         self.messages.push(message);
         i += 1;
       }

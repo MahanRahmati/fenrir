@@ -73,6 +73,7 @@ async fn main() {
 async fn run_tui(config: Config) -> Result<()> {
   let predict_enabled = config.general.predict_next_prompt;
   let prompt_history_enabled = config.general.prompt_history;
+  let expanded_reasoning = config.general.expanded_reasoning;
   let default_persona = PersonaManager::default_for(&config).name().to_string();
   let broker = start_broker(&config).await?;
   let server = fenrir_server::spawn(&broker, config.server).await?;
@@ -82,6 +83,7 @@ async fn run_tui(config: Config) -> Result<()> {
     predict_enabled,
     prompt_history_enabled,
     &default_persona,
+    expanded_reasoning,
   )
   .await;
   server.shutdown().await;

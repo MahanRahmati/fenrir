@@ -47,6 +47,7 @@ pub struct MessageItem {
   role: Role,
   error: bool,
   depth: u16,
+  expanded: bool,
   tool_call_id: Option<String>,
   tool_name: Option<String>,
   tool_view: ToolCallView,
@@ -61,6 +62,7 @@ impl MessageItem {
       role,
       error: false,
       depth: 0,
+      expanded: true,
       tool_call_id: None,
       tool_name: None,
       tool_view: ToolCallView::default(),
@@ -77,6 +79,12 @@ impl MessageItem {
 
   pub fn with_depth(mut self, depth: u16) -> Self {
     self.depth = depth;
+    self.wrapped = None;
+    return self;
+  }
+
+  pub fn with_expanded(mut self, expanded: bool) -> Self {
+    self.expanded = expanded;
     self.wrapped = None;
     return self;
   }
@@ -101,6 +109,7 @@ impl MessageItem {
       role: Role::ToolCall,
       error: false,
       depth: 0,
+      expanded: true,
       tool_call_id: Some(id),
       tool_name: Some(name),
       tool_view,
@@ -147,6 +156,7 @@ impl MessageItem {
       let mut lines = match self.role {
         Role::ToolCall => self.tool_call_lines(inner_width),
         Role::ToolResult => self.tool_result_lines(inner_width),
+        Role::Reasoning => self.reasoning_lines(inner_width),
         _ => self.list_item().render_lines(inner_width),
       };
       if lines.is_empty() {
@@ -189,12 +199,25 @@ impl MessageItem {
     return Container::builder(self.text.clone()).borderless().build();
   }
 
-  fn reasoning_list_item(&self) -> Container<'static> {
-    return Container::builder(self.text.clone())
-      .borderless()
-      .style(Style::default().dim())
-      .trim(false)
-      .build();
+  fn reasoning_lines(&self, width: u16) -> Vec<Line<'static>> {
+    let style = Style::default().dim();
+    let label = if self.expanded {
+      "- Thinking"
+    } else {
+      "+ Thinking"
+    };
+    let mut lines = vec![Line::from(Span::styled(label, style))];
+    if self.expanded {
+      lines.extend(
+        Container::builder(self.text.clone())
+          .borderless()
+          .style(style)
+          .trim(false)
+          .build()
+          .render_lines(width),
+      );
+    }
+    return lines;
   }
 
   fn error_list_item(&self) -> Container<'static> {
@@ -227,12 +250,13 @@ impl MessageItem {
     return match self.role {
       Role::User => self.user_list_item(),
       Role::Assistant | Role::SubagentTask => self.llm_list_item(),
-      Role::Reasoning => self.reasoning_list_item(),
       Role::SubagentReport => self.subagent_report_list_item(),
       Role::Compaction => self.compaction_list_item(),
       Role::Duration => self.duration_list_item(),
       Role::Error => self.error_list_item(),
-      Role::ToolCall | Role::ToolResult => self.llm_list_item(),
+      Role::ToolCall | Role::ToolResult | Role::Reasoning => {
+        self.llm_list_item()
+      }
     };
   }
 
@@ -311,6 +335,11 @@ impl MessageItem {
 
   pub fn is_reasoning(&self) -> bool {
     return self.role == Role::Reasoning;
+  }
+
+  pub fn toggle_expanded(&mut self) {
+    self.expanded = !self.expanded;
+    self.wrapped = None;
   }
 
   pub fn is_assistant(&self) -> bool {

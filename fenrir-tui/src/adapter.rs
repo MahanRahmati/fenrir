@@ -59,6 +59,7 @@ pub async fn run(
   predict_enabled: bool,
   prompt_history_enabled: bool,
   default_persona: &str,
+  expanded_reasoning: bool,
 ) -> Result<()> {
   let cwd = std::env::current_dir()
     .map(|path| path.display().to_string())
@@ -68,7 +69,7 @@ pub async fn run(
   spawn_input_task(input_tx);
   let mut adapter = Adapter {
     client,
-    tui: Tui::new(&cwd, prompt_history_enabled),
+    tui: Tui::new(&cwd, prompt_history_enabled, expanded_reasoning),
     terminal: ratatui::init(),
     input: input_rx,
     input_open: true,
