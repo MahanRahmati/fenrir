@@ -250,6 +250,13 @@ impl MessageItem {
 
   fn tool_call_lines(&self, width: u16) -> Vec<Line<'static>> {
     let view = &self.tool_view;
+    let is_success =
+      self.tool_result.as_ref().is_some_and(|(_, error)| !*error);
+    let icon_style = if is_success {
+      Style::default().fg(Color::Green)
+    } else {
+      Style::default()
+    };
     let label = match (&self.tool_name, &self.tool_result) {
       (Some(name), Some((result, false))) => {
         tool_result_label(name, view, result)
@@ -257,10 +264,10 @@ impl MessageItem {
       }
       _ => view.label.clone(),
     };
-    let label = format!("{} {}", view.icon, label);
-    let mut lines: Vec<Line<'static>> =
-      vec![Line::from(truncate_line(&label, width))];
-
+    let icon = format!("{} ", view.icon);
+    let mut spans = vec![Span::styled(icon, icon_style)];
+    spans.push(Span::raw(truncate_line(&label, width.saturating_sub(2))));
+    let mut lines: Vec<Line<'static>> = vec![Line::from(spans)];
     for (index, group) in hunk_groups(&view.body).iter().enumerate() {
       if index > 0 {
         lines.push(Line::default());
