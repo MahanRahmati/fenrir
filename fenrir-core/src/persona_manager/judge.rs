@@ -13,12 +13,14 @@ pub const JUDGE_PERSONA: Persona = Persona::new(
     "Be concise and concrete. Cite what you checked, with paths and locations.",
   ],
   ToolAccess::Only(&[
+    "date_time",
     "read_file",
-    "read_pdf",
     "find_file",
     "find_text",
     "list_directories",
+    "read_pdf",
     "project_context",
+    "git",
   ]),
   true,
 );
