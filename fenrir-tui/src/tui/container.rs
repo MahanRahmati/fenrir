@@ -131,12 +131,15 @@ impl<'a> Container<'a> {
     return vec![self.separator(width), line];
   }
 
+  fn content_width(&self, width: u16) -> u16 {
+    if self.bordered {
+      return width.saturating_sub(2);
+    }
+    return width;
+  }
+
   fn paragraph(&self, width: u16) -> Paragraph<'_> {
-    let inner_width = if self.bordered {
-      width.saturating_sub(2).max(1)
-    } else {
-      width
-    };
+    let inner_width = self.content_width(width).max(1);
     let mut lines = self.title_lines(inner_width);
     lines.extend(self.body_lines());
     lines.extend(self.footer_lines(inner_width));
@@ -152,7 +155,7 @@ impl<'a> Container<'a> {
   }
 
   pub fn line_count(&self, width: u16) -> usize {
-    return self.paragraph(width).line_count(width);
+    return self.paragraph(width).line_count(self.content_width(width));
   }
 
   pub fn render_lines(&self, width: u16) -> Vec<Line<'static>> {
