@@ -6,6 +6,12 @@ use crate::tool_manager::tool::{Tool, ToolContext, ToolParams};
 
 pub const CONTROL_KEYBOARD_TOOL_NAME: &str = "control_keyboard";
 
+#[cfg(target_os = "macos")]
+const KEY_HELP: &str = "Key to press, e.g. 'cmd', 'enter', or a combination like 'cmd+shift+p'. Use 'super' for the command key. Only used with action 'key'.";
+
+#[cfg(target_os = "linux")]
+const KEY_HELP: &str = "Key to press, e.g. 'super', 'enter', or a combination like 'super+d'. Use 'ctrl', 'alt', or 'shift' as modifiers. Only used with action 'key'.";
+
 pub struct ControlKeyboardTool;
 
 #[async_trait::async_trait]
@@ -28,7 +34,7 @@ impl Tool for ControlKeyboardTool {
           "description": "What to do. 'type' types text, 'key' presses a key or key combination."
         },
         "text": {"type": "string", "description": "Text to type. Only used with action 'type'."},
-        "key": {"type": "string", "description": "Key to press, e.g. 'super', 'enter', or a combination like 'super+d'. Only used with action 'key'."}
+        "key": {"type": "string", "description": KEY_HELP}
       },
       "required": ["action"],
     });

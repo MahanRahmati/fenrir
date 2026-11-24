@@ -53,6 +53,19 @@ pub async fn press_key_on_keyboard(key: &str) -> Result<String> {
 
 #[cfg(target_os = "macos")]
 pub async fn press_key_on_keyboard(key: &str) -> Result<String> {
+  let script = key_script(key)?;
+  let output = process::osascript(&script).await?;
+  if !output.exit_code.is_success() {
+    bail!(process::failure(
+      &output,
+      "osascript could not press the key"
+    ));
+  }
+  return Ok(format!("Pressed '{key}'"));
+}
+
+#[cfg(target_os = "macos")]
+fn key_script(key: &str) -> Result<String> {
   let mut modifiers: Vec<&str> = Vec::new();
   let mut key_code: Option<u16> = None;
   let mut character: Option<char> = None;
@@ -93,18 +106,20 @@ pub async fn press_key_on_keyboard(key: &str) -> Result<String> {
         escape_applescript(&c.to_string())
       )
     }
-    (None, None) => bail!("Cannot parse key '{key}'"),
+    (None, None) => {
+      let code = match modifiers.as_slice() {
+        ["command down"] => 55,
+        ["control down"] => 59,
+        ["option down"] => 58,
+        ["shift down"] => 56,
+        _ => bail!("Cannot parse key '{key}'"),
+      };
+      format!("key code {code}")
+    }
   };
-  let script =
-    format!("tell application \"System Events\"\n{statement}\nend tell");
-  let output = process::osascript(&script).await?;
-  if !output.exit_code.is_success() {
-    bail!(process::failure(
-      &output,
-      "osascript could not press the key"
-    ));
-  }
-  return Ok(format!("Pressed '{key}'"));
+  return Ok(format!(
+    "tell application \"System Events\"\n{statement}\nend tell"
+  ));
 }
 
 #[cfg(target_os = "linux")]
@@ -362,8 +377,10 @@ impl Key {
       "f12" => Some(Self::F12),
       "ctrl" | "control" | "control_l" => Some(Self::Control),
       "shift" | "shift_l" => Some(Self::Shift),
-      "alt" | "alt_l" => Some(Self::Alt),
-      "super" | "meta" | "win" | "super_l" => Some(Self::Super),
+      "alt" | "option" | "alt_l" => Some(Self::Alt),
+      "super" | "meta" | "win" | "cmd" | "command" | "super_l" => {
+        Some(Self::Super)
+      }
       _ => None,
     };
   }
