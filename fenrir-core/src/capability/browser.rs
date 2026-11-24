@@ -15,15 +15,30 @@ use crate::utils::xdg;
 
 const DEFAULT_FOCUS_DELAY: u64 = 5;
 const PRINT_DIALOG_DELAY_SECS: u64 = 10;
-const DIALOG_STEP_DELAY_SECS: u64 = 2;
+const DIALOG_STEP_DELAY_SECS: u64 = 3;
 const KEY_PACING_MS: u64 = 400;
 const SAVE_POLL_TIMEOUT_SECS: u64 = 30;
 const SAVE_POLL_INTERVAL_MS: u64 = 300;
 
+#[cfg(target_os = "macos")]
+const OPEN_COMMAND: &str = "open";
+#[cfg(target_os = "linux")]
+const OPEN_COMMAND: &str = "xdg-open";
+
+#[cfg(target_os = "macos")]
+const PRINT_SHORTCUT: &str = "cmd+p";
+#[cfg(target_os = "linux")]
+const PRINT_SHORTCUT: &str = "ctrl+p";
+
+#[cfg(target_os = "macos")]
+const LOCATION_SHORTCUT: &str = "cmd+shift+g";
+#[cfg(target_os = "linux")]
+const LOCATION_SHORTCUT: &str = "ctrl+l";
+
 pub async fn open_url(url: &str) -> Result<String> {
-  let output = process::run("xdg-open", &[url], None)
+  let output = process::run(OPEN_COMMAND, &[url], None)
     .await
-    .context(format!("Failed to run xdg-open for '{url}'"))?;
+    .context(format!("Failed to run {OPEN_COMMAND} for '{url}'"))?;
 
   if !output.exit_code.is_success() {
     let stderr = output.stderr.trim();
@@ -66,7 +81,7 @@ async fn focus_browser() -> Result<String> {
 }
 
 async fn open_print_dialog() -> Result<()> {
-  keyboard::press_key_on_keyboard("ctrl+p")
+  keyboard::press_key_on_keyboard(PRINT_SHORTCUT)
     .await
     .context("Could not open the print dialog")?;
   delay(Some(PRINT_DIALOG_DELAY_SECS)).await;
@@ -80,7 +95,7 @@ async fn open_save_dialog() -> Result<()> {
 }
 
 async fn navigate_to(dir: &str) -> Result<()> {
-  press("ctrl+l").await?;
+  press(LOCATION_SHORTCUT).await?;
   type_text(dir).await?;
   delay(Some(DIALOG_STEP_DELAY_SECS)).await;
   press("enter").await?;
