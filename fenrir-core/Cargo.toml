@@ -24,7 +24,7 @@ tokio = { version = "1.54.1", features = [
 tokio-util = { version = "0.7.20", features = ["rt"] }
 futures = "0.3.34"
 bytes = "1.12.2"
-turso = { version = "0.8.4", default-features = false, features = ["mimalloc"] }
+turso = { version = "0.8.4", default-features = false }
 async-trait = "0.1.92"
 base64 = "0.23.1"
 uuid = { version = "1.29.3", features = ["v7", "serde"] }
