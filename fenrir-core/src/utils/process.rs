@@ -61,3 +61,31 @@ pub async fn run(
     exit_code,
   });
 }
+
+#[cfg(target_os = "macos")]
+pub async fn osascript(script: &str) -> Result<Output> {
+  return run("osascript", &["-e", script], None)
+    .await
+    .context("Failed to run osascript");
+}
+
+pub fn failure(output: &Output, fallback: &str) -> String {
+  let stderr = output.stderr.trim();
+  if stderr.is_empty() {
+    return fallback.to_string();
+  }
+  let mut reason = stderr.to_string();
+  #[cfg(target_os = "macos")]
+  {
+    if stderr.contains("-1743")
+      || stderr.contains("Not authorized")
+      || stderr.contains("not allowed assistive access")
+    {
+      reason.push_str(
+        " Grant Fenrir access in System Settings → Privacy & Security → \
+         Automation and Accessibility.",
+      );
+    }
+  }
+  return reason;
+}

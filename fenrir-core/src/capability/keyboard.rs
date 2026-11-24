@@ -1,7 +1,11 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
+
+#[cfg(target_os = "linux")]
+use anyhow::Context;
 
 use crate::utils::process;
 
+#[cfg(target_os = "linux")]
 pub async fn type_with_keyboard(text: &str) -> Result<String> {
   let output = process::run("ydotool", &["type", text], None)
     .await
@@ -12,6 +16,23 @@ pub async fn type_with_keyboard(text: &str) -> Result<String> {
   return Ok(format!("Typed text ({} characters)", text.chars().count()));
 }
 
+#[cfg(target_os = "macos")]
+pub async fn type_with_keyboard(text: &str) -> Result<String> {
+  let script = typing_script(text);
+  if script.is_empty() {
+    return Ok(format!("Typed text ({} characters)", text.chars().count()));
+  }
+  let output = process::osascript(&script).await?;
+  if !output.exit_code.is_success() {
+    bail!(process::failure(
+      &output,
+      "osascript could not type the text"
+    ));
+  }
+  return Ok(format!("Typed text ({} characters)", text.chars().count()));
+}
+
+#[cfg(target_os = "linux")]
 pub async fn press_key_on_keyboard(key: &str) -> Result<String> {
   let codes = key_combination(key)?;
   let args: Vec<String> = codes
@@ -30,6 +51,63 @@ pub async fn press_key_on_keyboard(key: &str) -> Result<String> {
   return Ok(format!("Pressed '{key}'"));
 }
 
+#[cfg(target_os = "macos")]
+pub async fn press_key_on_keyboard(key: &str) -> Result<String> {
+  let mut modifiers: Vec<&str> = Vec::new();
+  let mut key_code: Option<u16> = None;
+  let mut character: Option<char> = None;
+  for part in key.split('+').map(|part| part.trim().to_ascii_lowercase()) {
+    if part.is_empty() {
+      continue;
+    }
+    if let Some(modifier) = modifier(&part) {
+      if !modifiers.contains(&modifier) {
+        modifiers.push(modifier);
+      }
+      continue;
+    }
+    if let Some(code) = named_key_code(&part) {
+      key_code = Some(code);
+      continue;
+    }
+    let mut chars = part.chars();
+    let c = chars.next();
+    if chars.next().is_some() {
+      bail!("Unknown key '{part}'");
+    }
+    let Some(c) = c else {
+      bail!("Cannot parse key '{key}'");
+    };
+    character = Some(c);
+  }
+
+  let using = match modifiers.is_empty() {
+    true => String::new(),
+    false => format!(" using {{{}}}", modifiers.join(", ")),
+  };
+  let statement = match (key_code, character) {
+    (Some(code), _) => format!("key code {code}{using}"),
+    (None, Some(c)) => {
+      format!(
+        r#"keystroke "{}"{using}"#,
+        escape_applescript(&c.to_string())
+      )
+    }
+    (None, None) => bail!("Cannot parse key '{key}'"),
+  };
+  let script =
+    format!("tell application \"System Events\"\n{statement}\nend tell");
+  let output = process::osascript(&script).await?;
+  if !output.exit_code.is_success() {
+    bail!(process::failure(
+      &output,
+      "osascript could not press the key"
+    ));
+  }
+  return Ok(format!("Pressed '{key}'"));
+}
+
+#[cfg(target_os = "linux")]
 fn key_combination(key: &str) -> Result<Vec<i32>> {
   let mut codes = Vec::new();
   for part in key.split('+').map(|p| p.trim().to_ascii_lowercase()) {
@@ -62,6 +140,7 @@ fn key_combination(key: &str) -> Result<Vec<i32>> {
   return Ok(codes);
 }
 
+#[cfg(target_os = "linux")]
 fn ydotool_failure(output: &process::Output, fallback: &str) -> String {
   let stderr = output.stderr.trim();
   if stderr.is_empty() {
@@ -74,6 +153,102 @@ fn ydotool_failure(output: &process::Output, fallback: &str) -> String {
   return reason;
 }
 
+#[cfg(target_os = "macos")]
+fn typing_script(text: &str) -> String {
+  let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+  let mut statements: Vec<String> = Vec::new();
+  let mut buffer = String::new();
+  for c in normalized.chars() {
+    match c {
+      '\n' => {
+        push_keystroke(&mut statements, &mut buffer);
+        statements.push("key code 36".to_string());
+      }
+      '\t' => {
+        push_keystroke(&mut statements, &mut buffer);
+        statements.push("key code 48".to_string());
+      }
+      _ => buffer.push(c),
+    }
+  }
+  push_keystroke(&mut statements, &mut buffer);
+  if statements.is_empty() {
+    return String::new();
+  }
+  return format!(
+    "tell application \"System Events\"\n{}\nend tell",
+    statements.join("\n")
+  );
+}
+
+#[cfg(target_os = "macos")]
+fn push_keystroke(statements: &mut Vec<String>, buffer: &mut String) {
+  if buffer.is_empty() {
+    return;
+  }
+  let text = escape_applescript(buffer);
+  statements.push(format!(r#"keystroke "{text}""#));
+  buffer.clear();
+}
+
+#[cfg(target_os = "macos")]
+fn escape_applescript(text: &str) -> String {
+  let mut escaped = String::with_capacity(text.len());
+  for c in text.chars() {
+    match c {
+      '\\' => escaped.push_str("\\\\"),
+      '"' => escaped.push_str("\\\""),
+      _ => escaped.push(c),
+    }
+  }
+  return escaped;
+}
+
+#[cfg(target_os = "macos")]
+fn modifier(name: &str) -> Option<&'static str> {
+  return match name {
+    "cmd" | "command" | "super" | "meta" | "win" => Some("command down"),
+    "ctrl" | "control" | "control_l" => Some("control down"),
+    "alt" | "option" | "alt_l" => Some("option down"),
+    "shift" | "shift_l" => Some("shift down"),
+    _ => None,
+  };
+}
+
+#[cfg(target_os = "macos")]
+fn named_key_code(name: &str) -> Option<u16> {
+  return match name {
+    "enter" | "return" => Some(36),
+    "escape" | "esc" => Some(53),
+    "backspace" | "delete" => Some(51),
+    "forwarddelete" => Some(117),
+    "tab" => Some(48),
+    "space" => Some(49),
+    "left" => Some(123),
+    "right" => Some(124),
+    "down" => Some(125),
+    "up" => Some(126),
+    "home" => Some(115),
+    "end" => Some(119),
+    "pageup" | "prior" => Some(116),
+    "pagedown" | "next" => Some(121),
+    "f1" => Some(122),
+    "f2" => Some(120),
+    "f3" => Some(99),
+    "f4" => Some(118),
+    "f5" => Some(96),
+    "f6" => Some(97),
+    "f7" => Some(98),
+    "f8" => Some(100),
+    "f9" => Some(101),
+    "f10" => Some(109),
+    "f11" => Some(103),
+    "f12" => Some(111),
+    _ => None,
+  };
+}
+
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Key {
   Enter,
@@ -112,6 +287,7 @@ enum Key {
   Super,
 }
 
+#[cfg(target_os = "linux")]
 impl Key {
   fn evdev_code(&self) -> i32 {
     return match self {
@@ -193,6 +369,7 @@ impl Key {
   }
 }
 
+#[cfg(target_os = "linux")]
 fn char_evdev_code(c: char) -> Option<(i32, bool)> {
   return match c {
     'a'..='z' => Some((letter_evdev_code(c)?, false)),
@@ -236,6 +413,7 @@ fn char_evdev_code(c: char) -> Option<(i32, bool)> {
   };
 }
 
+#[cfg(target_os = "linux")]
 fn letter_evdev_code(c: char) -> Option<i32> {
   return match c.to_ascii_lowercase() {
     'a' => Some(30),
