@@ -103,7 +103,7 @@ fn key_script(key: &str) -> Result<String> {
     (None, Some(c)) => {
       format!(
         r#"keystroke "{}"{using}"#,
-        escape_applescript(&c.to_string())
+        process::escape_applescript(&c.to_string())
       )
     }
     (None, None) => {
@@ -201,22 +201,9 @@ fn push_keystroke(statements: &mut Vec<String>, buffer: &mut String) {
   if buffer.is_empty() {
     return;
   }
-  let text = escape_applescript(buffer);
+  let text = process::escape_applescript(buffer);
   statements.push(format!(r#"keystroke "{text}""#));
   buffer.clear();
-}
-
-#[cfg(target_os = "macos")]
-fn escape_applescript(text: &str) -> String {
-  let mut escaped = String::with_capacity(text.len());
-  for c in text.chars() {
-    match c {
-      '\\' => escaped.push_str("\\\\"),
-      '"' => escaped.push_str("\\\""),
-      _ => escaped.push(c),
-    }
-  }
-  return escaped;
 }
 
 #[cfg(target_os = "macos")]

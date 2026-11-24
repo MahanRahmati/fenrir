@@ -1,7 +1,11 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
+
+#[cfg(target_os = "linux")]
+use anyhow::Context;
 
 use crate::utils::process;
 
+#[cfg(target_os = "linux")]
 pub async fn send_notification(summary: &str, body: &str) -> Result<String> {
   let summary_arg = format!("string:{summary}");
   let body_arg = format!("string:{body}");
@@ -35,6 +39,24 @@ pub async fn send_notification(summary: &str, body: &str) -> Result<String> {
       stderr.to_string()
     };
     bail!("{details}");
+  }
+
+  return Ok("Notification sent".to_string());
+}
+
+#[cfg(target_os = "macos")]
+pub async fn send_notification(summary: &str, body: &str) -> Result<String> {
+  let summary = process::escape_applescript(summary);
+  let body = process::escape_applescript(body);
+  let script =
+    format!(r#"display notification "{body}" with title "{summary}""#);
+  let output = process::osascript(&script).await?;
+
+  if !output.exit_code.is_success() {
+    bail!(process::failure(
+      &output,
+      "osascript could not send the notification"
+    ));
   }
 
   return Ok("Notification sent".to_string());

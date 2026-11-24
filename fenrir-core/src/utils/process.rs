@@ -69,6 +69,19 @@ pub async fn osascript(script: &str) -> Result<Output> {
     .context("Failed to run osascript");
 }
 
+#[cfg(target_os = "macos")]
+pub fn escape_applescript(text: &str) -> String {
+  let mut escaped = String::with_capacity(text.len());
+  for c in text.chars() {
+    match c {
+      '\\' => escaped.push_str("\\\\"),
+      '"' => escaped.push_str("\\\""),
+      _ => escaped.push(c),
+    }
+  }
+  return escaped;
+}
+
 pub fn failure(output: &Output, fallback: &str) -> String {
   let stderr = output.stderr.trim();
   if stderr.is_empty() {
