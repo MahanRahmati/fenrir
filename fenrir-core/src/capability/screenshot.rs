@@ -14,6 +14,7 @@ use crate::utils::process;
 use crate::utils::sleep::poll;
 use crate::utils::xdg;
 
+#[cfg(target_os = "linux")]
 const SCREENSHOT_ARGS: &[&str] = &[
   "--session",
   "--dest=org.freedesktop.portal.Desktop",
@@ -41,9 +42,7 @@ pub async fn screenshot(
   let snapshot = existing_pngs(&dirs).await;
   let call_start = SystemTime::now();
 
-  let output = process::run("dbus-send", SCREENSHOT_ARGS, None)
-    .await
-    .context("Failed to run dbus-send")?;
+  let output = capture(&dirs).await?;
 
   if !output.exit_code.is_success() {
     let stderr = output.stderr.trim();
@@ -106,6 +105,29 @@ pub async fn screenshot(
     ))?;
 
   return Ok(destination);
+}
+
+async fn capture(_dirs: &[PathBuf]) -> Result<process::Output> {
+  #[cfg(target_os = "macos")]
+  {
+    let dir = _dirs
+      .first()
+      .context("Cannot determine where to save the screenshot")?;
+    let source = dir
+      .join(timestamped_name("screenshot"))
+      .to_string_lossy()
+      .to_string();
+    return process::run("screencapture", &["-x", &source], None)
+      .await
+      .context("Failed to run screencapture");
+  }
+
+  #[cfg(target_os = "linux")]
+  {
+    return process::run("dbus-send", SCREENSHOT_ARGS, None)
+      .await
+      .context("Failed to run dbus-send");
+  }
 }
 
 async fn resolve_destination(destination: String) -> Result<String> {
