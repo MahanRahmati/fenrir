@@ -87,7 +87,9 @@ pub fn failure(output: &Output, fallback: &str) -> String {
   if stderr.is_empty() {
     return fallback.to_string();
   }
-  let mut reason = stderr.to_string();
+  let reason = stderr.to_string();
+  #[cfg(target_os = "macos")]
+  let mut reason = reason;
   #[cfg(target_os = "macos")]
   {
     if stderr.contains("-1743")
