@@ -48,6 +48,7 @@ pub struct MessageItem {
   error: bool,
   depth: u16,
   expanded: bool,
+  reasoning_done: bool,
   tool_call_id: Option<String>,
   tool_name: Option<String>,
   tool_view: ToolCallView,
@@ -63,6 +64,7 @@ impl MessageItem {
       error: false,
       depth: 0,
       expanded: true,
+      reasoning_done: false,
       tool_call_id: None,
       tool_name: None,
       tool_view: ToolCallView::default(),
@@ -89,6 +91,12 @@ impl MessageItem {
     return self;
   }
 
+  pub fn with_reasoning_done(mut self, reasoning_done: bool) -> Self {
+    self.reasoning_done = reasoning_done;
+    self.wrapped = None;
+    return self;
+  }
+
   pub fn depth(&self) -> u16 {
     return self.depth;
   }
@@ -110,6 +118,7 @@ impl MessageItem {
       error: false,
       depth: 0,
       expanded: true,
+      reasoning_done: false,
       tool_call_id: Some(id),
       tool_name: Some(name),
       tool_view,
@@ -201,10 +210,11 @@ impl MessageItem {
 
   fn reasoning_lines(&self, width: u16) -> Vec<Line<'static>> {
     let style = Style::default().dim();
-    let label = if self.expanded {
-      "- Thinking"
-    } else {
-      "+ Thinking"
+    let label = match (self.reasoning_done, self.expanded) {
+      (true, true) => "- Thought",
+      (true, false) => "+ Thought",
+      (false, true) => "- Thinking",
+      (false, false) => "+ Thinking",
     };
     let mut lines = vec![Line::from(Span::styled(label, style))];
     if self.expanded {
@@ -335,6 +345,15 @@ impl MessageItem {
 
   pub fn is_reasoning(&self) -> bool {
     return self.role == Role::Reasoning;
+  }
+
+  pub fn finish_reasoning(&mut self) {
+    if self.role != Role::Reasoning || self.reasoning_done {
+      return;
+    }
+    self.reasoning_done = true;
+    self.expanded = false;
+    self.wrapped = None;
   }
 
   pub fn toggle_expanded(&mut self) {

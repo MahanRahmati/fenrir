@@ -446,6 +446,7 @@ impl Adapter {
         duration_seconds,
       } => {
         self.tui.set_processing(false);
+        self.tui.finish_reasoning();
         self.tui.finish_working(duration_seconds);
         self.tui.reset_subagents();
         self.tui.touch_session(correlation.session_id);
@@ -496,6 +497,7 @@ impl Adapter {
         self.pending_review_request = None;
         self.prediction_pending = false;
         self.tui.set_processing(false);
+        self.tui.finish_reasoning();
         self.tui.clear_working();
         self.tui.reset_subagents();
         self.refresh_queue_display();

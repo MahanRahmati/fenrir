@@ -240,6 +240,7 @@ impl MessagesList {
     if is_subagent {
       self.subagent_calls.insert(id.clone());
     }
+    self.finish_last_reasoning();
     let message = MessageItem::new_tool_call(id, name, arguments, preview);
     self.messages.push(message);
     if let Some(task) = task {
@@ -277,6 +278,7 @@ impl MessagesList {
     let role = if reasoning {
       Role::Reasoning
     } else {
+      self.finish_subagent_reasoning(tool_call_id);
       Role::Assistant
     };
     let index =
@@ -329,6 +331,7 @@ impl MessagesList {
     arguments: String,
     preview: Option<ToolPreview>,
   ) {
+    self.finish_subagent_reasoning(tool_call_id);
     self.subagent_streams.remove(tool_call_id);
     let message =
       MessageItem::new_tool_call(id, name, arguments, preview).with_depth(1);
@@ -343,6 +346,7 @@ impl MessagesList {
     result: String,
     error: bool,
   ) {
+    self.finish_subagent_reasoning(tool_call_id);
     self.subagent_streams.remove(tool_call_id);
     if let Some(call) =
       self.messages.iter_mut().rev().find(|message| {
@@ -366,6 +370,7 @@ impl MessagesList {
     max_attempts: u32,
     delay_seconds: u64,
   ) {
+    self.finish_subagent_reasoning(tool_call_id);
     self.subagent_streams.remove(tool_call_id);
     let message = MessageItem::new(
       format!(
@@ -384,6 +389,7 @@ impl MessagesList {
     result: String,
     error: bool,
   ) {
+    self.finish_subagent_reasoning(tool_call_id);
     self.subagent_streams.remove(tool_call_id);
     let report = result.trim();
     let duplicate = !report.is_empty()
@@ -428,6 +434,7 @@ impl MessagesList {
   }
 
   pub fn ensure_content_line(&mut self) {
+    self.finish_last_reasoning();
     if self
       .messages
       .last()
@@ -436,6 +443,32 @@ impl MessagesList {
       let message = MessageItem::new(String::new(), Role::Assistant);
       self.messages.push(message);
       self.select_last();
+    }
+  }
+
+  pub fn finish_reasoning(&mut self) {
+    for message in &mut self.messages {
+      message.finish_reasoning();
+    }
+  }
+
+  fn finish_last_reasoning(&mut self) {
+    if let Some(message) = self
+      .messages
+      .iter_mut()
+      .rev()
+      .find(|message| message.depth() == 0 && message.is_reasoning())
+    {
+      message.finish_reasoning();
+    }
+  }
+
+  fn finish_subagent_reasoning(&mut self, tool_call_id: &str) {
+    let Some(index) = self.subagent_streams.get(tool_call_id).copied() else {
+      return;
+    };
+    if let Some(message) = self.messages.get_mut(index) {
+      message.finish_reasoning();
     }
   }
 
@@ -544,12 +577,10 @@ impl MessagesList {
             continue;
           }
         };
+        let is_reasoning = msg.role == "reasoning";
         let message = MessageItem::new(msg.content.clone(), role)
-          .with_expanded(if msg.role == "reasoning" {
-            self.expanded_reasoning
-          } else {
-            true
-          });
+          .with_reasoning_done(is_reasoning)
+          .with_expanded(!is_reasoning);
         self.messages.push(message);
         i += 1;
       }

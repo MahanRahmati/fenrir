@@ -515,6 +515,10 @@ impl Tui {
     self.messages_list.ensure_reasoning_line();
   }
 
+  pub fn finish_reasoning(&mut self) {
+    self.messages_list.finish_reasoning();
+  }
+
   pub fn ensure_content_line(&mut self) {
     self.messages_list.ensure_content_line();
   }
