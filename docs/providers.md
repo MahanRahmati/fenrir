@@ -1,5 +1,14 @@
 # Providers
 
+A provider key can come from the environment. An environment variable overrides the value in `secrets.toml`.
+
+| Variable                    | Provider          |
+| --------------------------- | ----------------- |
+| `OPENAI_COMPATIBLE_API_KEY` | OpenAI-compatible |
+| `OPENROUTER_API_KEY`        | Open Router       |
+| `OPENCODE_API_KEY`          | OpenCode          |
+| `ZAI_API_KEY`               | Z.AI              |
+
 ## Open Router
 
 ### Configuration
