@@ -6,6 +6,7 @@ mod help_popup;
 mod history;
 mod icon;
 mod input;
+mod markdown;
 mod message_item;
 mod messages_list;
 mod models_popup;

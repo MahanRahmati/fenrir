@@ -2,6 +2,7 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 
 use crate::tui::container::Container;
+use crate::tui::markdown;
 use crate::tui::tool_view::{ToolCallView, tool_call_view, tool_result_label};
 use crate::tui::{HORIZONTAL_PADDING, TOP_PADDING};
 use fenrir_core::tool_manager::{
@@ -163,10 +164,20 @@ impl MessageItem {
         .saturating_sub(right_padding)
         .saturating_sub(guide_width);
       let mut lines = match self.role {
+        Role::User => self.user_list_item().render_lines(inner_width),
+        Role::Assistant | Role::SubagentTask => {
+          self.markdown_lines(inner_width)
+        }
+        Role::Reasoning => self.reasoning_lines(inner_width),
         Role::ToolCall => self.tool_call_lines(inner_width),
         Role::ToolResult => self.tool_result_lines(inner_width),
-        Role::Reasoning => self.reasoning_lines(inner_width),
-        _ => self.list_item().render_lines(inner_width),
+        Role::SubagentReport if self.error => {
+          self.error_list_item().render_lines(inner_width)
+        }
+        Role::SubagentReport => self.markdown_lines(inner_width),
+        Role::Compaction => self.compaction_lines(inner_width),
+        Role::Duration => self.duration_list_item().render_lines(inner_width),
+        Role::Error => self.error_list_item().render_lines(inner_width),
       };
       if lines.is_empty() {
         lines.push(Line::default());
@@ -204,10 +215,6 @@ impl MessageItem {
       .build();
   }
 
-  fn llm_list_item(&self) -> Container<'static> {
-    return Container::builder(self.text.clone()).borderless().build();
-  }
-
   fn reasoning_lines(&self, width: u16) -> Vec<Line<'static>> {
     let style = Style::default().dim();
     let label = match (self.reasoning_done, self.expanded) {
@@ -218,8 +225,9 @@ impl MessageItem {
     };
     let mut lines = vec![Line::from(Span::styled(label, style))];
     if self.expanded {
+      let body = markdown::render(&self.text, width);
       lines.extend(
-        Container::builder(self.text.clone())
+        Container::builder(body)
           .borderless()
           .style(style)
           .trim(false)
@@ -230,22 +238,30 @@ impl MessageItem {
     return lines;
   }
 
+  fn markdown_lines(&self, width: u16) -> Vec<Line<'static>> {
+    let lines = markdown::render(&self.text, width);
+    return Container::builder(lines)
+      .borderless()
+      .trim(false)
+      .build()
+      .render_lines(width);
+  }
+
+  fn compaction_lines(&self, width: u16) -> Vec<Line<'static>> {
+    let inner_width = width.saturating_sub(2);
+    let body = markdown::render(&self.text, inner_width);
+    return Container::builder(body)
+      .title(" Compaction")
+      .color(Color::Magenta)
+      .trim(false)
+      .build()
+      .render_lines(width);
+  }
+
   fn error_list_item(&self) -> Container<'static> {
     return Container::builder(self.text.clone())
       .borderless()
       .style(Style::default().fg(Color::Red))
-      .build();
-  }
-
-  fn subagent_report_list_item(&self) -> Container<'static> {
-    let style = if self.error {
-      Style::default().fg(Color::Red)
-    } else {
-      Style::default()
-    };
-    return Container::builder(self.text.clone())
-      .borderless()
-      .style(style)
       .build();
   }
 
@@ -254,20 +270,6 @@ impl MessageItem {
       .borderless()
       .style(Style::default().dim())
       .build();
-  }
-
-  fn list_item(&self) -> Container<'static> {
-    return match self.role {
-      Role::User => self.user_list_item(),
-      Role::Assistant | Role::SubagentTask => self.llm_list_item(),
-      Role::SubagentReport => self.subagent_report_list_item(),
-      Role::Compaction => self.compaction_list_item(),
-      Role::Duration => self.duration_list_item(),
-      Role::Error => self.error_list_item(),
-      Role::ToolCall | Role::ToolResult | Role::Reasoning => {
-        self.llm_list_item()
-      }
-    };
   }
 
   fn tool_result_lines(&self, width: u16) -> Vec<Line<'static>> {
@@ -329,18 +331,6 @@ impl MessageItem {
       );
     }
     return lines;
-  }
-
-  fn compaction_list_item(&self) -> Container<'static> {
-    let body: Vec<Line<'static>> = self
-      .text
-      .lines()
-      .map(|l| Line::from(l.to_string()))
-      .collect();
-    return Container::builder(body)
-      .title(" Compaction")
-      .color(Color::Magenta)
-      .build();
   }
 
   pub fn is_reasoning(&self) -> bool {

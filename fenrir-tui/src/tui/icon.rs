@@ -1,2 +1,16 @@
+pub const TASK_DONE_ICON: &str = "■";
+pub const TASK_TODO_ICON: &str = "□";
+pub const BULLET_ICON: &str = "●";
 pub const TOOL_CALL_ICON: &str = "●";
 pub const STATUS_ICON: &str = "●";
+pub const BORDER_HORIZONTAL: &str = "─";
+pub const BORDER_VERTICAL: &str = "│";
+pub const BORDER_TOP_LEFT: &str = "╭";
+pub const BORDER_TOP_JUNCTION: &str = "┬";
+pub const BORDER_TOP_RIGHT: &str = "╮";
+pub const BORDER_LEFT_JUNCTION: &str = "├";
+pub const BORDER_CROSS: &str = "┼";
+pub const BORDER_RIGHT_JUNCTION: &str = "┤";
+pub const BORDER_BOTTOM_LEFT: &str = "╰";
+pub const BORDER_BOTTOM_JUNCTION: &str = "┴";
+pub const BORDER_BOTTOM_RIGHT: &str = "╯";
