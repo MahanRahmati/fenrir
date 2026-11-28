@@ -158,9 +158,10 @@ pub fn blocks(markdown: &str) -> Vec<Block> {
       }
       Event::End(TagEnd::Item) => {
         flush_inline(&mut inline, &mut containers);
-        let Some(Container::Item(item)) = containers.pop() else {
+        let Some(Container::Item(mut item)) = containers.pop() else {
           continue;
         };
+        trim_blank_edges(&mut item.blocks);
         if let Some(Container::List(list)) = containers.last_mut() {
           list.items.push(item);
         }
@@ -328,10 +329,10 @@ fn push_block(containers: &mut [Container], block: Block) {
 }
 
 fn blank_line(containers: &mut [Container]) {
-  let Some(Container::Root(blocks) | Container::Quote(blocks)) =
-    containers.last_mut()
-  else {
-    return;
+  let blocks = match containers.last_mut() {
+    Some(Container::Root(blocks) | Container::Quote(blocks)) => blocks,
+    Some(Container::Item(item)) => &mut item.blocks,
+    Some(Container::List(_) | Container::Table(_)) | None => return,
   };
   if blocks
     .last()

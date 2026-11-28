@@ -54,6 +54,7 @@ pub struct MessageItem {
   tool_name: Option<String>,
   tool_view: ToolCallView,
   tool_result: Option<(String, bool)>,
+  markdown: markdown::Renderer,
   wrapped: Option<(u16, Vec<Line<'static>>)>,
 }
 
@@ -70,6 +71,7 @@ impl MessageItem {
       tool_name: None,
       tool_view: ToolCallView::default(),
       tool_result: None,
+      markdown: markdown::Renderer::new(),
       wrapped: None,
     };
   }
@@ -124,6 +126,7 @@ impl MessageItem {
       tool_name: Some(name),
       tool_view,
       tool_result: None,
+      markdown: markdown::Renderer::new(),
       wrapped: None,
     };
   }
@@ -215,7 +218,7 @@ impl MessageItem {
       .build();
   }
 
-  fn reasoning_lines(&self, width: u16) -> Vec<Line<'static>> {
+  fn reasoning_lines(&mut self, width: u16) -> Vec<Line<'static>> {
     let style = Style::default().dim();
     let label = match (self.reasoning_done, self.expanded) {
       (true, true) => "- Thought",
@@ -225,26 +228,19 @@ impl MessageItem {
     };
     let mut lines = vec![Line::from(Span::styled(label, style))];
     if self.expanded {
-      let body = markdown::render(&self.text, width);
-      lines.extend(
-        Container::builder(body)
-          .borderless()
-          .style(style)
-          .trim(false)
-          .build()
-          .render_lines(width),
-      );
+      let body = self.markdown.render(&self.text, width);
+      let body: Vec<Line<'static>> = body
+        .into_iter()
+        .map(|line| line.patch_style(style))
+        .collect();
+      lines.extend(pad_lines(body, width));
     }
     return lines;
   }
 
-  fn markdown_lines(&self, width: u16) -> Vec<Line<'static>> {
-    let lines = markdown::render(&self.text, width);
-    return Container::builder(lines)
-      .borderless()
-      .trim(false)
-      .build()
-      .render_lines(width);
+  fn markdown_lines(&mut self, width: u16) -> Vec<Line<'static>> {
+    let lines = self.markdown.render(&self.text, width);
+    return pad_lines(lines, width);
   }
 
   fn compaction_lines(&self, width: u16) -> Vec<Line<'static>> {
@@ -359,6 +355,24 @@ impl MessageItem {
     self.text.push_str(text);
     self.wrapped = None;
   }
+
+  pub fn clear_markdown_cache(&mut self) {
+    self.markdown.clear();
+  }
+}
+
+fn pad_lines(lines: Vec<Line<'static>>, width: u16) -> Vec<Line<'static>> {
+  let width = width as usize;
+  return lines
+    .into_iter()
+    .map(|mut line| {
+      let used = line.width();
+      if used < width {
+        line.spans.push(Span::raw(" ".repeat(width - used)));
+      }
+      line
+    })
+    .collect();
 }
 
 fn preview_line(line: &ToolPreviewLine, number_width: usize) -> Line<'static> {

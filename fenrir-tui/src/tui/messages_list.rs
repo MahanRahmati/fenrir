@@ -73,12 +73,16 @@ impl MessagesList {
     self.viewport_height = area.height;
     let mut items: Vec<ListItem> = Vec::new();
     self.line_ranges.clear();
+    let last_index = self.messages.len().saturating_sub(1);
     for (index, message) in self.messages.iter_mut().enumerate() {
       let start = items.len();
       let lines = message.lines(area.width);
       let end = start + lines.len();
       items.extend(lines.iter().map(|line| ListItem::new(line.clone())));
       self.line_ranges.push((index, start, end));
+      if index != last_index {
+        message.clear_markdown_cache();
+      }
     }
     if let Some(working) = &self.working {
       let text = working_for(elapsed_seconds(working.started_at));

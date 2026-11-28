@@ -11,6 +11,65 @@ pub fn render(markdown: &str, width: u16) -> Vec<Line<'static>> {
   let width = width.max(1) as usize;
   let mut lines = Vec::new();
   render_blocks(&parse::blocks(markdown), width, &mut lines);
+  trim_blank_lines(&mut lines);
+  return lines;
+}
+
+pub struct Renderer {
+  width: usize,
+  blocks: Vec<Block>,
+  lines: Vec<Vec<Line<'static>>>,
+}
+
+impl Renderer {
+  pub fn new() -> Self {
+    return Self {
+      width: 0,
+      blocks: Vec::new(),
+      lines: Vec::new(),
+    };
+  }
+
+  pub fn clear(&mut self) {
+    self.blocks.clear();
+    self.lines.clear();
+  }
+
+  pub fn render(&mut self, markdown: &str, width: u16) -> Vec<Line<'static>> {
+    let width = width.max(1) as usize;
+    if self.width != width {
+      self.width = width;
+      self.clear();
+    }
+    let blocks = parse::blocks(markdown);
+    let shared = self
+      .blocks
+      .iter()
+      .zip(blocks.iter())
+      .take_while(|(cached, block)| *cached == *block)
+      .count();
+    self.blocks.truncate(shared);
+    self.lines.truncate(shared);
+    for block in &blocks[shared..] {
+      let mut block_lines = Vec::new();
+      render_blocks(std::slice::from_ref(block), width, &mut block_lines);
+      self.blocks.push(block.clone());
+      self.lines.push(block_lines);
+    }
+    let mut lines: Vec<Line<'static>> =
+      self.lines.iter().flatten().cloned().collect();
+    trim_blank_lines(&mut lines);
+    return lines;
+  }
+}
+
+impl Default for Renderer {
+  fn default() -> Self {
+    return Self::new();
+  }
+}
+
+fn trim_blank_lines(lines: &mut Vec<Line<'static>>) {
   while lines.first().is_some_and(is_blank_line) {
     lines.remove(0);
   }
@@ -20,7 +79,6 @@ pub fn render(markdown: &str, width: u16) -> Vec<Line<'static>> {
   if lines.is_empty() {
     lines.push(Line::default());
   }
-  return lines;
 }
 
 fn render_blocks(
@@ -51,20 +109,33 @@ fn render_blocks(
 }
 
 fn render_list(list: &List, width: usize, lines: &mut Vec<Line<'static>>) {
-  for (index, item) in list.items.iter().enumerate() {
-    let (marker, marker_style) = list_marker(list, index, item);
-    let marker_width = wrap::width(&marker);
-    let content_width = width.saturating_sub(marker_width).max(1);
+  let markers: Vec<(String, Style)> = list
+    .items
+    .iter()
+    .enumerate()
+    .map(|(index, item)| list_marker(list, index, item))
+    .collect();
+  let marker_width = markers
+    .iter()
+    .map(|(marker, _)| wrap::width(marker))
+    .max()
+    .unwrap_or(0);
+  let content_width = width.saturating_sub(marker_width).max(1);
+  for (item, (marker, marker_style)) in list.items.iter().zip(markers) {
     let mut item_lines = Vec::new();
     render_blocks(&item.blocks, content_width, &mut item_lines);
     if item_lines.is_empty() {
       item_lines.push(Line::default());
     }
+    let marker_padding = marker_width - wrap::width(&marker);
     for (line_index, line) in item_lines.into_iter().enumerate() {
       let mut spans = Vec::with_capacity(line.spans.len() + 1);
       if line_index == 0 {
         spans.push(Span::styled(marker.clone(), marker_style));
-      } else {
+        if marker_padding > 0 {
+          spans.push(Span::raw(" ".repeat(marker_padding)));
+        }
+      } else if !line.spans.is_empty() {
         spans.push(Span::raw(" ".repeat(marker_width)));
       }
       spans.extend(line.spans);
@@ -109,6 +180,10 @@ fn render_quote(
   render_blocks(blocks, inner, &mut quote_lines);
   let style = Style::default().fg(Color::DarkGray);
   for line in quote_lines {
+    if line.spans.is_empty() {
+      lines.push(Line::from(Span::styled(BORDER_VERTICAL.to_string(), style)));
+      continue;
+    }
     let mut spans = Vec::with_capacity(line.spans.len() + 1);
     spans.push(Span::styled(format!("{BORDER_VERTICAL} "), style));
     spans.extend(line.spans);
@@ -205,17 +280,30 @@ fn inline_width(inline: &Inline) -> usize {
 
 fn fit_widths(naturals: &[usize], available: usize) -> Vec<usize> {
   let mut widths = naturals.to_vec();
-  while widths.iter().sum::<usize>() > available {
-    let Some(index) = widths
-      .iter()
-      .enumerate()
-      .filter(|(_, width)| **width > TABLE_MIN_COLUMN_WIDTH)
-      .max_by_key(|(_, width)| **width)
-      .map(|(index, _)| index)
-    else {
+  loop {
+    let total: usize = widths.iter().sum();
+    if total <= available {
+      break;
+    }
+    let Some(widest) = widths.iter().copied().max() else {
       break;
     };
-    widths[index] -= 1;
+    if widest <= TABLE_MIN_COLUMN_WIDTH {
+      break;
+    }
+    let count = widths.iter().filter(|width| **width == widest).count();
+    let next = widths
+      .iter()
+      .copied()
+      .filter(|width| *width < widest)
+      .max()
+      .unwrap_or(TABLE_MIN_COLUMN_WIDTH)
+      .max(TABLE_MIN_COLUMN_WIDTH);
+    let excess = total - available;
+    let step = (widest - next).min(excess.div_ceil(count));
+    for width in widths.iter_mut().filter(|width| **width == widest) {
+      *width -= step;
+    }
   }
   return widths;
 }
@@ -292,13 +380,21 @@ fn render_table_plain(
   lines: &mut Vec<Line<'static>>,
 ) {
   let border = Style::default().fg(Color::DarkGray);
-  for row in std::iter::once(&table.header).chain(table.rows.iter()) {
+  for (row_index, row) in std::iter::once(&table.header)
+    .chain(table.rows.iter())
+    .enumerate()
+  {
+    let style = if row_index == 0 {
+      Style::default().add_modifier(Modifier::BOLD)
+    } else {
+      Style::default()
+    };
     let mut segments = Vec::new();
     for (index, cell) in row.iter().enumerate() {
       if index > 0 {
         segments.push((format!(" {BORDER_VERTICAL} "), border));
       }
-      push_segments(cell, Style::default(), &mut segments);
+      push_segments(cell, style, &mut segments);
     }
     lines.extend(wrap::wrap(segments, width));
   }
