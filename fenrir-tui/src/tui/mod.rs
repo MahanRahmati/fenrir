@@ -4,6 +4,7 @@ mod confirm_popup;
 mod container;
 mod help_popup;
 mod history;
+mod icon;
 mod input;
 mod message_item;
 mod messages_list;

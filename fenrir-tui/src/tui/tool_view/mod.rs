@@ -32,7 +32,7 @@ use fenrir_core::tool_manager::{
   WRITE_FILE_TOOL_NAME,
 };
 
-const TOOL_CALL_ICON: &str = "●";
+use crate::tui::icon::TOOL_CALL_ICON;
 
 #[derive(Debug, PartialEq)]
 pub struct ToolCallView {

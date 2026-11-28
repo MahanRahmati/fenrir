@@ -14,6 +14,7 @@ use ratatui::widgets::{
 };
 use uuid::Uuid;
 
+use crate::tui::icon::STATUS_ICON;
 use crate::tui::sidebar::Sidebar;
 use crate::tui::spinner::Spinner;
 use fenrir_core::engine::protocol::{SessionStatus, SessionSummary};
@@ -222,9 +223,11 @@ impl SessionsSidebar {
             (working_icon, Style::default().fg(Color::Cyan))
           }
           SessionStatus::AwaitingApproval => {
-            ("●", Style::default().fg(Color::Yellow))
+            (STATUS_ICON, Style::default().fg(Color::Yellow))
           }
-          SessionStatus::Completed => ("●", Style::default().fg(Color::Green)),
+          SessionStatus::Completed => {
+            (STATUS_ICON, Style::default().fg(Color::Green))
+          }
         };
         let title = truncate(
           session.title.as_deref().unwrap_or("Untitled Session"),
